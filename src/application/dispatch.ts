@@ -1,7 +1,9 @@
 import type { Command, Result } from '../domain/model/types';
+import { CommandType, Phase } from '../domain/model/types';
 import type { World } from '../domain/model/World';
 import { build } from './commands/build';
 import { callWave } from './commands/callWave';
+import { endless } from './commands/endless';
 import { sell } from './commands/sell';
 import { target } from './commands/target';
 import { upgrade } from './commands/upgrade';
@@ -15,12 +17,14 @@ export function dispatch(world: World, cmd: Command): Result {
 }
 
 function execute(world: World, cmd: Command): Result {
-  if (world.phase === 'victory' || world.phase === 'defeat') return fail('La partie est terminée.');
+  if (world.phase === Phase.Defeat) return fail('La partie est terminée.');
+  if (world.phase === Phase.Victory && cmd.c !== CommandType.Endless) return fail('La partie est terminée.');
   switch (cmd.c) {
-    case 'build': return build(world, cmd);
-    case 'upgrade': return upgrade(world, cmd);
-    case 'sell': return sell(world, cmd);
-    case 'target': return target(world, cmd);
-    case 'callWave': return callWave(world);
+    case CommandType.Build: return build(world, cmd);
+    case CommandType.Upgrade: return upgrade(world, cmd);
+    case CommandType.Sell: return sell(world, cmd);
+    case CommandType.Target: return target(world, cmd);
+    case CommandType.CallWave: return callWave(world);
+    case CommandType.Endless: return endless(world);
   }
 }

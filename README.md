@@ -2,17 +2,21 @@
 
 Tower defense de *mazing* dans l'esprit des cartes personnalisées de Warcraft III
 (Wintermaul, Element TD) : pas de chemin imposé, c'est vous qui dessinez le
-labyrinthe avec vos tours. TypeScript, Canvas 2D, aucune dépendance à l'exécution.
+labyrinthe avec vos tours. TypeScript, Canvas 2D, serveur Node (`ws`) qui arbitre les parties.
 
 ## Lancer
 
+Le jeu se joue en ligne : chaque partie est tenue par un serveur qui l'arbitre.
+
 ```bash
 npm install
-npm run dev              # serveur de dev Vite avec rechargement
-npm test                 # tests de la simulation + test d'équilibrage par un bot
-npm run build            # dist/index.html : un seul fichier autonome, jouable hors ligne
-npm run build:artifact   # variante sans enveloppe <html>, pour une page hébergée
+npm run build && npm run server   # build puis serveur de partie (http://localhost:8080)
+npm test                          # tests de la simulation + test d'équilibrage par un bot
+npm run build:artifact            # variante sans enveloppe <html>, pour une page hébergée
 ```
+
+En développement, deux serveurs en parallèle : `npm run server` (arbitre + WebSocket) et
+`npm run dev` (Vite, rechargement à chaud). Le jeu n'est plus jouable hors ligne.
 
 ## Règles
 
@@ -58,7 +62,10 @@ src/
     render/        Renderer (Canvas 2D), sprites procéduraux, Effects (particules, textes)
     audio/         Sfx : sons synthétisés en Web Audio, aucun fichier
     GameLoop.ts    requestAnimationFrame à pas fixe 1/60 s
-  presentation/    Game : entrées, panneau de commandes 4×3, HUD, écrans ; describe.ts : textes
+  presentation/    Game : entrées, panneau de commandes 4×3, HUD, écrans ; describe.ts : textes ;
+                   ServerLink.ts : liaison WebSocket au serveur de partie
+  server/          serveur HTTP + WebSocket : sert dist/, relaie les ordres à l'arbitre
+                   (application/online/)
 tests/             même arborescence que src/ ; architecture, balance (bot), support/
 ```
 

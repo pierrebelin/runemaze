@@ -1,5 +1,6 @@
 import type { World } from '../model/World';
 import type { Creep } from '../model/types';
+import { GameEventType, Phase } from '../model/types';
 import { creepSpeed } from '../rules/speed';
 
 export function updateMovement(world: World, dt: number): void {
@@ -79,11 +80,11 @@ function advanceLeg(world: World, c: Creep): boolean {
   world.lives -= c.def.leak;
   world.stats.leaked++;
   world.creepGone(c);
-  world.emit({ t: 'leak', lives: c.def.leak, boss: !!c.def.boss });
-  if (world.lives <= 0 && world.phase !== 'defeat') {
+  world.emit({ t: GameEventType.Leak, lives: c.def.leak, boss: !!c.def.boss });
+  if (world.lives <= 0 && world.phase !== Phase.Defeat) {
     world.lives = 0;
-    world.phase = 'defeat';
-    world.emit({ t: 'defeat' });
+    world.phase = Phase.Defeat;
+    world.emit({ t: GameEventType.Defeat });
   }
   return false;
 }

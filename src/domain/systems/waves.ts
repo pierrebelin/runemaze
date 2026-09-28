@@ -1,6 +1,7 @@
 import { baseHp, bountyFor, clearBonus, CREEPS, DIFFICULTY, waveAt } from '../catalog/creeps';
 import type { World } from '../model/World';
 import type { Creep, CreepDef } from '../model/types';
+import { BreakerPhase, GameEventType, Phase } from '../model/types';
 
 export interface Spawner {
   wave: number;
@@ -19,7 +20,7 @@ export function waveDuration(index: number): number {
 }
 
 export function canLaunchNext(world: World): boolean {
-  if (world.phase !== 'prep' && world.phase !== 'playing') return false;
+  if (world.phase !== Phase.Prep && world.phase !== Phase.Playing) return false;
   return world.endless || world.wave + 1 < world.campaignLength;
 }
 
@@ -27,7 +28,7 @@ export function launchWave(world: World): void {
   const index = world.wave + 1;
   const w = waveAt(index);
   world.wave = index;
-  world.phase = 'playing';
+  world.phase = Phase.Playing;
   let pending = 0;
   for (const g of w.groups) {
     world.spawners.push({ wave: index, creep: g.creep, left: g.count, interval: g.interval, timer: g.delay });
@@ -37,7 +38,7 @@ export function launchWave(world: World): void {
   world.stats.waves[index] = { livesLost: 0, gold: null };
   world.nextWaveIn = canLaunchNext(world) ? waveDuration(index) + WAVE_GAP : Infinity;
   const first = w.groups[0];
-  world.emit({ t: 'waveStart', wave: index, creep: first.creep, boss: w.groups.some((g) => CREEPS[g.creep].boss) });
+  world.emit({ t: GameEventType.WaveStart, wave: index, creep: first.creep, boss: w.groups.some((g) => CREEPS[g.creep].boss) });
 }
 
 /** PV d'une créature à la vague `wave`, difficulté et mode infini compris. */
@@ -57,7 +58,7 @@ function buildCreep(world: World, def: CreepDef, wave: number, x: number, y: num
     alive: true, remaining: Infinity, bob: world.rng.next() * Math.PI * 2, hitFlash: 0,
     bounty: bountyFor(wave, def),
     brood: 0,
-    breaker: def.breaker ? { phase: 'charge', timer: def.breaker.charge } : undefined,
+    breaker: def.breaker ? { phase: BreakerPhase.Charge, timer: def.breaker.charge } : undefined,
   };
 }
 
@@ -104,20 +105,20 @@ export function updateWaves(world: World, dt: number): void {
   for (const [wave, left] of world.pending) {
     if (left > 0) continue;
     world.pending.delete(wave);
-    if (world.phase === 'defeat') continue;
+    if (world.phase === Phase.Defeat) continue;
     const bonus = clearBonus(wave);
     const interest = Math.min(Math.floor(world.gold * 0.04), 20 + wave * 2);
     world.addGold(bonus + interest);
     world.stats.waves[wave].gold = world.gold;
-    world.emit({ t: 'waveCleared', wave, bonus, interest });
+    world.emit({ t: GameEventType.WaveCleared, wave, bonus, interest });
   }
 
   if (
-    world.phase === 'playing' && !world.endless &&
+    world.phase === Phase.Playing && !world.endless &&
     world.wave >= world.campaignLength - 1 &&
     world.spawners.length === 0 && world.creeps.length === 0 && world.pending.size === 0
   ) {
-    world.phase = 'victory';
-    world.emit({ t: 'victory' });
+    world.phase = Phase.Victory;
+    world.emit({ t: GameEventType.Victory });
   }
 }

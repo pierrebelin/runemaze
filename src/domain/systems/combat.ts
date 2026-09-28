@@ -3,6 +3,7 @@ import type { World } from '../model/World';
 import type { AttackDef, AttackType, Creep, TargetMode, Tower } from '../model/types';
 import { applyOnHit } from './status';
 import { spawnOffspring } from './waves';
+import { GameEventType } from '../model/types';
 
 export function canTarget(a: AttackDef, c: Creep): boolean {
   if (!c.alive) return false;
@@ -43,7 +44,7 @@ export function updateCombat(world: World, dt: number): void {
     }
     t.cooldown = a.cooldown;
     t.aim = Math.atan2(targets[0].y - t.cy, targets[0].x - t.cx);
-    world.emit({ t: 'fire', towerId: t.id, family: t.def.family });
+    world.emit({ t: GameEventType.Fire, towerId: t.id, family: t.def.family });
     for (const target of targets) {
       const roll = world.rng.range(a.dmg[0], a.dmg[1]);
       const crit = !!a.crit && world.rng.next() < a.crit.chance;
@@ -52,7 +53,7 @@ export function updateCombat(world: World, dt: number): void {
         if (a.chain) fireChain(world, t, a, target, dmg);
         else {
           hitCreep(world, t.id, t.def.id, a, target, dmg);
-          world.emit({ t: 'chain', points: [{ x: t.cx, y: t.cy - 0.6 }, { x: target.x, y: target.y }] });
+          world.emit({ t: GameEventType.Chain, points: [{ x: t.cx, y: t.cy - 0.6 }, { x: target.x, y: target.y }] });
         }
       } else {
         world.projectiles.push({
@@ -89,7 +90,7 @@ function fireChain(world: World, t: Tower, a: AttackDef, first: Creep, dmg: numb
     }
     cur = best;
   }
-  world.emit({ t: 'chain', points });
+  world.emit({ t: GameEventType.Chain, points });
 }
 
 export function updateProjectiles(world: World, dt: number): void {
@@ -124,7 +125,7 @@ export function updateProjectiles(world: World, dt: number): void {
     } else if (target) {
       hitCreep(world, p.towerId, p.defId, a, target, p.dmgRoll);
     }
-    world.emit({ t: 'hit', x: p.x, y: p.y, family: p.family, splash: a.splash?.radius ?? 0, crit: p.crit, dmg: Math.round(p.dmgRoll) });
+    world.emit({ t: GameEventType.Hit, x: p.x, y: p.y, family: p.family, splash: a.splash?.radius ?? 0, crit: p.crit, dmg: Math.round(p.dmgRoll) });
   }
 }
 
@@ -161,7 +162,7 @@ export function applyDamage(world: World, c: Creep, raw: number, type: AttackTyp
     if (tower) tower.kills++;
     world.creepGone(c);
     if (c.def.split) spawnOffspring(world, c, c.def.split.creep, c.def.split.count);
-    world.emit({ t: 'kill', x: c.x, y: c.y, bounty: c.bounty, creepId: c.id, boss: !!c.def.boss });
+    world.emit({ t: GameEventType.Kill, x: c.x, y: c.y, bounty: c.bounty, creepId: c.id, boss: !!c.def.boss });
   }
   return dmg;
 }

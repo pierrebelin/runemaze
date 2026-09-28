@@ -6,6 +6,7 @@ import { spawnCreep } from '../../../src/domain/systems/waves';
 import { dispatch } from '../../../src/application/dispatch';
 import type { AttackDef } from '../../../src/domain/model/types';
 import { newWorld } from '../../support/helpers';
+import { CommandType } from '../../../src/domain/model/types';
 
 const PLAIN_ATTACK: AttackDef = {
   type: 'normal',
@@ -164,12 +165,12 @@ describe('status', () => {
 
   it('[RM-02] crédite la tour vendue des dégâts de son poison encore actif', () => {
     const w = newWorld();
-    const built = dispatch(w, { c: 'build', def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
+    const built = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
     const t = w.towerById.get(built.id)!;
     const c = spawnCreep(w, 'rat', 0);
     applyOnHit(w, c, POISON_ATTACK, t.id, t.def.id);
 
-    dispatch(w, { c: 'sell', tower: t.id });
+    dispatch(w, { c: CommandType.Sell, tower: t.id });
     updateStatuses(w, 1);
 
     expect(w.towerById.has(t.id)).toBe(false);
@@ -178,13 +179,13 @@ describe('status', () => {
 
   it('[RM-02] crédite la tour vendue de l’élimination faite par son poison', () => {
     const w = newWorld();
-    const built = dispatch(w, { c: 'build', def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
+    const built = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
     const t = w.towerById.get(built.id)!;
     const c = spawnCreep(w, 'rat', 0);
     c.hp = 3;
     applyOnHit(w, c, POISON_ATTACK, t.id, t.def.id);
 
-    dispatch(w, { c: 'sell', tower: t.id });
+    dispatch(w, { c: CommandType.Sell, tower: t.id });
     updateStatuses(w, 1);
 
     expect(w.stats.towers.get(t.id)!.kills).toBe(1);
@@ -192,13 +193,13 @@ describe('status', () => {
 
   it('[RM-01] ne compte pas le surplus de dégâts au-delà des PV restants', () => {
     const w = newWorld();
-    const built = dispatch(w, { c: 'build', def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
+    const built = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
     const t = w.towerById.get(built.id)!;
     const c = spawnCreep(w, 'rat', 0);
     c.hp = 2;
     applyOnHit(w, c, POISON_ATTACK, t.id, t.def.id);
 
-    dispatch(w, { c: 'sell', tower: t.id });
+    dispatch(w, { c: CommandType.Sell, tower: t.id });
     updateStatuses(w, 1);
 
     expect(w.stats.towers.get(t.id)!.damage).toBe(2);

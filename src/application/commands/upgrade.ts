@@ -4,8 +4,9 @@ import type { World } from '../../domain/model/World';
 import { upgradeCost } from '../../domain/rules/pricing';
 import { infusionLock } from '../queries/infusionLock';
 import { fail } from '../result';
+import { CommandType, GameEventType } from '../../domain/model/types';
 
-export function upgrade(world: World, cmd: Extract<Command, { c: 'upgrade' }>): Result {
+export function upgrade(world: World, cmd: Extract<Command, { c: CommandType.Upgrade }>): Result {
   const t = world.towerById.get(cmd.tower);
   if (!t) return fail('Tour introuvable.');
   if (!t.def.upgrades.includes(cmd.def)) return fail('Amélioration indisponible.');
@@ -18,6 +19,6 @@ export function upgrade(world: World, cmd: Extract<Command, { c: 'upgrade' }>): 
   t.def = to;
   t.spent += cost;
   t.cooldown = Math.min(t.cooldown, 0.3);
-  world.emit({ t: 'upgraded', towerId: t.id });
+  world.emit({ t: GameEventType.Upgraded, towerId: t.id });
   return { ok: true, id: t.id };
 }

@@ -4,6 +4,7 @@ import { applyDamage } from '../../../src/domain/systems/combat';
 import { WAVES, waveAt } from '../../../src/domain/catalog/creeps';
 import type { WaveDef } from '../../../src/domain/model/types';
 import { killAllCreeps, newWorld, run } from '../../support/helpers';
+import { GameEventType } from '../../../src/domain/model/types';
 
 // Vague de substitution : un seul Limon (se scinde en 2 petits Limons à sa mort).
 const SLIME_WAVE: WaveDef = {
@@ -91,7 +92,7 @@ describe('waves', () => {
     killAllCreeps(w);
     run(w, 0.05);
 
-    const cleared = w.events.filter((e) => e.t === 'waveCleared');
+    const cleared = w.events.filter((e) => e.t === GameEventType.WaveCleared);
     expect(cleared).toHaveLength(1);
     expect(w.gold).toBeGreaterThan(goldBefore);
   });
@@ -104,7 +105,7 @@ describe('waves', () => {
     killAllCreeps(w); // tue les rats déjà apparus
     run(w, 0.05);
 
-    const cleared = w.events.filter((e) => e.t === 'waveCleared');
+    const cleared = w.events.filter((e) => e.t === GameEventType.WaveCleared);
     expect(cleared).toHaveLength(0);
     expect(w.pending.get(0)).toBeGreaterThan(0);
   });
@@ -121,13 +122,13 @@ describe('waves', () => {
     run(w, 1 / 60); // fusionne les rejetons dans world.creeps
 
     expect(w.creeps.filter((c) => c.def.id === 'slimelet')).toHaveLength(2);
-    let cleared = w.events.filter((e) => e.t === 'waveCleared');
+    let cleared = w.events.filter((e) => e.t === GameEventType.WaveCleared);
     expect(cleared).toHaveLength(0);
 
     killAllCreeps(w);
     run(w, 0.05);
 
-    cleared = w.events.filter((e) => e.t === 'waveCleared');
+    cleared = w.events.filter((e) => e.t === GameEventType.WaveCleared);
     expect(cleared).toHaveLength(1);
   });
 });

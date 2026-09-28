@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-const LAYERS = ['domain', 'application', 'infrastructure', 'presentation'] as const;
+const LAYERS = ['domain', 'application', 'infrastructure', 'presentation', 'server'] as const;
 type Layer = (typeof LAYERS)[number];
 
 // Couches qu'une couche a le droit d'importer, en plus d'elle-même.
@@ -9,6 +9,7 @@ const ALLOWED: Record<Layer, Layer[]> = {
   application: ['domain'],
   infrastructure: ['domain'],
   presentation: ['domain', 'application', 'infrastructure'],
+  server: ['domain', 'application'],
 };
 
 // Clés de la forme '../src/domain/model/World.ts'.
@@ -54,6 +55,14 @@ describe('architecture', () => {
     const leaks = [...filesOf('domain'), ...filesOf('application')]
       .filter(([, code]) => /\b(document|window|requestAnimationFrame|AudioContext|HTMLCanvasElement)\b/.test(code))
       .map(([path]) => path);
+    expect(leaks).toEqual([]);
+  });
+
+  it('[RM-04] domain et application ne lisent ni l\'heure ni l\'aléatoire du système', () => {
+    const leaks = [...filesOf('domain'), ...filesOf('application')]
+      .filter(([, code]) => /\b(Date\.now|new Date|performance\.now|Math\.random|crypto)\b/.test(code))
+      .map(([path]) => path);
+    expect(filesOf('domain').length + filesOf('application').length).toBeGreaterThan(0);
     expect(leaks).toEqual([]);
   });
 });

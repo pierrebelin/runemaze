@@ -1,4 +1,5 @@
 import type { GameEvent } from '../../domain/model/types';
+import { GameEventType } from '../../domain/model/types';
 
 /**
  * Effets sonores synthétisés avec la Web Audio API : aucun fichier à charger.
@@ -77,52 +78,52 @@ export class Sfx {
     if (!this.ctx || this.muted) return;
     for (const e of events) {
       switch (e.t) {
-        case 'fire':
+        case GameEventType.Fire:
           if (e.family === 'cannon' && this.gate('cannon', 0.12)) this.noise(0.18, 0.5, 600);
           else if (e.family === 'archer' && this.gate('arrow', 0.09)) this.tone(900, 0.05, 'triangle', 0.08, 500);
           else if (e.family === 'frost' && this.gate('frost', 0.12)) this.tone(1500, 0.12, 'sine', 0.06, 2200);
           else if (e.family === 'venom' && this.gate('venom', 0.14)) this.tone(260, 0.1, 'sine', 0.07, 140);
           break;
-        case 'chain':
+        case GameEventType.Chain:
           if (this.gate('zap', 0.1)) this.noise(0.12, 0.25, 4000);
           break;
-        case 'kill':
+        case GameEventType.Kill:
           if (e.boss) {
             this.tone(220, 0.6, 'sawtooth', 0.15, 55);
             this.noise(0.6, 0.6, 400);
           } else if (this.gate('kill', 0.06)) this.tone(520, 0.08, 'square', 0.05, 260);
           break;
-        case 'leak':
+        case GameEventType.Leak:
           this.tone(110, 0.35, 'sawtooth', 0.18, 70);
           break;
-        case 'built':
+        case GameEventType.Built:
           this.noise(0.1, 0.4, 900);
           this.tone(180, 0.1, 'triangle', 0.15, 120);
           break;
-        case 'upgraded':
+        case GameEventType.Upgraded:
           this.tone(520, 0.12, 'triangle', 0.12);
           this.tone(780, 0.18, 'triangle', 0.12, undefined, 0.08);
           break;
-        case 'sold':
+        case GameEventType.Sold:
           this.tone(1200, 0.08, 'square', 0.06);
           this.tone(1600, 0.1, 'square', 0.06, undefined, 0.06);
           break;
-        case 'destroyed':
+        case GameEventType.Destroyed:
           this.noise(0.18, 0.5, 600);
           break;
-        case 'waveStart':
+        case GameEventType.WaveStart:
           // Cor de guerre : deux quintes superposées.
           this.tone(e.boss ? 98 : 147, 0.9, 'sawtooth', 0.12);
           this.tone(e.boss ? 147 : 220, 0.9, 'sawtooth', 0.08);
           break;
-        case 'waveCleared':
+        case GameEventType.WaveCleared:
           this.tone(660, 0.12, 'triangle', 0.1);
           this.tone(880, 0.2, 'triangle', 0.1, undefined, 0.1);
           break;
-        case 'victory':
+        case GameEventType.Victory:
           [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.4, 'triangle', 0.14, undefined, i * 0.15));
           break;
-        case 'defeat':
+        case GameEventType.Defeat:
           [330, 262, 196, 131].forEach((f, i) => this.tone(f, 0.5, 'sawtooth', 0.12, undefined, i * 0.2));
           break;
         default:

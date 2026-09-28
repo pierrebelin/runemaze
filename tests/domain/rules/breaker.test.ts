@@ -3,9 +3,10 @@ import { nearestTowers } from '../../../src/domain/rules/breaker';
 import { dispatch } from '../../../src/application/dispatch';
 import { newWorld } from '../../support/helpers';
 import type { Tower } from '../../../src/domain/model/types';
+import { CommandType } from '../../../src/domain/model/types';
 
 function build(world: ReturnType<typeof newWorld>, def: string, x: number, y: number): Tower {
-  const r = dispatch(world, { c: 'build', def, x, y });
+  const r = dispatch(world, { c: CommandType.Build, def, x, y });
   expect(r.ok).toBe(true);
   return world.towers.find((t) => t.id === (r as { ok: true; id: number }).id)!;
 }

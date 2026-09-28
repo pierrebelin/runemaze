@@ -4,6 +4,7 @@ import { updateAbilities } from '../../../src/domain/systems/abilities';
 import { applyDamage } from '../../../src/domain/systems/combat';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { newWorld, run } from '../../support/helpers';
+import { CommandType, GameEventType, BreakerPhase } from '../../../src/domain/model/types';
 
 const TICK = 1 / 60;
 /** Premier tick qui atteint ou dépasse l'instant `s` (la simulation avance par pas fixes). */
@@ -88,10 +89,10 @@ describe('abilities', () => {
       const sapper = spawnCreep(w, 'sapper', 0);
 
       run(w, 2 - TICK);
-      expect(sapper.breaker?.phase).toBe('charge');
+      expect(sapper.breaker?.phase).toBe(BreakerPhase.Charge);
 
       w.step();
-      expect(sapper.breaker?.phase).toBe('armed');
+      expect(sapper.breaker?.phase).toBe(BreakerPhase.Armed);
       expect(sapper.breaker?.timer).toBeGreaterThanOrEqual(0);
       expect(sapper.breaker?.timer).toBeLessThanOrEqual(10);
     });
@@ -104,14 +105,14 @@ describe('abilities', () => {
       const windowInstant = sapper.breaker!.timer;
 
       run(w, ticksUntil(windowInstant));
-      expect(sapper.breaker?.phase).toBe('cooldown');
+      expect(sapper.breaker?.phase).toBe(BreakerPhase.Cooldown);
       expect(sapper.breaker?.timer).toBeCloseTo(20, 1);
 
       run(w, 20 - TICK);
-      expect(sapper.breaker?.phase).toBe('cooldown');
+      expect(sapper.breaker?.phase).toBe(BreakerPhase.Cooldown);
 
       w.step();
-      expect(sapper.breaker?.phase).toBe('charge');
+      expect(sapper.breaker?.phase).toBe(BreakerPhase.Charge);
       expect(sapper.breaker?.timer).toBeCloseTo(2, 1);
     });
 
@@ -121,7 +122,7 @@ describe('abilities', () => {
       sapper.frozen = 5;
 
       run(w, 2);
-      expect(sapper.breaker?.phase).toBe('charge');
+      expect(sapper.breaker?.phase).toBe(BreakerPhase.Charge);
     });
 
     it('[RM-08] distingue le Sapeur en fenêtre d’un Sapeur en charge ou en recharge', () => {
@@ -132,18 +133,18 @@ describe('abilities', () => {
       const b = spawnCreep(w, 'sapper', 0);
       run(w, 1);
       // Même instant : A a 2 s d'existence (fenêtre ouverte), B seulement 1 s (encore en charge).
-      expect(a.breaker?.phase).toBe('armed');
-      expect(b.breaker?.phase).not.toBe('armed');
+      expect(a.breaker?.phase).toBe(BreakerPhase.Armed);
+      expect(b.breaker?.phase).not.toBe(BreakerPhase.Armed);
 
       const windowInstant = a.breaker!.timer;
       run(w, ticksUntil(windowInstant));
-      expect(a.breaker?.phase).toBe('cooldown');
+      expect(a.breaker?.phase).toBe(BreakerPhase.Cooldown);
 
       const c = spawnCreep(w, 'sapper', 0);
       run(w, 2);
       // Même instant : A toujours en recharge (20 s), C vient d'ouvrir sa fenêtre.
-      expect(c.breaker?.phase).toBe('armed');
-      expect(a.breaker?.phase).not.toBe('armed');
+      expect(c.breaker?.phase).toBe(BreakerPhase.Armed);
+      expect(a.breaker?.phase).not.toBe(BreakerPhase.Armed);
     });
 
     it("[RM-05] détruit la tour sans rendre d'or et raccourcit le trajet aussitôt quand elle fermait un détour", () => {
@@ -152,7 +153,7 @@ describe('abilities', () => {
       // du milieu (y=9) est le seul à portée 3 du Sapeur placé à son centre.
       let middleId = -1;
       for (let y = 1; y <= 19; y += 2) {
-        const r = dispatch(w, { c: 'build', def: 'wall', x: 10, y }) as { ok: true; id: number };
+        const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y }) as { ok: true; id: number };
         if (y === 9) middleId = r.id;
       }
       const t = w.towerById.get(middleId)!;
@@ -162,7 +163,7 @@ describe('abilities', () => {
       const sapper = spawnCreep(w, 'sapper', 0);
       sapper.x = t.cx;
       sapper.y = t.cy;
-      sapper.breaker = { phase: 'armed', timer: TICK / 2 };
+      sapper.breaker = { phase: BreakerPhase.Armed, timer: TICK / 2 };
 
       w.step();
 
@@ -172,14 +173,14 @@ describe('abilities', () => {
       expect(t.fate).toBe('destroyed');
       expect(w.mazeLength()).toBeLessThan(before - 5);
       const events = w.drainEvents();
-      expect(events).toContainEqual({ t: 'destroyed', x: t.cx, y: t.cy });
+      expect(events).toContainEqual({ t: GameEventType.Destroyed, x: t.cx, y: t.cy });
     });
 
     it('[RM-05] redirige les créatures déjà en route par le passage rouvert', () => {
       const w = newWorld();
       let middleId = -1;
       for (let y = 1; y <= 19; y += 2) {
-        const r = dispatch(w, { c: 'build', def: 'wall', x: 10, y }) as { ok: true; id: number };
+        const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y }) as { ok: true; id: number };
         if (y === 9) middleId = r.id;
       }
       const t = w.towerById.get(middleId)!;
@@ -197,7 +198,7 @@ describe('abilities', () => {
       const sapper = spawnCreep(w, 'sapper', 0);
       sapper.x = t.cx;
       sapper.y = t.cy;
-      sapper.breaker = { phase: 'armed', timer: TICK / 2 };
+      sapper.breaker = { phase: BreakerPhase.Armed, timer: TICK / 2 };
 
       w.step();
 
@@ -206,13 +207,13 @@ describe('abilities', () => {
 
     it('[RM-07] ne détruit aucune tour quand le Sapeur meurt pendant sa fenêtre', () => {
       const w = newWorld();
-      const built = dispatch(w, { c: 'build', def: 'wall', x: 5, y: 5 }) as { ok: true; id: number };
+      const built = dispatch(w, { c: CommandType.Build, def: 'wall', x: 5, y: 5 }) as { ok: true; id: number };
       const t = w.towerById.get(built.id)!;
 
       const sapper = spawnCreep(w, 'sapper', 0);
       sapper.x = t.cx;
       sapper.y = t.cy;
-      sapper.breaker = { phase: 'armed', timer: TICK / 2 };
+      sapper.breaker = { phase: BreakerPhase.Armed, timer: TICK / 2 };
       // Vague 0 non lancée par `launchWave` ici : évite que sa mort ne déclenche la clôture de vague.
       w.pending.set(0, 2);
 
@@ -222,12 +223,12 @@ describe('abilities', () => {
       expect(w.towers.includes(t)).toBe(true);
       expect(w.towerById.get(built.id)).toBe(t);
       const events = w.drainEvents();
-      expect(events).not.toContainEqual(expect.objectContaining({ t: 'destroyed' }));
+      expect(events).not.toContainEqual(expect.objectContaining({ t: GameEventType.Destroyed }));
     });
 
     it('[RM-15] détruit la tour la plus proche à 4 cases dans une fenêtre de 5 s puis recharge 12 s', () => {
       const w = newWorld();
-      const built = dispatch(w, { c: 'build', def: 'wall', x: 5, y: 5 }) as { ok: true; id: number };
+      const built = dispatch(w, { c: CommandType.Build, def: 'wall', x: 5, y: 5 }) as { ok: true; id: number };
       const t = w.towerById.get(built.id)!;
 
       const ashlord = spawnCreep(w, 'ashlord', 0);
@@ -250,10 +251,10 @@ describe('abilities', () => {
       };
 
       advance(2 - TICK);
-      expect(ashlord.breaker?.phase).toBe('charge');
+      expect(ashlord.breaker?.phase).toBe(BreakerPhase.Charge);
 
       advance(TICK);
-      expect(ashlord.breaker?.phase).toBe('armed');
+      expect(ashlord.breaker?.phase).toBe(BreakerPhase.Armed);
       expect(ashlord.breaker?.timer).toBeGreaterThanOrEqual(0);
       expect(ashlord.breaker?.timer).toBeLessThanOrEqual(5);
 
@@ -261,32 +262,32 @@ describe('abilities', () => {
       advance(ticksUntil(windowInstant));
       expect(w.towers.includes(t)).toBe(false);
       expect(t.fate).toBe('destroyed');
-      expect(ashlord.breaker?.phase).toBe('cooldown');
+      expect(ashlord.breaker?.phase).toBe(BreakerPhase.Cooldown);
       expect(ashlord.breaker?.timer).toBeCloseTo(12, 1);
 
       advance(12 - TICK);
-      expect(ashlord.breaker?.phase).toBe('cooldown');
+      expect(ashlord.breaker?.phase).toBe(BreakerPhase.Cooldown);
 
       advance(TICK);
-      expect(ashlord.breaker?.phase).toBe('charge');
+      expect(ashlord.breaker?.phase).toBe(BreakerPhase.Charge);
       expect(ashlord.breaker?.timer).toBeCloseTo(2, 1);
     });
 
     it("[RM-06] passe en recharge sans rien détruire quand aucune tour n'est à portée", () => {
       const w = newWorld();
-      const far = dispatch(w, { c: 'build', def: 'wall', x: 5, y: 5 }) as { ok: true; id: number };
+      const far = dispatch(w, { c: CommandType.Build, def: 'wall', x: 5, y: 5 }) as { ok: true; id: number };
       const towersBefore = [...w.towers];
 
       const sapper = spawnCreep(w, 'sapper', 0);
       sapper.x = 25;
       sapper.y = 18;
-      sapper.breaker = { phase: 'armed', timer: TICK / 2 };
+      sapper.breaker = { phase: BreakerPhase.Armed, timer: TICK / 2 };
 
       w.step();
 
       expect(w.towers).toEqual(towersBefore);
       expect(w.towerById.get(far.id)).toBeDefined();
-      expect(sapper.breaker?.phase).toBe('cooldown');
+      expect(sapper.breaker?.phase).toBe(BreakerPhase.Cooldown);
     });
   });
 });

@@ -1,5 +1,6 @@
 import type { World } from '../model/World';
 import { nearestTowers } from '../rules/breaker';
+import { GameEventType, BreakerPhase } from '../model/types';
 
 /** Capacités actives des créatures (soin du Chaman, etc). */
 export function updateAbilities(world: World, dt: number): void {
@@ -23,21 +24,21 @@ export function updateAbilities(world: World, dt: number): void {
     if (c.frozen > 0) continue;
     c.breaker.timer -= dt;
     if (c.breaker.timer > 1e-9) continue;
-    if (c.breaker.phase === 'charge') {
-      c.breaker.phase = 'armed';
+    if (c.breaker.phase === BreakerPhase.Charge) {
+      c.breaker.phase = BreakerPhase.Armed;
       c.breaker.timer = world.rng.range(0, c.def.breaker.armed);
-    } else if (c.breaker.phase === 'armed') {
+    } else if (c.breaker.phase === BreakerPhase.Armed) {
       const targets = nearestTowers(world.towers, c.x, c.y, c.def.breaker.range);
       if (targets.length) {
         const t = targets.length > 1 ? targets[world.rng.int(targets.length)] : targets[0];
         t.fate = 'destroyed';
         world.removeTower(t);
-        world.emit({ t: 'destroyed', x: t.cx, y: t.cy });
+        world.emit({ t: GameEventType.Destroyed, x: t.cx, y: t.cy });
       }
-      c.breaker.phase = 'cooldown';
+      c.breaker.phase = BreakerPhase.Cooldown;
       c.breaker.timer = c.def.breaker.cooldown;
     } else {
-      c.breaker.phase = 'charge';
+      c.breaker.phase = BreakerPhase.Charge;
       c.breaker.timer = c.def.breaker.charge;
     }
   }

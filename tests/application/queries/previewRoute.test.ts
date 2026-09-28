@@ -3,6 +3,7 @@ import { dispatch } from '../../../src/application/dispatch';
 import { previewRoute } from '../../../src/application/queries/previewRoute';
 import { newWorld } from '../../support/helpers';
 import { MAP_TWO_STONES } from '../../support/maps';
+import { CommandType } from '../../../src/domain/model/types';
 
 describe('previewRoute', () => {
   it('[RM-04] renvoie trois tronçons enchaînés du portail à la porte quand la carte a deux pierres', () => {
@@ -21,7 +22,7 @@ describe('previewRoute', () => {
     const wallCells = new Set(w.grid.footprint(9, 1));
     expect(route[2].some((c) => wallCells.has(c))).toBe(false);
 
-    const built = dispatch(w, { c: 'build', def: 'wall', x: 9, y: 1 });
+    const built = dispatch(w, { c: CommandType.Build, def: 'wall', x: 9, y: 1 });
     expect(built.ok).toBe(true);
     expect(route[2]).toEqual(w.groundRoute()[2]);
   });
@@ -30,7 +31,7 @@ describe('previewRoute', () => {
     const w = newWorld('normal', 42, MAP_TWO_STONES);
 
     const { length } = previewRoute(w, 5, 1);
-    const built = dispatch(w, { c: 'build', def: 'wall', x: 5, y: 1 });
+    const built = dispatch(w, { c: CommandType.Build, def: 'wall', x: 5, y: 1 });
 
     expect(built.ok).toBe(true);
     expect(length).toBe(w.mazeLength());

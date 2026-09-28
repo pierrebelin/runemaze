@@ -13,18 +13,27 @@ import { canBuild } from '../application/queries/canBuild';
 import { infusionLock } from '../application/queries/infusionLock';
 import { previewRoute } from '../application/queries/previewRoute';
 import { waveBriefing } from '../application/queries/waveBriefing';
+import { realign } from '../application/online/realign';
+import { LOST_LIMIT_MS } from '../application/online/heldGame';
+import { ClientMessageType, ServerMessageType } from '../application/online/protocol';
+import type { ServerMessage } from '../application/online/protocol';
 import { refundValue, upgradeCost } from '../domain/rules/pricing';
 import { canLaunchNext } from '../domain/systems/waves';
 import { World } from '../domain/model/World';
-import type { ArmorType, AttackType, Creep, Difficulty, GameEvent, MapDef, TargetMode, Tower } from '../domain/model/types';
+import { restore } from '../domain/model/snapshot';
+import { fingerprint } from '../domain/rules/fingerprint';
+import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, MapDef, Result, TargetMode, Tower } from '../domain/model/types';
+import { CommandType, GameEventType, Phase } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
 import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, nextWaveInfo, TARGET_LABEL, towerInfo } from './describe';
+import { ServerLink } from './ServerLink';
 
 const KEYS = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'z', 'x', 'c', 'v'];
 const TARGET_ORDER: TargetMode[] = ['first', 'last', 'strong', 'weak', 'close'];
 const BEST_KEY = 'dedale.best.v2';
 const LEGACY_BEST_KEY = 'dedale.best.v1';
+const PENDING_KEY = 'dedale.pending.v1';
 
 const ICON_CANCEL = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M11 11l18 18M29 11L11 29" stroke="#e0664f" stroke-width="4" stroke-linecap="round"/></svg>';
 const ICON_HELP = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14" fill="none" stroke="#b98d4c" stroke-width="2.5"/><path d="M15.5 16a4.5 4.5 0 119 .5c0 3-4.5 3.5-4.5 6.5" fill="none" stroke="#efe3c4" stroke-width="2.6" stroke-linecap="round"/><circle cx="20" cy="28" r="1.8" fill="#efe3c4"/></svg>';
@@ -43,6 +52,14 @@ interface Slot {
   info: () => string;
 }
 
+enum Overlay {
+  Start = 'start',
+  Help = 'help',
+  End = 'end',
+  Pause = 'pause',
+  Lost = 'lost',
+}
+
 type Selection = { kind: 'tower'; id: number } | { kind: 'creep'; id: number } | null;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -55,6 +72,17 @@ export class Game {
   private readonly loop: GameLoop;
   private difficulty: Difficulty = 'normal';
   private mapId: string = MAPS[0].id;
+  private link: ServerLink | null = null;
+  private launching = false;
+  private pausedByVisibility = false;
+  private unloading = false;
+  private gameId: string | null = null;
+  private gameToken: string | null = null;
+  private lostElapsed = 0;
+  private lostRemaining = -1;
+  private lostRetryAt = 0;
+  private lostFinal = false;
+  private reconnecting = false;
 
   private selected: Selection = null;
   private buildDef: string | null = null;
@@ -70,7 +98,7 @@ export class Game {
   private unitCache = '';
   private briefingCache = '';
   private hud: Record<string, string> = {};
-  private overlay: 'start' | 'help' | 'end' | 'pause' | null = null;
+  private overlay: Overlay | null = null;
   private pausedByOverlay = false;
   private helpFromStart = false;
   private endShown = false;
@@ -98,10 +126,36 @@ export class Game {
     return new World({ map, difficulty: d, seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0 });
   }
 
-  private newGame(d: Difficulty): void {
-    this.difficulty = d;
+  private async newGame(d: Difficulty): Promise<void> {
+    if (this.launching) return;
+    this.launching = true;
     const map = MAPS.find((m) => m.id === this.mapId) ?? MAPS[0];
-    this.world = this.createWorld(map, d);
+    const previous = this.loadPending() ?? undefined;
+    this.link?.close();
+    this.link = null;
+    const link = new ServerLink();
+    let opened: Extract<ServerMessage, { t: ServerMessageType.Opened }>;
+    try {
+      await link.connect();
+      opened = await new Promise((resolve, reject) => {
+        link.onLost(() => reject(new Error('connexion perdue')));
+        link.onMessage((msg) => {
+          if (msg.t === ServerMessageType.Opened) resolve(msg);
+        });
+        link.send({ t: ClientMessageType.Open, map, difficulty: d, ...(previous ? { previous } : {}) });
+      });
+    } catch {
+      this.launching = false;
+      this.toast('Impossible de lancer la partie, vérifiez votre connexion.', true);
+      return;
+    }
+
+    this.launching = false;
+    this.difficulty = d;
+    this.link = link;
+    this.gameId = opened.id;
+    this.gameToken = opened.token;
+    this.world = restore(opened.snapshot);
     this.renderer.setWorld(this.world);
     this.fx.clear();
     this.selected = null;
@@ -113,7 +167,69 @@ export class Game {
     this.resize();
     this.closeOverlay();
     this.setPaused(false);
+    this.sendPace();
+    this.savePending();
+    this.resetLostState();
     this.toast(`${DIFFICULTY[d].label} : ${DIFFICULTY[d].lives} vies. Bâtissez avant la première vague.`);
+    this.attachLink(link);
+  }
+
+  /** Rebranche les gestionnaires d'une liaison de partie ; factorisé entre lancement et reprise. */
+  private attachLink(link: ServerLink): void {
+    link.onMessage((msg) => {
+      if (this.link !== link) return;
+      this.onServerMessage(msg);
+    });
+    link.onLost(() => {
+      if (this.link !== link) return;
+      this.onLost();
+    });
+  }
+
+  /** Un ordre du serveur qui recale ou termine la partie. */
+  private onServerMessage(msg: ServerMessage): void {
+    switch (msg.t) {
+      case ServerMessageType.Drift:
+        this.world = realign(msg.snapshot, this.world.log, this.world.tick);
+        this.renderer.setWorld(this.world);
+        break;
+      case ServerMessageType.Over:
+        this.clearPending();
+        this.world = restore(msg.snapshot);
+        this.renderer.setWorld(this.world);
+        this.saveBest();
+        this.showEnd();
+        break;
+      case ServerMessageType.Ended:
+        this.clearPending();
+        this.link?.close();
+        this.link = null;
+        this.showEndedOverlay();
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** Coupure de connexion pendant une partie non terminée : gel avec décompte, reconnexion automatique. */
+  private onLost(): void {
+    this.link = null;
+    if (this.overlay === Overlay.End || this.overlay === Overlay.Lost || this.overlay === Overlay.Start) return;
+    this.setPaused(true);
+    this.resetLostState();
+    this.lostRemaining = Math.ceil(LOST_LIMIT_MS / 1000);
+    this.openOverlay(Overlay.Lost, this.lostHtml(this.lostRemaining));
+  }
+
+  /** Envoie un ordre du joueur : `dispatch` fait foi localement, le serveur ne fait que confirmer ou recaler. */
+  private order(cmd: Command): Result {
+    const r = dispatch(this.world, cmd);
+    if (r.ok) this.link?.send({ t: ClientMessageType.Order, tick: this.world.tick, cmd, fingerprint: fingerprint(this.world) });
+    return r;
+  }
+
+  private sendPace(): void {
+    this.link?.send({ t: ClientMessageType.Pace, tick: this.world.tick, paused: this.loop.paused, speed: this.loop.speed });
   }
 
   private resize(): void {
@@ -137,18 +253,14 @@ export class Game {
   private onEvent(e: GameEvent): void {
     const w = this.world;
     switch (e.t) {
-      case 'waveCleared':
+      case GameEventType.WaveCleared:
         this.toast(`Vague ${e.wave + 1} repoussée : +${e.bonus} or${e.interest ? `, +${e.interest} d'intérêts` : ''}.`);
         break;
-      case 'leak':
+      case GameEventType.Leak:
         if (w.time - this.leakToastAt > 3) {
           this.leakToastAt = w.time;
           this.toast(e.boss ? `Le chef a franchi la porte : −${e.lives} vies.` : 'Une créature a franchi la porte.', true);
         }
-        break;
-      case 'victory':
-      case 'defeat':
-        this.saveBest();
         break;
       default:
         break;
@@ -156,6 +268,7 @@ export class Game {
   }
 
   private frame(dt: number): void {
+    if (this.overlay === Overlay.Lost) this.updateLost(dt);
     const w = this.world;
     this.fx.update(this.loop.paused ? 0 : dt * this.loop.speed);
 
@@ -179,9 +292,9 @@ export class Game {
     this.updateBriefing();
     this.drawPortrait();
 
-    if ((w.phase === 'victory' || w.phase === 'defeat') && !this.endShown && !this.fx.banner) {
+    if (w.isOver() && !this.endShown && !this.fx.banner) {
       this.endShown = true;
-      this.showEnd();
+      this.link?.send({ t: ClientMessageType.Check, tick: w.tick, fingerprint: fingerprint(w) });
     }
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
@@ -227,7 +340,7 @@ export class Game {
     const a = this.anchor;
     if (!this.buildDef || !a) return;
     this.sfx.unlock();
-    const r = dispatch(this.world, { c: 'build', def: this.buildDef, x: a.x, y: a.y });
+    const r = this.order({ c: CommandType.Build, def: this.buildDef, x: a.x, y: a.y });
     if (!r.ok) this.fail(r.reason);
     else this.drainNow();
     this.touchPending = null;
@@ -248,14 +361,14 @@ export class Game {
   }
 
   private upgrade(t: Tower, to: string): void {
-    const r = dispatch(this.world, { c: 'upgrade', tower: t.id, def: to });
+    const r = this.order({ c: CommandType.Upgrade, tower: t.id, def: to });
     if (!r.ok) this.fail(r.reason);
     else this.drainNow();
     this.hoverSlot = null;
   }
 
   private sell(t: Tower): void {
-    const r = dispatch(this.world, { c: 'sell', tower: t.id });
+    const r = this.order({ c: CommandType.Sell, tower: t.id });
     if (!r.ok) this.fail(r.reason);
     else {
       this.drainNow();
@@ -266,7 +379,7 @@ export class Game {
   private callWave(): void {
     this.sfx.unlock();
     if (this.overlay) return;
-    const r = dispatch(this.world, { c: 'callWave' });
+    const r = this.order({ c: CommandType.CallWave });
     if (!r.ok) this.fail(r.reason);
     else this.drainNow();
   }
@@ -274,6 +387,7 @@ export class Game {
   private setSpeed(s: number): void {
     this.loop.speed = s;
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === s)));
+    this.sendPace();
   }
 
   private setPaused(p: boolean): void {
@@ -282,14 +396,15 @@ export class Game {
   }
 
   private togglePause(): void {
-    if (this.overlay === 'start' || this.overlay === 'end') return;
-    if (this.overlay === 'pause') {
+    if (this.overlay === Overlay.Start || this.overlay === Overlay.End || this.overlay === Overlay.Lost) return;
+    if (this.overlay === Overlay.Pause) {
       this.closeOverlay();
       this.setPaused(false);
     } else if (!this.overlay) {
       this.setPaused(true);
       this.showPause();
     }
+    this.sendPace();
   }
 
   private toggleMute(): void {
@@ -299,11 +414,11 @@ export class Game {
   }
 
   private escape(): void {
-    if (this.overlay === 'help' && this.helpFromStart) {
+    if (this.overlay === Overlay.Help && this.helpFromStart) {
       this.showStart();
       return;
     }
-    if (this.overlay === 'help' || this.overlay === 'pause') {
+    if (this.overlay === Overlay.Help || this.overlay === Overlay.Pause) {
       this.closeOverlay();
       if (!this.pausedByOverlay) this.setPaused(false);
       return;
@@ -370,10 +485,31 @@ export class Game {
     });
     card.addEventListener('pointerleave', () => (this.hoverSlot = null));
 
+    window.addEventListener('pagehide', () => {
+      this.unloading = true;
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (this.unloading) return;
+      if (document.hidden) {
+        if (!this.loop.paused) {
+          this.pausedByVisibility = true;
+          this.setPaused(true);
+          this.sendPace();
+        }
+      } else if (this.pausedByVisibility) {
+        this.pausedByVisibility = false;
+        if (this.overlay !== Overlay.Lost) {
+          this.setPaused(false);
+          this.sendPace();
+        }
+      }
+    });
+
     $('callBtn').addEventListener('click', () => this.callWave());
     $('pauseBtn').addEventListener('click', () => this.togglePause());
     $('muteBtn').addEventListener('click', () => this.toggleMute());
-    $('helpBtn').addEventListener('click', () => (this.overlay === 'help' ? this.escape() : this.showHelp()));
+    $('helpBtn').addEventListener('click', () => (this.overlay === Overlay.Help ? this.escape() : this.showHelp()));
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) =>
       b.addEventListener('click', () => this.setSpeed(Number(b.dataset.speed))),
     );
@@ -381,16 +517,16 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
-      if (this.overlay === 'start') {
+      if (this.overlay === Overlay.Start) {
         if (k === 'enter') {
           e.preventDefault();
           ($('startBtn') as HTMLButtonElement | null)?.click();
         }
         return;
       }
-      if (this.overlay === 'end') return;
+      if (this.overlay === Overlay.End || this.overlay === Overlay.Lost) return;
       if (k === 'escape') this.escape();
-      else if (k === 'h' || k === '?') this.overlay === 'help' ? this.escape() : this.showHelp();
+      else if (k === 'h' || k === '?') this.overlay === Overlay.Help ? this.escape() : this.showHelp();
       else if (k === 'p') this.togglePause();
       else if (this.overlay) return;
       else if (k === ' ') {
@@ -502,7 +638,7 @@ export class Game {
           label: `Ciblage : ${TARGET_LABEL[t.targetMode]}`, icon: ICON_TARGET,
           run: () => {
             const next = TARGET_ORDER[(TARGET_ORDER.indexOf(t.targetMode) + 1) % TARGET_ORDER.length];
-            dispatch(w, { c: 'target', tower: t.id, mode: next });
+            this.order({ c: CommandType.Target, tower: t.id, mode: next });
             this.toast(`Ciblage : ${TARGET_LABEL[next]}.`);
           },
           info: () => `<h3>Ciblage : ${TARGET_LABEL[t.targetMode]}</h3><p>Change la priorité de tir : premier (le plus avancé), dernier, plus robuste, plus faible ou plus proche.</p>`,
@@ -670,7 +806,7 @@ export class Game {
     const can = canLaunchNext(w);
     const secs = Math.ceil(Math.max(0, w.nextWaveIn));
     set('timerLabel', can ? 'Vague suivante : ' : '');
-    set('timer', can ? `${secs} s` : w.phase === 'playing' ? 'Dernière vague' : '');
+    set('timer', can ? `${secs} s` : w.phase === Phase.Playing ? 'Dernière vague' : '');
     const bonus = can && Number.isFinite(w.nextWaveIn) ? Math.floor(Math.max(0, w.nextWaveIn) * 0.5) : 0;
     const label = can ? (bonus > 0 ? `Appeler +${bonus}` : 'Appeler') : 'Appeler';
     if (this.hud.call !== label + can) {
@@ -692,7 +828,7 @@ export class Game {
 
   // ─── Écrans superposés ───────────────────────────────────────────────────
 
-  private openOverlay(kind: 'start' | 'help' | 'end' | 'pause', html: string): void {
+  private openOverlay(kind: Overlay, html: string): void {
     const el = $('overlay');
     this.overlay = kind;
     el.innerHTML = html;
@@ -717,13 +853,169 @@ export class Game {
 
   private saveBest(): void {
     const w = this.world;
-    const reached = w.phase === 'victory' ? w.wave + 1 : Math.max(0, w.wave);
+    const reached = w.phase === Phase.Victory ? w.wave + 1 : Math.max(0, w.wave);
     try {
       const best = withRecord(this.loadBest(), this.mapId, this.difficulty, reached);
       localStorage.setItem(BEST_KEY, JSON.stringify(best));
     } catch {
       /* stockage indisponible : on s'en passe */
     }
+  }
+
+  private loadPending(): { id: string; token: string } | null {
+    try {
+      const raw = localStorage.getItem(PENDING_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw) as { id?: unknown; token?: unknown };
+      return typeof p.id === 'string' && typeof p.token === 'string' ? { id: p.id, token: p.token } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private savePending(): void {
+    try {
+      if (this.gameId && this.gameToken) localStorage.setItem(PENDING_KEY, JSON.stringify({ id: this.gameId, token: this.gameToken }));
+    } catch {
+      /* stockage indisponible : on s'en passe */
+    }
+  }
+
+  private clearPending(): void {
+    try {
+      localStorage.removeItem(PENDING_KEY);
+    } catch {
+      /* stockage indisponible : on s'en passe */
+    }
+  }
+
+  // ─── Coupure de connexion ────────────────────────────────────────────────
+
+  private resetLostState(): void {
+    this.lostElapsed = 0;
+    this.lostRemaining = -1;
+    this.lostRetryAt = 0;
+    this.lostFinal = false;
+    this.reconnecting = false;
+  }
+
+  private lostHtml(seconds: number): string {
+    return `
+      <div class="sheet" style="width:min(360px,100%);text-align:center">
+        <h2>Connexion perdue — ${seconds} s</h2>
+        <p class="lede">Nouvelle tentative de connexion en cours…</p>
+      </div>`;
+  }
+
+  private showEndedOverlay(): void {
+    this.openOverlay(Overlay.End, `
+      <div class="sheet" style="width:min(360px,100%);text-align:center">
+        <h2>La partie est terminée.</h2>
+        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="backToStart">Écran titre</button></div>
+      </div>`);
+    $('backToStart').addEventListener('click', () => this.showStart());
+  }
+
+  /** Décompte affiché pendant le gel, et tentatives de reconnexion toutes les ~2 s. */
+  private updateLost(dt: number): void {
+    this.lostElapsed += dt;
+    const remainingMs = Math.max(0, LOST_LIMIT_MS - this.lostElapsed * 1000);
+    const remaining = Math.ceil(remainingMs / 1000);
+    if (remaining !== this.lostRemaining) {
+      this.lostRemaining = remaining;
+      this.openOverlay(Overlay.Lost, this.lostHtml(remaining));
+    }
+    if (remainingMs <= 0) {
+      // Le décompte est écoulé : la tentative en cours (ou la prochaine) sera la dernière.
+      this.lostFinal = true;
+      if (!this.reconnecting) void this.tryReconnect();
+      return;
+    }
+    this.lostRetryAt -= dt;
+    if (this.lostRetryAt <= 0 && !this.reconnecting) {
+      this.lostRetryAt = 2;
+      void this.tryReconnect();
+    }
+  }
+
+  /** Tente de reprendre la partie gelée. La dernière chance se décide à l'échec (`lostFinal`), pas au lancement. */
+  private async tryReconnect(): Promise<void> {
+    if (this.reconnecting || !this.gameId || !this.gameToken) return;
+    this.reconnecting = true;
+    try {
+      const { link, reply } = await this.requestResume(this.gameId, this.gameToken);
+      this.reconnecting = false;
+      this.handleResumeReply(link, reply);
+    } catch {
+      this.reconnecting = false;
+      if (this.lostFinal) this.applyEnded();
+    }
+  }
+
+  /** Ouvre une liaison neuve, envoie `resume` et rend la liaison avec sa réponse. Rejette sur échec de connexion ou coupure : la liaison est alors déjà fermée. */
+  private async requestResume(id: string, token: string): Promise<{ link: ServerLink; reply: Extract<ServerMessage, { t: ServerMessageType.Resumed | ServerMessageType.Over | ServerMessageType.Ended }> }> {
+    const link = new ServerLink();
+    try {
+      await link.connect();
+      const reply = await new Promise<Extract<ServerMessage, { t: ServerMessageType.Resumed | ServerMessageType.Over | ServerMessageType.Ended }>>((resolve, reject) => {
+        link.onLost(() => reject(new Error('connexion perdue')));
+        link.onMessage((msg) => {
+          if (msg.t === ServerMessageType.Resumed || msg.t === ServerMessageType.Over || msg.t === ServerMessageType.Ended) resolve(msg);
+        });
+        link.send({ t: ClientMessageType.Resume, id, token });
+      });
+      return { link, reply };
+    } catch (e) {
+      link.close();
+      throw e;
+    }
+  }
+
+  /** Réponse à une reprise (`resumed`/`over`/`ended`), commune à la reconnexion automatique et au bouton de reprise. */
+  private handleResumeReply(link: ServerLink, reply: Extract<ServerMessage, { t: ServerMessageType.Resumed | ServerMessageType.Over | ServerMessageType.Ended }>): void {
+    if (reply.t === ServerMessageType.Resumed) this.applyResumed(link, reply);
+    else if (reply.t === ServerMessageType.Over) this.applyAbandon(link, reply);
+    else this.applyEnded(link);
+  }
+
+  private applyResumed(link: ServerLink, msg: Extract<ServerMessage, { t: ServerMessageType.Resumed }>): void {
+    this.link = link;
+    this.attachLink(link);
+    this.world = restore(msg.snapshot);
+    this.mapId = this.world.map.id;
+    this.difficulty = this.world.difficulty;
+    this.renderer.setWorld(this.world);
+    this.resize();
+    this.loop.speed = msg.speed;
+    document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === msg.speed)));
+    this.setPaused(msg.paused);
+    this.savePending();
+    if (msg.paused) this.showPause();
+    else this.closeOverlay();
+    this.resetLostState();
+  }
+
+  private applyAbandon(link: ServerLink, msg: Extract<ServerMessage, { t: ServerMessageType.Over }>): void {
+    link.close();
+    this.link = null;
+    this.clearPending();
+    this.world = restore(msg.snapshot);
+    this.mapId = this.world.map.id;
+    this.difficulty = this.world.difficulty;
+    this.renderer.setWorld(this.world);
+    this.resize();
+    this.saveBest();
+    this.toast('La partie est terminée.', true);
+    this.showEnd();
+    this.resetLostState();
+  }
+
+  private applyEnded(link?: ServerLink): void {
+    link?.close();
+    this.link = null;
+    this.clearPending();
+    this.showEndedOverlay();
+    this.resetLostState();
   }
 
   private diffsHtml(mapId: string): string {
@@ -739,12 +1031,14 @@ export class Game {
   }
 
   private showStart(): void {
+    this.link?.close();
+    this.link = null;
     this.setPaused(true);
     const maps = MAPS.map(
       (m) => `<button type="button" class="map" role="radio" data-map="${m.id}" aria-checked="${m.id === this.mapId}">
         <canvas class="map-thumb" data-thumb="${m.id}" width="64" height="64"></canvas><span>${m.name}</span></button>`,
     ).join('');
-    this.openOverlay('start', `
+    this.openOverlay(Overlay.Start, `
       <div class="sheet">
         <h1>Dédale</h1>
         <p class="lede">Bâtissez le labyrinthe, tenez la porte. Trente vagues, trois chefs, et un seul chemin que vous dessinez vous-même.</p>
@@ -789,6 +1083,62 @@ export class Game {
     });
     $('startHelp').addEventListener('click', () => this.showHelp(true));
     ($('startBtn') as HTMLButtonElement).focus();
+    this.offerResume();
+  }
+
+  /** Partie interrompue connue (clé locale) : propose de la reprendre, sans bloquer l'écran titre. Liaison de sondage refermée dès la réponse. */
+  private async offerResume(): Promise<void> {
+    const pending = this.loadPending();
+    if (!pending) return;
+    const link = new ServerLink();
+    try {
+      await link.connect();
+      const reply = await new Promise<Extract<ServerMessage, { t: ServerMessageType.Resumable }>>((resolve, reject) => {
+        link.onLost(() => reject(new Error('connexion perdue')));
+        link.onMessage((msg) => {
+          if (msg.t === ServerMessageType.Resumable) resolve(msg);
+        });
+        link.send({ t: ClientMessageType.Resumable, id: pending.id, token: pending.token });
+      });
+      link.close();
+      if (!reply.ok) {
+        this.clearPending();
+        return;
+      }
+      if (this.overlay !== Overlay.Start) return;
+      this.gameId = pending.id;
+      this.gameToken = pending.token;
+      this.addResumeButton(pending);
+    } catch {
+      link.close();
+    }
+  }
+
+  /** Bouton « Reprendre la partie » : ouvre une liaison neuve à chaque clic, la clé locale n'est jamais effacée sur échec réseau. */
+  private addResumeButton(pending: { id: string; token: string }): void {
+    const row = document.querySelector<HTMLElement>('#overlay .sheet .row');
+    if (!row) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn primary';
+    btn.textContent = 'Reprendre la partie';
+    btn.addEventListener('click', () => {
+      if (btn.disabled || this.launching) return;
+      btn.disabled = true;
+      this.launching = true;
+      this.sfx.unlock();
+      this.requestResume(pending.id, pending.token)
+        .then(({ link, reply }) => {
+          this.launching = false;
+          this.handleResumeReply(link, reply);
+        })
+        .catch(() => {
+          this.launching = false;
+          this.toast('Impossible de reprendre la partie, vérifiez votre connexion.', true);
+          btn.disabled = false;
+        });
+    });
+    row.insertBefore(btn, row.firstChild);
   }
 
   private armorTable(): string {
@@ -810,10 +1160,11 @@ export class Game {
   }
 
   private showHelp(fromStart = false): void {
+    if (this.overlay === Overlay.Lost) return;
     this.helpFromStart = fromStart;
     this.pausedByOverlay = this.loop.paused;
     this.setPaused(true);
-    this.openOverlay('help', `
+    this.openOverlay(Overlay.Help, `
       <div class="sheet">
         <h2>Commandes</h2>
         <div class="keys">
@@ -840,7 +1191,7 @@ export class Game {
 
   private showPause(): void {
     this.pausedByOverlay = false;
-    this.openOverlay('pause', `
+    this.openOverlay(Overlay.Pause, `
       <div class="sheet" style="width:min(360px,100%);text-align:center">
         <h2>Pause</h2>
         <p class="lede">Le temps est suspendu. Vous pouvez encore consulter vos tours.</p>
@@ -851,10 +1202,10 @@ export class Game {
 
   private showEnd(): void {
     const w = this.world;
-    const win = w.phase === 'victory';
+    const win = w.phase === Phase.Victory;
     const s = w.stats;
     const reached = win ? w.wave + 1 : Math.max(1, w.wave + 1);
-    this.openOverlay('end', `
+    this.openOverlay(Overlay.End, `
       <div class="sheet">
         <h2>${win ? (w.endless ? 'Vous tenez encore' : 'Victoire') : 'La porte est tombée'}</h2>
         <p class="lede">${win ? `Les trente vagues sont venues se briser sur votre labyrinthe, avec ${w.lives} vies restantes.` : `Votre défense a tenu jusqu'à la vague ${reached}.`}</p>
@@ -892,7 +1243,8 @@ export class Game {
     $('again').addEventListener('click', () => this.showStart());
     if (win) {
       $('endless').addEventListener('click', () => {
-        w.continueEndless();
+        const r = this.order({ c: CommandType.Endless });
+        if (r.ok) this.savePending();
         this.endShown = false;
         this.closeOverlay();
         this.toast('Mode infini : les vagues ne s’arrêtent plus.');

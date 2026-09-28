@@ -3,6 +3,7 @@ import { dispatch } from '../../src/application/dispatch';
 import { upgradeCost } from '../../src/domain/rules/pricing';
 import type { World } from '../../src/domain/model/World';
 import type { Tower } from '../../src/domain/model/types';
+import { CommandType, Phase } from '../../src/domain/model/types';
 
 /** Plan de labyrinthe en chicanes : une barrière centrale, puis des cloisons alternées. */
 export function mazePlan(): [number, number][] {
@@ -53,14 +54,14 @@ export class Bot {
         const fam = FAMILY_CYCLE[this.towerCount % FAMILY_CYCLE.length];
         const best = walls.map((t) => [t, this.coverage(t)] as const).sort((a, b) => b[1] - a[1])[0][0];
         if (w.gold < upgradeCost(best.def, TOWERS[fam])) return;
-        dispatch(w, { c: 'upgrade', tower: best.id, def: fam });
+        dispatch(w, { c: CommandType.Upgrade, tower: best.id, def: fam });
         this.towerCount++;
         continue;
       }
       if (this.planIdx < this.plan.length) {
         if (w.gold < 3) return;
         const [x, y] = this.plan[this.planIdx];
-        const r = dispatch(w, { c: 'build', def: 'wall', x, y });
+        const r = dispatch(w, { c: CommandType.Build, def: 'wall', x, y });
         if (r.ok || !/créature/.test(r.reason)) this.planIdx++;
         else return;
         continue;
@@ -68,7 +69,7 @@ export class Bot {
       // Plan épuisé : une case déjà bâtie a pu être libérée par un briseur, on la rebâtit.
       const gap = this.plan.find(([x, y]) => w.grid.tower[w.grid.idx(x, y)] === 0);
       if (gap && w.gold >= 3) {
-        const r = dispatch(w, { c: 'build', def: 'wall', x: gap[0], y: gap[1] });
+        const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: gap[0], y: gap[1] });
         if (r.ok) continue;
       }
       // Améliorations : la tour la moins avancée d'abord.
@@ -80,7 +81,7 @@ export class Bot {
       const next = up.def.tier === 1 ? BRANCH[up.def.family][up.id % BRANCH[up.def.family].length] : opts[0];
       const cost = upgradeCost(up.def, TOWERS[next]);
       if (w.gold < cost) return;
-      dispatch(w, { c: 'upgrade', tower: up.id, def: next });
+      dispatch(w, { c: CommandType.Upgrade, tower: up.id, def: next });
     }
   }
 }
@@ -88,7 +89,7 @@ export class Bot {
 export function playBot(w: World, maxWave = 30): { wave: number; lives: number; phase: string; maze: number; gold: number } {
   const bot = new Bot(w);
   let ticks = 0;
-  while ((w.phase === 'prep' || w.phase === 'playing') && ticks < 60 * 60 * 60) {
+  while ((w.phase === Phase.Prep || w.phase === Phase.Playing) && ticks < 60 * 60 * 60) {
     if (ticks % 30 === 0) bot.act();
     w.step();
     ticks++;

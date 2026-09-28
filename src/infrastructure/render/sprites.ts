@@ -1,6 +1,7 @@
 import { Grid } from '../../domain/model/Grid';
-import type { CellKind, CreepDef, MapDef, TowerDef } from '../../domain/model/types';
+import type { CellKind, Creep, CreepDef, MapDef, TowerDef } from '../../domain/model/types';
 import { CREEP_STYLE, FAMILY_COLOR, PAL } from './palette';
+import { BreakerPhase } from '../../domain/model/types';
 
 // Dessins vectoriels procéduraux. Le contexte est déjà mis à l'échelle :
 // une unité = une case de la grille. Les mêmes fonctions servent à la carte,
@@ -777,7 +778,7 @@ export interface CreepLike {
   shred: number;
   hitFlash: number;
   bob: number;
-  breaker?: { phase: 'charge' | 'armed' | 'cooldown'; timer: number };
+  breaker?: Creep['breaker'];
 }
 
 export function drawCreep(ctx: Ctx, c: CreepLike, dirX: number, dirY: number, time: number, showBar = true): void {
@@ -795,7 +796,7 @@ export function drawCreep(ctx: Ctx, c: CreepLike, dirX: number, dirY: number, ti
   ctx.fill();
 
   // Aura du Sapeur gobelin en fenêtre de destruction.
-  if (c.breaker?.phase === 'armed') {
+  if (c.breaker?.phase === BreakerPhase.Armed) {
     ctx.fillStyle = PAL.breakerAura;
     ctx.beginPath();
     ctx.arc(x, y, r + 0.14 + 0.05 * Math.sin(time * 6 + c.bob), 0, Math.PI * 2);

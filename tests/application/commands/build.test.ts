@@ -3,13 +3,14 @@ import { dispatch } from '../../../src/application/dispatch';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { newWorld } from '../../support/helpers';
 import { MAP_GATED_STONES } from '../../support/maps';
+import { CommandType } from '../../../src/domain/model/types';
 
 describe('build', () => {
   it('allonge le trajet quand on construit un mur en travers', () => {
     const w = newWorld();
     const before = w.mazeLength();
     // Un rideau de murs vertical de y=1 à y=20, colonne 10 : les créatures doivent contourner par le bas.
-    for (let y = 1; y <= 19; y += 2) expect(dispatch(w, { c: 'build', def: 'wall', x: 10, y }).ok).toBe(true);
+    for (let y = 1; y <= 19; y += 2) expect(dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y }).ok).toBe(true);
     expect(w.mazeLength()).toBeGreaterThan(before + 10);
   });
 
@@ -18,7 +19,7 @@ describe('build', () => {
     w.gold = 10_000;
     // Mur complet sur la colonne 20 sauf la dernière case : le dernier bloc doit être refusé.
     const results = [];
-    for (let y = 1; y <= 21; y += 2) results.push(dispatch(w, { c: 'build', def: 'wall', x: 20, y }));
+    for (let y = 1; y <= 21; y += 2) results.push(dispatch(w, { c: CommandType.Build, def: 'wall', x: 20, y }));
     const last = results[results.length - 1];
     expect(last.ok).toBe(false);
     expect(Number.isFinite(w.mazeLength())).toBe(true);
@@ -26,7 +27,7 @@ describe('build', () => {
 
   it('[RM-01] inscrit la tour posée au registre, en place', () => {
     const w = newWorld();
-    const built = dispatch(w, { c: 'build', def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
+    const built = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
 
     expect(w.stats.towers.size).toBe(1);
     const entry = w.stats.towers.get(built.id)!;
@@ -38,7 +39,7 @@ describe('build', () => {
     const w = newWorld('normal', 42, MAP_GATED_STONES);
     const gold = w.gold;
 
-    const r = dispatch(w, { c: 'build', def: 'wall', x: 15, y: 1 });
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 15, y: 1 });
 
     expect(r).toEqual({ ok: false, reason: 'Impossible de bloquer le chemin.' });
     expect(w.towers).toHaveLength(0);
@@ -49,7 +50,7 @@ describe('build', () => {
     const w = newWorld('normal', 42, MAP_GATED_STONES);
     const gold = w.gold;
 
-    const r = dispatch(w, { c: 'build', def: 'wall', x: 10, y: 1 });
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y: 1 });
 
     expect(r).toEqual({ ok: false, reason: 'Impossible de bloquer le chemin.' });
     expect(w.towers).toHaveLength(0);
@@ -70,7 +71,7 @@ describe('build', () => {
     c.y = 4.5;
     const gold = w.gold;
 
-    const r = dispatch(w, { c: 'build', def: 'wall', x: 12, y: 3 });
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 12, y: 3 });
 
     expect(r).toEqual({ ok: false, reason: 'Impossible de bloquer le chemin.' });
     expect(w.towers).toHaveLength(0);
@@ -81,7 +82,7 @@ describe('build', () => {
     const w = newWorld('normal', 42, MAP_GATED_STONES);
     const gold = w.gold;
 
-    const r = dispatch(w, { c: 'build', def: 'wall', x: 1, y: 1 });
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 1, y: 1 });
 
     expect(r.ok).toBe(true);
     expect(w.towers).toHaveLength(1);

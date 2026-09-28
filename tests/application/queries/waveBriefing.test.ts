@@ -5,6 +5,7 @@ import { WAVES } from '../../../src/domain/catalog/creeps';
 import type { WaveDef } from '../../../src/domain/model/types';
 import { creepHp } from '../../../src/domain/systems/waves';
 import { newWorld } from '../../support/helpers';
+import { CommandType } from '../../../src/domain/model/types';
 
 // Vague mixte sans chef : loups ×3 (délai 0) puis rats ×2 (délai 3).
 const MIXED_WAVE: WaveDef = {
@@ -47,7 +48,7 @@ describe('waveBriefing', () => {
     expect(b.groups[1].count).toBe(2);
     expect(b.groups[1].hp).toBe(creepHp(w, b.groups[1].creep, 0));
 
-    dispatch(w, { c: 'callWave' });
+    dispatch(w, { c: CommandType.CallWave });
     w.step();
     expect(w.creeps[0].maxHp).toBe(b.groups[0].hp);
   });

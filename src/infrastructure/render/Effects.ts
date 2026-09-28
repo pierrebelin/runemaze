@@ -1,6 +1,7 @@
 import { CREEPS } from '../../domain/catalog/creeps';
 import type { GameEvent } from '../../domain/model/types';
 import { FAMILY_COLOR, PAL } from './palette';
+import { GameEventType } from '../../domain/model/types';
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number }
 interface Floater { x: number; y: number; text: string; color: string; life: number; big: boolean }
@@ -20,37 +21,37 @@ export class Effects {
   consume(events: GameEvent[]): void {
     for (const e of events) {
       switch (e.t) {
-        case 'kill':
+        case GameEventType.Kill:
           this.floaters.push({ x: e.x, y: e.y - 0.4, text: `+${e.bounty}`, color: PAL.gold, life: 1.1, big: e.boss });
           this.burst(e.x, e.y, e.boss ? 26 : 8, e.boss ? PAL.gold : '#c9b48a', e.boss ? 3 : 1.6);
           break;
-        case 'hit': {
+        case GameEventType.Hit: {
           const col = FAMILY_COLOR[e.family];
           if (e.splash > 0) this.rings.push({ x: e.x, y: e.y, r: e.splash, life: 0.35, max: 0.35, color: col.glow });
           this.burst(e.x, e.y, e.splash > 0 ? 6 : 2, col.main, 1.2);
           if (e.crit) this.floaters.push({ x: e.x, y: e.y - 0.5, text: `${e.dmg}!`, color: '#ffdf7a', life: 0.8, big: false });
           break;
         }
-        case 'chain':
+        case GameEventType.Chain:
           this.bolts.push({ points: e.points, life: 0.2, seed: Math.random() * 1000 });
           break;
-        case 'fire':
+        case GameEventType.Fire:
           this.recoil.set(e.towerId, 0.12);
           break;
-        case 'leak':
+        case GameEventType.Leak:
           this.leakFlash = 0.6;
           break;
-        case 'built':
-        case 'upgraded':
+        case GameEventType.Built:
+        case GameEventType.Upgraded:
           break;
-        case 'sold':
+        case GameEventType.Sold:
           this.floaters.push({ x: e.x, y: e.y - 0.5, text: `+${e.refund}`, color: PAL.gold, life: 1, big: false });
           this.burst(e.x, e.y, 10, PAL.stone, 1.5);
           break;
-        case 'destroyed':
+        case GameEventType.Destroyed:
           this.burst(e.x, e.y, 10, PAL.stone, 1.5);
           break;
-        case 'waveStart': {
+        case GameEventType.WaveStart: {
           const def = CREEPS[e.creep];
           const flags = [def.air ? 'volants' : '', def.magicImmune ? 'immunisés à la magie' : '', def.regen && !def.boss ? 'régénération' : '']
             .filter(Boolean)

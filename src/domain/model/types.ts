@@ -133,7 +133,14 @@ export interface Creep {
   /** Nombre de seuils de `brood` déjà franchis. */
   brood: number;
   /** État du cycle du Sapeur gobelin (absent si sa définition n'a pas `breaker`). */
-  breaker?: { phase: 'charge' | 'armed' | 'cooldown'; timer: number };
+  breaker?: { phase: BreakerPhase; timer: number };
+}
+
+/** Cycle du Sapeur gobelin : charge, fenêtre de destruction, récupération. */
+export enum BreakerPhase {
+  Charge = 'charge',
+  Armed = 'armed',
+  Cooldown = 'cooldown',
 }
 
 export type TowerFate = 'standing' | 'sold' | 'destroyed';
@@ -172,28 +179,59 @@ export interface Projectile {
   alive: boolean;
 }
 
-export type GameEvent =
-  | { t: 'kill'; x: number; y: number; bounty: number; creepId: number; boss: boolean }
-  | { t: 'leak'; lives: number; boss: boolean }
-  | { t: 'hit'; x: number; y: number; family: Family; splash: number; crit: boolean; dmg: number }
-  | { t: 'fire'; towerId: number; family: Family }
-  | { t: 'chain'; points: { x: number; y: number }[] }
-  | { t: 'built'; towerId: number; x: number; y: number }
-  | { t: 'upgraded'; towerId: number }
-  | { t: 'sold'; x: number; y: number; refund: number }
-  | { t: 'destroyed'; x: number; y: number }
-  | { t: 'waveStart'; wave: number; creep: string; boss: boolean }
-  | { t: 'waveCleared'; wave: number; bonus: number; interest: number }
-  | { t: 'victory' }
-  | { t: 'defeat' };
+export enum GameEventType {
+  Kill = 'kill',
+  Leak = 'leak',
+  Hit = 'hit',
+  Fire = 'fire',
+  Chain = 'chain',
+  Built = 'built',
+  Upgraded = 'upgraded',
+  Sold = 'sold',
+  Destroyed = 'destroyed',
+  WaveStart = 'waveStart',
+  WaveCleared = 'waveCleared',
+  Victory = 'victory',
+  Defeat = 'defeat',
+}
 
-export type Phase = 'prep' | 'playing' | 'victory' | 'defeat';
+export type GameEvent =
+  | { t: GameEventType.Kill; x: number; y: number; bounty: number; creepId: number; boss: boolean }
+  | { t: GameEventType.Leak; lives: number; boss: boolean }
+  | { t: GameEventType.Hit; x: number; y: number; family: Family; splash: number; crit: boolean; dmg: number }
+  | { t: GameEventType.Fire; towerId: number; family: Family }
+  | { t: GameEventType.Chain; points: { x: number; y: number }[] }
+  | { t: GameEventType.Built; towerId: number; x: number; y: number }
+  | { t: GameEventType.Upgraded; towerId: number }
+  | { t: GameEventType.Sold; x: number; y: number; refund: number }
+  | { t: GameEventType.Destroyed; x: number; y: number }
+  | { t: GameEventType.WaveStart; wave: number; creep: string; boss: boolean }
+  | { t: GameEventType.WaveCleared; wave: number; bonus: number; interest: number }
+  | { t: GameEventType.Victory }
+  | { t: GameEventType.Defeat };
+
+export enum Phase {
+  Prep = 'prep',
+  Playing = 'playing',
+  Victory = 'victory',
+  Defeat = 'defeat',
+}
+
+export enum CommandType {
+  Build = 'build',
+  Upgrade = 'upgrade',
+  Sell = 'sell',
+  Target = 'target',
+  CallWave = 'callWave',
+  Endless = 'endless',
+}
 
 export type Command =
-  | { c: 'build'; def: string; x: number; y: number }
-  | { c: 'upgrade'; tower: number; def: string }
-  | { c: 'sell'; tower: number }
-  | { c: 'target'; tower: number; mode: TargetMode }
-  | { c: 'callWave' };
+  | { c: CommandType.Build; def: string; x: number; y: number }
+  | { c: CommandType.Upgrade; tower: number; def: string }
+  | { c: CommandType.Sell; tower: number }
+  | { c: CommandType.Target; tower: number; mode: TargetMode }
+  | { c: CommandType.CallWave }
+  | { c: CommandType.Endless };
 
 export type Result = { ok: true; id?: number } | { ok: false; reason: string };

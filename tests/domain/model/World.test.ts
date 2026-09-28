@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { MAP_CROSSING } from '../../../src/domain/catalog/map';
 import { World } from '../../../src/domain/model/World';
+import { BreakerPhase, CommandType, Phase } from '../../../src/domain/model/types';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { CREEPS } from '../../../src/domain/catalog/creeps';
 import { creepSpeed } from '../../../src/domain/rules/speed';
@@ -12,7 +13,7 @@ import { MAP_SEALS, MAP_SPIRAL } from '../../../src/domain/catalog/map';
 describe('World', () => {
   it('fait passer les créatures par la pierre runique avant la sortie', () => {
     const w = newWorld();
-    dispatch(w, { c: 'callWave' });
+    dispatch(w, { c: CommandType.CallWave });
     let sawLeg1 = false;
     for (let i = 0; i < 60 * 90 && w.stats.leaked === 0; i++) {
       w.step();
@@ -25,9 +26,9 @@ describe('World', () => {
   it('est déterministe : même graine et mêmes ordres, même partie', () => {
     const play = () => {
       const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 7 });
-      dispatch(w, { c: 'build', def: 'archer', x: 8, y: 3 });
-      dispatch(w, { c: 'build', def: 'cannon', x: 12, y: 5 });
-      dispatch(w, { c: 'callWave' });
+      dispatch(w, { c: CommandType.Build, def: 'archer', x: 8, y: 3 });
+      dispatch(w, { c: CommandType.Build, def: 'cannon', x: 12, y: 5 });
+      dispatch(w, { c: CommandType.CallWave });
       run(w, 60);
       return { gold: w.gold, kills: w.stats.kills, lives: w.lives, tick: w.tick };
     };
@@ -36,11 +37,11 @@ describe('World', () => {
 
   it('rejoue une partie à partir du journal de commandes', () => {
     const a = newWorld('normal', 99);
-    dispatch(a, { c: 'build', def: 'frost', x: 8, y: 3 });
+    dispatch(a, { c: CommandType.Build, def: 'frost', x: 8, y: 3 });
     run(a, 3);
-    dispatch(a, { c: 'callWave' });
+    dispatch(a, { c: CommandType.CallWave });
     run(a, 10);
-    dispatch(a, { c: 'build', def: 'storm', x: 14, y: 3 });
+    dispatch(a, { c: CommandType.Build, def: 'storm', x: 14, y: 3 });
     run(a, 30);
 
     const b = newWorld('normal', 99);
@@ -58,15 +59,15 @@ describe('World', () => {
     const play = () => {
       const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 11 });
       w.gold = 1000;
-      const cannon = dispatch(w, { c: 'build', def: 'cannon', x: 8, y: 3 }) as { ok: true; id: number };
+      const cannon = dispatch(w, { c: CommandType.Build, def: 'cannon', x: 8, y: 3 }) as { ok: true; id: number };
       expect(cannon.ok).toBe(true);
-      expect(dispatch(w, { c: 'upgrade', tower: cannon.id, def: 'mortar' }).ok).toBe(true);
-      const frost = dispatch(w, { c: 'build', def: 'frost', x: 12, y: 3 }) as { ok: true; id: number };
+      expect(dispatch(w, { c: CommandType.Upgrade, tower: cannon.id, def: 'mortar' }).ok).toBe(true);
+      const frost = dispatch(w, { c: CommandType.Build, def: 'frost', x: 12, y: 3 }) as { ok: true; id: number };
       expect(frost.ok).toBe(true);
-      expect(dispatch(w, { c: 'upgrade', tower: frost.id, def: 'glacier' }).ok).toBe(true);
+      expect(dispatch(w, { c: CommandType.Upgrade, tower: frost.id, def: 'glacier' }).ok).toBe(true);
       w.wave = 7;
-      expect(dispatch(w, { c: 'upgrade', tower: cannon.id, def: 'cryoshell' }).ok).toBe(true);
-      expect(dispatch(w, { c: 'callWave' }).ok).toBe(true);
+      expect(dispatch(w, { c: CommandType.Upgrade, tower: cannon.id, def: 'cryoshell' }).ok).toBe(true);
+      expect(dispatch(w, { c: CommandType.CallWave }).ok).toBe(true);
       const frozenIds = new Set<number>();
       for (let elapsed = 0; elapsed < 90; elapsed += 0.1) {
         run(w, 0.1);
@@ -90,16 +91,16 @@ describe('World', () => {
   it('[RM-12] ralentit toutes les créatures touchées par les rebonds de la Grêle', () => {
     const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 11 });
     w.gold = 1000;
-    const storm = dispatch(w, { c: 'build', def: 'storm', x: 8, y: 3 }) as { ok: true; id: number };
+    const storm = dispatch(w, { c: CommandType.Build, def: 'storm', x: 8, y: 3 }) as { ok: true; id: number };
     expect(storm.ok).toBe(true);
-    expect(dispatch(w, { c: 'upgrade', tower: storm.id, def: 'tempest' }).ok).toBe(true);
-    const frost = dispatch(w, { c: 'build', def: 'frost', x: 12, y: 3 }) as { ok: true; id: number };
+    expect(dispatch(w, { c: CommandType.Upgrade, tower: storm.id, def: 'tempest' }).ok).toBe(true);
+    const frost = dispatch(w, { c: CommandType.Build, def: 'frost', x: 12, y: 3 }) as { ok: true; id: number };
     expect(frost.ok).toBe(true);
-    expect(dispatch(w, { c: 'upgrade', tower: frost.id, def: 'glacier' }).ok).toBe(true);
+    expect(dispatch(w, { c: CommandType.Upgrade, tower: frost.id, def: 'glacier' }).ok).toBe(true);
     w.wave = 7;
-    expect(dispatch(w, { c: 'upgrade', tower: storm.id, def: 'hail' }).ok).toBe(true);
-    expect(dispatch(w, { c: 'sell', tower: frost.id }).ok).toBe(true);
-    expect(dispatch(w, { c: 'callWave' }).ok).toBe(true);
+    expect(dispatch(w, { c: CommandType.Upgrade, tower: storm.id, def: 'hail' }).ok).toBe(true);
+    expect(dispatch(w, { c: CommandType.Sell, tower: frost.id }).ok).toBe(true);
+    expect(dispatch(w, { c: CommandType.CallWave }).ok).toBe(true);
 
     let maxSlowedAtOnce = 0;
     for (let elapsed = 0; elapsed < 90; elapsed += 0.1) {
@@ -113,7 +114,7 @@ describe('World', () => {
 
   it('[RM-04] note les vies perdues de la vague quand ses créatures s’échappent', () => {
     const w = newWorld();
-    dispatch(w, { c: 'callWave' });
+    dispatch(w, { c: CommandType.CallWave });
     const before = w.lives;
     for (let i = 0; i < 60 * 90 && w.stats.leaked === 0; i++) w.step();
     expect(w.stats.waves[0].livesLost).toBe(before - w.lives);
@@ -121,15 +122,15 @@ describe('World', () => {
 
   it('[RM-04] note l’or possédé après prime et intérêts quand la vague se termine', () => {
     const w = newWorld();
-    dispatch(w, { c: 'callWave' });
+    dispatch(w, { c: CommandType.CallWave });
     for (let i = 0; i < 60 * 300 && w.stats.waves[0]?.gold === null; i++) w.step();
     expect(w.stats.waves[0].gold).toBe(w.gold);
   });
 
   it('[RM-04] impute l’évasion à la vague de la créature quand deux vagues se chevauchent', () => {
     const w = newWorld();
-    dispatch(w, { c: 'callWave' });
-    dispatch(w, { c: 'callWave' });
+    dispatch(w, { c: CommandType.CallWave });
+    dispatch(w, { c: CommandType.CallWave });
     w.lives = 1_000_000;
     const before = w.lives;
     for (let i = 0; i < 60 * 600 && (w.pending.has(0) || w.pending.has(1)); i++) w.step();
@@ -142,26 +143,26 @@ describe('World', () => {
 
   it('[RM-04] laisse l’or non renseigné et garde les vies perdues quand la vague est en cours à la défaite', () => {
     const w = newWorld();
-    dispatch(w, { c: 'callWave' });
+    dispatch(w, { c: CommandType.CallWave });
     w.lives = 1;
-    for (let i = 0; i < 60 * 90 && w.phase !== 'defeat'; i++) w.step();
-    expect(w.phase).toBe('defeat');
+    for (let i = 0; i < 60 * 90 && w.phase !== Phase.Defeat; i++) w.step();
+    expect(w.phase).toBe(Phase.Defeat);
     expect(w.stats.waves[0].gold).toBeNull();
     expect(w.stats.waves[0].livesLost).toBeGreaterThan(0);
   });
 
   it('[RM-06] produit le même registre de tours et le même décompte de vagues quand la partie est rejouée depuis le journal', () => {
     const a = newWorld('normal', 99);
-    const archer = dispatch(a, { c: 'build', def: 'archer', x: 8, y: 3 }) as { ok: true; id: number };
+    const archer = dispatch(a, { c: CommandType.Build, def: 'archer', x: 8, y: 3 }) as { ok: true; id: number };
     expect(archer.ok).toBe(true);
-    const cannon = dispatch(a, { c: 'build', def: 'cannon', x: 12, y: 3 }) as { ok: true; id: number };
+    const cannon = dispatch(a, { c: CommandType.Build, def: 'cannon', x: 12, y: 3 }) as { ok: true; id: number };
     expect(cannon.ok).toBe(true);
     run(a, 3);
-    dispatch(a, { c: 'callWave' });
+    dispatch(a, { c: CommandType.CallWave });
     run(a, 60);
-    expect(dispatch(a, { c: 'upgrade', tower: cannon.id, def: 'mortar' }).ok).toBe(true);
-    expect(dispatch(a, { c: 'sell', tower: archer.id }).ok).toBe(true);
-    dispatch(a, { c: 'callWave' });
+    expect(dispatch(a, { c: CommandType.Upgrade, tower: cannon.id, def: 'mortar' }).ok).toBe(true);
+    expect(dispatch(a, { c: CommandType.Sell, tower: archer.id }).ok).toBe(true);
+    dispatch(a, { c: CommandType.CallWave });
     run(a, 400);
 
     const toRegistry = (w: World) =>
@@ -223,7 +224,7 @@ describe('World', () => {
 
   it('[RM-04] ne compte aucune vie perdue au-delà de la défaite quand plusieurs créatures s’échappent au même tick', () => {
     const w = newWorld();
-    dispatch(w, { c: 'callWave' });
+    dispatch(w, { c: CommandType.CallWave });
     for (let i = 0; i < 60 * 5 && w.creeps.length === 0; i++) w.step();
     // Place trois créatures pile sur la case de sortie : elles s'échappent
     // toutes au même tick, quelle que soit leur vitesse.
@@ -268,12 +269,12 @@ describe('World', () => {
   it('[RM-16] détruit les mêmes tours au même instant quand la graine et le journal sont les mêmes', () => {
     const play = () => {
       const w = newWorld('normal', 5);
-      dispatch(w, { c: 'build', def: 'wall', x: 15, y: 9 });
-      dispatch(w, { c: 'build', def: 'wall', x: 19, y: 9 });
+      dispatch(w, { c: CommandType.Build, def: 'wall', x: 15, y: 9 });
+      dispatch(w, { c: CommandType.Build, def: 'wall', x: 19, y: 9 });
       const sapper = spawnCreep(w, 'sapper', 0);
       sapper.x = 18;
       sapper.y = 10;
-      sapper.breaker = { phase: 'armed', timer: 1 / 60 / 2 };
+      sapper.breaker = { phase: BreakerPhase.Armed, timer: 1 / 60 / 2 };
 
       let destroyedAt: { tick: number; id: number } | null = null;
       for (let i = 0; i < 60 * 5 && destroyedAt === null; i++) {
@@ -294,7 +295,7 @@ describe('World', () => {
 
   it('[RM-01] fait passer une créature terrestre par la pierre 1 puis la pierre 2 avant la sortie', () => {
     const w = newWorld('normal', 42, MAP_CORRIDOR);
-    dispatch(w, { c: 'callWave' });
+    dispatch(w, { c: CommandType.CallWave });
     const legs: number[] = [];
     for (let i = 0; i < 60 * 60 && w.stats.leaked === 0; i++) {
       w.step();
@@ -307,7 +308,7 @@ describe('World', () => {
 
   it('[RM-01] ne compte pas la pierre 2 quand la créature la traverse avant la pierre 1', () => {
     const w = newWorld('normal', 42, MAP_CORRIDOR);
-    dispatch(w, { c: 'callWave' });
+    dispatch(w, { c: CommandType.CallWave });
     const stone2Cell = w.grid.idx(3, 1);
     let legAtCrossing: number | null = null;
     for (let i = 0; i < 60 * 60 && legAtCrossing === null; i++) {
@@ -328,8 +329,8 @@ describe('World', () => {
   it("[RM-07] rejoue à l'identique une partie à deux pierres quand carte, graine et journal sont les mêmes", () => {
     const play = () => {
       const w = newWorld('normal', 17, MAP_TWO_STONES);
-      dispatch(w, { c: 'build', def: 'archer', x: 2, y: 2 });
-      dispatch(w, { c: 'callWave' });
+      dispatch(w, { c: CommandType.Build, def: 'archer', x: 2, y: 2 });
+      dispatch(w, { c: CommandType.CallWave });
       run(w, 20);
       return {
         gold: w.gold,

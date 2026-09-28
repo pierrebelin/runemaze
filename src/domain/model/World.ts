@@ -7,7 +7,8 @@ import { updateCombat, updateProjectiles } from '../systems/combat';
 import { updateMovement } from '../systems/movement';
 import { updateStatuses } from '../systems/status';
 import { updateWaves, type Spawner } from '../systems/waves';
-import type { Command, Creep, Difficulty, GameEvent, MapDef, Phase, Projectile, Tower, WaveTally } from './types';
+import { Phase } from './types';
+import type { Command, Creep, Difficulty, GameEvent, MapDef, Projectile, Tower, WaveTally } from './types';
 
 export const TICK = 1 / 60;
 export const FIRST_WAVE_DELAY = 35;
@@ -37,6 +38,7 @@ export class World {
   readonly grid: Grid;
   readonly rng: Rng;
   readonly difficulty: Difficulty;
+  readonly map: MapDef;
   /** Un champ par tronçon : une pierre runique après l'autre, dans l'ordre, puis la sortie. */
   readonly fields: FlowField[];
   readonly spawnCenter: { x: number; y: number };
@@ -44,7 +46,7 @@ export class World {
 
   tick = 0;
   time = 0;
-  phase: Phase = 'prep';
+  phase: Phase = Phase.Prep;
   endless = false;
   gold: number;
   lives: number;
@@ -67,13 +69,15 @@ export class World {
   /** Longueur restante estimée après chaque tronçon (pour le ciblage). */
   legRest: number[] = [];
   airRest: number[] = [];
-  private nextId = 1;
+  /** Compteur d'ids, accessible pour figer/restaurer une partie (voir `snapshot.ts`). */
+  nextId = 1;
   towerById = new Map<number, Tower>();
 
   constructor(opts: WorldOptions) {
     this.grid = new Grid(opts.map);
     this.rng = new Rng(opts.seed);
     this.difficulty = opts.difficulty;
+    this.map = opts.map;
     const d = DIFFICULTY[opts.difficulty];
     this.gold = d.gold;
     this.lives = d.lives;
@@ -162,8 +166,13 @@ export class World {
     this.stats.goldEarned += n;
   }
 
+  /** Vrai quand la partie est gagnée ou perdue : `step()` n'avance plus. */
+  isOver(): boolean {
+    return this.phase === Phase.Victory || this.phase === Phase.Defeat;
+  }
+
   step(): void {
-    if (this.phase === 'victory' || this.phase === 'defeat') return;
+    if (this.isOver()) return;
     const dt = TICK;
     this.tick++;
     this.time += dt;
@@ -196,9 +205,9 @@ export class World {
   }
 
   continueEndless(): void {
-    if (this.phase !== 'victory') return;
+    if (this.phase !== Phase.Victory) return;
     this.endless = true;
-    this.phase = 'playing';
+    this.phase = Phase.Playing;
     this.nextWaveIn = 20;
   }
 }

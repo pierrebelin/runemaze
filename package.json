@@ -8,12 +8,19 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "server": "tsx src/server/main.ts",
     "test": "vitest run",
     "balance": "vitest run tests/balance.test.ts",
     "build:artifact": "npm run build && node scripts/artifact.mjs"
   },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
     "playwright": "^1.63.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.0.0",
     "vite": "^6.0.0",
     "vite-plugin-singlefile": "^2.0.0",
