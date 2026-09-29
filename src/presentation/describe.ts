@@ -4,6 +4,19 @@ import type { ArmorType, AttackType, Creep, CreepDef, TargetMode, Tower, TowerDe
 import type { breakerLosses, familyDamage, waveCurve } from '../domain/rules/debrief';
 import { towerYield } from '../domain/rules/debrief';
 import { creepSpeed } from '../domain/rules/speed';
+import { Verdict } from '../application/online/protocol';
+
+const DUEL_VERDICT_LABEL: Record<Verdict, string> = {
+  [Verdict.Victory]: 'Victoire',
+  [Verdict.Defeat]: 'Défaite',
+  [Verdict.Draw]: 'Égalité',
+  [Verdict.Forfeit]: 'Victoire par forfait',
+  [Verdict.Abandon]: 'Défaite',
+};
+
+export function duelVerdictLabel(v: Verdict): string {
+  return DUEL_VERDICT_LABEL[v];
+}
 
 // Textes du panneau d'information. Tout est échappé : les seules données
 // injectées viennent des fichiers de données du jeu.

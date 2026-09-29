@@ -7,6 +7,8 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { Referee } from '../application/online/referee';
 import { ClientMessageType, readClientMessage, ServerMessageType } from '../application/online/protocol';
 import type { ServerMessage } from '../application/online/protocol';
+import { duelCode, Lobby, type Addressed } from '../application/online/lobby';
+import type { Seat } from '../application/online/duel';
 
 /** Aucune logique de jeu ici : lit le message, appelle l'arbitre, renvoie le `ServerMessage`. */
 
@@ -25,12 +27,48 @@ const referee = new Referee();
 /** Partie tenue par la socket, pour relayer `order`/`check`/`pace` sans identifiant explicite. */
 const sockets = new Map<WebSocket, { id: string; token: string }>();
 
+const lobby = new Lobby();
+/** Identifiant de connexion pour le salon, distinct de l'`id` de partie. */
+const socketByKey = new Map<string, WebSocket>();
+const keyBySocket = new Map<WebSocket, string>();
+/** Siège d'un duel tenu par la socket, une fois la partie à deux lancée. */
+const duelSeats = new Map<WebSocket, { code: string; seat: Seat }>();
+
 function seed(): number {
   return randomBytes(4).readUInt32BE(0);
 }
 
+function drawToken(): string {
+  return randomBytes(16).toString('hex');
+}
+
+/** Tire un code de salon libre à partir de 6 entiers aléatoires. */
+function drawCode(): string {
+  let code: string;
+  do {
+    code = duelCode(Array.from(randomBytes(6)));
+  } while (lobby.taken(code));
+  return code;
+}
+
 function send(ws: WebSocket, msg: ServerMessage): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+}
+
+function dispatchAddressed(addressed: Addressed[]): void {
+  for (const a of addressed) {
+    const target = socketByKey.get(a.key);
+    if (target) send(target, a.msg);
+  }
+}
+
+/** Envoie chaque `SeatMessage` à la socket qui tient le siège visé dans ce salon. */
+function dispatchSeated(code: string, messages: { seat: Seat; msg: ServerMessage }[]): void {
+  for (const sm of messages) {
+    for (const [target, other] of duelSeats) {
+      if (other.code === code && other.seat === sm.seat) send(target, sm.msg);
+    }
+  }
 }
 
 /** Fait tenir `id`/`token` par la socket ; abandonne l'ancienne partie tenue si elle diffère. */
@@ -64,6 +102,10 @@ const httpServer = createServer((req, res) => {
 const wss = new WebSocketServer({ server: httpServer, path: '/partie' });
 
 wss.on('connection', (ws) => {
+  const key = randomUUID();
+  socketByKey.set(key, ws);
+  keyBySocket.set(ws, key);
+
   ws.on('message', (raw) => {
     const msg = readClientMessage(raw.toString());
     if (!msg) return;
@@ -80,6 +122,10 @@ wss.on('connection', (ws) => {
     const held = sockets.get(ws);
     if (held) referee.lose(held.id, Date.now());
     sockets.delete(ws);
+    duelSeats.delete(ws);
+    dispatchAddressed(lobby.leave(key, Date.now()));
+    socketByKey.delete(key);
+    keyBySocket.delete(ws);
   });
 });
 
@@ -99,18 +145,31 @@ function handleMessage(ws: WebSocket, msg: NonNullable<ReturnType<typeof readCli
       break;
     }
     case ClientMessageType.Order: {
+      const seated = duelSeats.get(ws);
+      if (seated) {
+        const reply = lobby.duel(seated.code)?.order(seated.seat, msg, now);
+        if (reply) send(ws, reply);
+        break;
+      }
       const held = sockets.get(ws);
       const reply = held && referee.game(held.id)?.order(msg, now);
       if (reply) send(ws, reply);
       break;
     }
     case ClientMessageType.Check: {
+      const seated = duelSeats.get(ws);
+      if (seated) {
+        const reply = lobby.duel(seated.code)?.check(seated.seat, msg, now);
+        if (reply) send(ws, reply);
+        break;
+      }
       const held = sockets.get(ws);
       const reply = held && referee.game(held.id)?.check(msg, now);
       if (reply) send(ws, reply);
       break;
     }
     case ClientMessageType.Pace: {
+      if (duelSeats.has(ws)) break;
       const held = sockets.get(ws);
       referee.game(held?.id ?? '')?.pace(msg, now);
       break;
@@ -132,6 +191,53 @@ function handleMessage(ws: WebSocket, msg: NonNullable<ReturnType<typeof readCli
       send(ws, reply);
       break;
     }
+    case ClientMessageType.Host: {
+      const key = keyBySocket.get(ws)!;
+      const code = drawCode();
+      dispatchAddressed(lobby.host({ code, nick: msg.nick, map: msg.map, difficulty: msg.difficulty, key }));
+      break;
+    }
+    case ClientMessageType.Join: {
+      const key = keyBySocket.get(ws)!;
+      dispatchAddressed(lobby.join({ code: msg.code, nick: msg.nick, key }));
+      break;
+    }
+    case ClientMessageType.Leave: {
+      const key = keyBySocket.get(ws)!;
+      duelSeats.delete(ws);
+      dispatchAddressed(lobby.leave(key, now));
+      break;
+    }
+    case ClientMessageType.Ready: {
+      const seated = duelSeats.get(ws);
+      if (!seated) break;
+      const messages = lobby.duel(seated.code)?.ready(seated.seat, now) ?? [];
+      dispatchSeated(seated.code, messages);
+      break;
+    }
+    case ClientMessageType.Rejoin: {
+      const key = keyBySocket.get(ws)!;
+      const addressed = lobby.rejoin({ code: msg.code, token: msg.token, key }, now);
+      for (const a of addressed) {
+        if (a.key === key && a.msg.t === ServerMessageType.Thawed) {
+          duelSeats.set(ws, { code: msg.code, seat: a.msg.seat });
+        }
+      }
+      dispatchAddressed(addressed);
+      break;
+    }
+    case ClientMessageType.Start: {
+      const key = keyBySocket.get(ws)!;
+      const addressed = lobby.start(key, seed(), [drawToken(), drawToken()], now);
+      for (const a of addressed) {
+        if (a.msg.t === ServerMessageType.DuelStarted) {
+          const target = socketByKey.get(a.key);
+          if (target) duelSeats.set(target, { code: a.msg.code, seat: a.msg.seat });
+        }
+      }
+      dispatchAddressed(addressed);
+      break;
+    }
   }
 }
 
@@ -142,6 +248,16 @@ setInterval(() => {
     if (reply) send(ws, reply);
   }
   referee.sweep(now);
+
+  const codes = new Set<string>();
+  for (const seated of duelSeats.values()) codes.add(seated.code);
+  for (const code of codes) {
+    dispatchSeated(code, lobby.duel(code)?.advance(now) ?? []);
+  }
+  lobby.sweep(now);
+  for (const [ws, seated] of duelSeats) {
+    if (!lobby.duel(seated.code)) duelSeats.delete(ws);
+  }
 }, ADVANCE_INTERVAL_MS);
 
 httpServer.listen(PORT, () => {

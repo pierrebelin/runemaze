@@ -148,3 +148,77 @@ describe('readClientMessage', () => {
     ).toBeNull();
   });
 });
+
+describe('readClientMessage — salon', () => {
+  it('[RM-16] lit la création d\'un salon avec pseudo, carte et difficulté', () => {
+    const longNick = 'A'.repeat(20);
+    const raw = JSON.stringify({ t: 'host', nick: longNick, map: MAP_TWO_STONES, difficulty: 'hard' });
+
+    expect(readClientMessage(raw)).toEqual({
+      t: 'host',
+      nick: longNick,
+      map: MAP_TWO_STONES,
+      difficulty: 'hard',
+    });
+
+    expect(
+      readClientMessage(JSON.stringify({ t: 'host', nick: 'Ada', map: MAP_TWO_STONES, difficulty: 'x' })),
+    ).toBeNull();
+    expect(
+      readClientMessage(JSON.stringify({ t: 'host', nick: 'Ada', map: {}, difficulty: 'hard' })),
+    ).toBeNull();
+    expect(
+      readClientMessage(JSON.stringify({ t: 'host', nick: 42, map: MAP_TWO_STONES, difficulty: 'hard' })),
+    ).toBeNull();
+  });
+
+  it('[RM-16] lit la demande de rejoindre avec pseudo et code', () => {
+    const raw = JSON.stringify({ t: 'join', nick: 'Bob', code: 'ABCDEF' });
+
+    expect(readClientMessage(raw)).toEqual({ t: 'join', nick: 'Bob', code: 'ABCDEF' });
+  });
+
+  it('[RM-02] rejette un message de rejoindre qui porte une carte ou une difficulté', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'join', nick: 'Bob', code: 'ABCDEF' }))).toEqual({
+      t: 'join',
+      nick: 'Bob',
+      code: 'ABCDEF',
+    });
+    expect(
+      readClientMessage(JSON.stringify({ t: 'join', nick: 'Bob', code: 'ABCDEF', map: MAP_TWO_STONES })),
+    ).toBeNull();
+    expect(
+      readClientMessage(JSON.stringify({ t: 'join', nick: 'Bob', code: 'ABCDEF', difficulty: 'hard' })),
+    ).toBeNull();
+  });
+
+  it('[RM-03] rejette un code qui n\'a pas 6 lettres de l\'alphabet', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'join', nick: 'Bob', code: 'HJKNPZ' }))).toEqual({
+      t: 'join',
+      nick: 'Bob',
+      code: 'HJKNPZ',
+    });
+    for (const code of ['ABCDE', 'ABCDEFG', 'abcdef', 'ABCDEI', 'ABCDEO', 'ABCD1F']) {
+      expect(readClientMessage(JSON.stringify({ t: 'join', nick: 'Bob', code }))).toBeNull();
+    }
+    expect(readClientMessage(JSON.stringify({ t: 'join', nick: 'Bob', code: 123456 }))).toBeNull();
+  });
+
+  it('[RM-16] lit le départ du salon', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'leave' }))).toEqual({ t: 'leave' });
+  });
+
+  it('[CU-03] lit la demande de lancement', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'start' }))).toEqual({ t: 'start' });
+  });
+
+  it('[RM-08] lit la demande d\'appel à deux', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'ready' }))).toEqual({ t: 'ready' });
+  });
+
+  it('[CU-07] lit la demande de reprise avec code et jeton', () => {
+    const raw = JSON.stringify({ t: 'rejoin', code: 'ABCDEF', token: 'tok-1' });
+
+    expect(readClientMessage(raw)).toEqual({ t: 'rejoin', code: 'ABCDEF', token: 'tok-1' });
+  });
+});

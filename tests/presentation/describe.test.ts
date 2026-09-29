@@ -8,8 +8,9 @@ import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   briefingChip, briefingInfo,
   creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  elementsLabel, FAMILY_LABEL, fmt0, fmt1, nextWaveInfo, towerInfo, towerSpecials,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, nextWaveInfo, towerInfo, towerSpecials,
 } from '../../src/presentation/describe';
+import { Verdict } from '../../src/application/online/protocol';
 import { infusionBlocker } from '../../src/domain/rules/infusion';
 import { TOWERS } from '../../src/domain/catalog/towers';
 import { familyDamage, towerRanking, towerYield } from '../../src/domain/rules/debrief';
@@ -201,6 +202,15 @@ describe('aperçu de la prochaine vague', () => {
     expect(html).toContain(fmt0(128));
     expect(html).toContain('23 or');
     expect(html).toContain('9 or');
+  });
+});
+
+describe('verdict de duel', () => {
+  it('[RM-14] nomme « Victoire », « Défaite », « Égalité » et « Victoire par forfait » selon le verdict', () => {
+    expect(duelVerdictLabel(Verdict.Victory)).toBe('Victoire');
+    expect(duelVerdictLabel(Verdict.Defeat)).toBe('Défaite');
+    expect(duelVerdictLabel(Verdict.Draw)).toBe('Égalité');
+    expect(duelVerdictLabel(Verdict.Forfeit)).toBe('Victoire par forfait');
   });
 });
 

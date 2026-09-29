@@ -14,26 +14,33 @@ import { infusionLock } from '../application/queries/infusionLock';
 import { previewRoute } from '../application/queries/previewRoute';
 import { waveBriefing } from '../application/queries/waveBriefing';
 import { realign } from '../application/online/realign';
+import { Seat } from '../application/online/duel';
 import { LOST_LIMIT_MS } from '../application/online/heldGame';
 import { ClientMessageType, ServerMessageType } from '../application/online/protocol';
 import type { ServerMessage } from '../application/online/protocol';
 import { refundValue, upgradeCost } from '../domain/rules/pricing';
 import { canLaunchNext } from '../domain/systems/waves';
-import { World } from '../domain/model/World';
-import { restore } from '../domain/model/snapshot';
+import { World, type Stats } from '../domain/model/World';
+import { restore, type WorldSnapshot } from '../domain/model/snapshot';
 import { fingerprint } from '../domain/rules/fingerprint';
 import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, MapDef, Result, TargetMode, Tower } from '../domain/model/types';
 import { CommandType, GameEventType, Phase } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
-import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, nextWaveInfo, TARGET_LABEL, towerInfo } from './describe';
+import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, nextWaveInfo, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
+
+/** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
+function escapeHtml(raw: string): string {
+  return raw.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+}
 
 const KEYS = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'z', 'x', 'c', 'v'];
 const TARGET_ORDER: TargetMode[] = ['first', 'last', 'strong', 'weak', 'close'];
 const BEST_KEY = 'dedale.best.v2';
 const LEGACY_BEST_KEY = 'dedale.best.v1';
 const PENDING_KEY = 'dedale.pending.v1';
+const DUEL_SEAT_KEY = 'dedale.duelseat.v1';
 
 const ICON_CANCEL = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M11 11l18 18M29 11L11 29" stroke="#e0664f" stroke-width="4" stroke-linecap="round"/></svg>';
 const ICON_HELP = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14" fill="none" stroke="#b98d4c" stroke-width="2.5"/><path d="M15.5 16a4.5 4.5 0 119 .5c0 3-4.5 3.5-4.5 6.5" fill="none" stroke="#efe3c4" stroke-width="2.6" stroke-linecap="round"/><circle cx="20" cy="28" r="1.8" fill="#efe3c4"/></svg>';
@@ -58,6 +65,7 @@ enum Overlay {
   End = 'end',
   Pause = 'pause',
   Lost = 'lost',
+  Lobby = 'lobby',
 }
 
 type Selection = { kind: 'tower'; id: number } | { kind: 'creep'; id: number } | null;
@@ -68,6 +76,8 @@ export class Game {
   private world: World;
   private readonly renderer: Renderer;
   private readonly fx = new Effects();
+  /** Passée au rendu à la place de `fx` en vue adverse : les effets de sa propre carte ne s'y dessinent pas. */
+  private readonly noFx = new Effects();
   private readonly sfx = new Sfx();
   private readonly loop: GameLoop;
   private difficulty: Difficulty = 'normal';
@@ -80,9 +90,27 @@ export class Game {
   private gameToken: string | null = null;
   private lostElapsed = 0;
   private lostRemaining = -1;
+  /** Temps restant avant forfait de l'adversaire déconnecté (décompte local) ; `null` hors gel de duel. */
+  private frozenMs: number | null = null;
   private lostRetryAt = 0;
   private lostFinal = false;
+  private duelLost = false;
   private reconnecting = false;
+  private duelLink: ServerLink | null = null;
+  private duelRole: 'host' | 'guest' | null = null;
+  private duelCode: string | null = null;
+  private duelHostNick = '';
+  private duelGuestNick: string | null = null;
+  private duelMap: MapDef | null = null;
+  private duelDifficulty: Difficulty | null = null;
+  private duelInRoom = false;
+  /** Vrai tant qu'une reprise de siège est en attente de réponse. */
+  private duelRejoining = false;
+  /** Carte adverse : restaurée à chaque `Rival`, avancée localement entre deux envois (D3). */
+  private rivalWorld: World | null = null;
+  private rivalNick = '';
+  private viewingRival = false;
+  private rivalHud: Record<string, string> = {};
 
   private selected: Selection = null;
   private buildDef: string | null = null;
@@ -130,7 +158,7 @@ export class Game {
     if (this.launching) return;
     this.launching = true;
     const map = MAPS.find((m) => m.id === this.mapId) ?? MAPS[0];
-    const previous = this.loadPending() ?? undefined;
+    const previous = this.loadSeat(PENDING_KEY) ?? undefined;
     this.link?.close();
     this.link = null;
     const link = new ServerLink();
@@ -194,14 +222,14 @@ export class Game {
         this.renderer.setWorld(this.world);
         break;
       case ServerMessageType.Over:
-        this.clearPending();
+        this.clearSeat(PENDING_KEY);
         this.world = restore(msg.snapshot);
         this.renderer.setWorld(this.world);
         this.saveBest();
         this.showEnd();
         break;
       case ServerMessageType.Ended:
-        this.clearPending();
+        this.clearSeat(PENDING_KEY);
         this.link?.close();
         this.link = null;
         this.showEndedOverlay();
@@ -219,6 +247,24 @@ export class Game {
     this.resetLostState();
     this.lostRemaining = Math.ceil(LOST_LIMIT_MS / 1000);
     this.openOverlay(Overlay.Lost, this.lostHtml(this.lostRemaining));
+  }
+
+  /** Coupure en duel : pas de reprise solo ni de décompte ; le joueur revient au titre et rejoint avec son code (`Rejoin`). */
+  private onDuelLost(): void {
+    this.link = null;
+    // L'overlay « adversaire déconnecté » est un `Lost` : un duel gelé doit quand même basculer sur « Connexion perdue ».
+    const frozen = this.frozenMs !== null;
+    if (this.overlay === Overlay.End || this.overlay === Overlay.Start || (this.overlay === Overlay.Lost && !frozen)) return;
+    this.setPaused(true);
+    this.resetLostState();
+    this.duelLost = true;
+    this.openOverlay(Overlay.Lost, `
+      <div class="sheet" style="width:min(360px,100%);text-align:center">
+        <h2>Connexion perdue</h2>
+        <p class="lede">Reprenez la partie avec son code dans les 30 s.</p>
+        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="quitDuelLost">Écran titre</button></div>
+      </div>`);
+    $('quitDuelLost').addEventListener('click', () => this.leaveLobby());
   }
 
   /** Envoie un ordre du joueur : `dispatch` fait foi localement, le serveur ne fait que confirmer ou recaler. */
@@ -242,7 +288,12 @@ export class Game {
   // ─── Simulation ──────────────────────────────────────────────────────────
 
   private stepSim(): void {
+    // Duel gelé : ni notre carte ni la carte adverse n'avancent, `Thawed` recale sur l'horloge du serveur.
+    if (this.frozenMs !== null) return;
     this.world.step();
+    // Carte adverse avancée localement entre deux `Rival`, sans effet visuel ni sonore (pas la nôtre).
+    this.rivalWorld?.step();
+    this.rivalWorld?.drainEvents();
     const events = this.world.drainEvents();
     if (events.length === 0) return;
     this.fx.consume(events);
@@ -261,6 +312,7 @@ export class Game {
           this.leakToastAt = w.time;
           this.toast(e.boss ? `Le chef a franchi la porte : −${e.lives} vies.` : 'Une créature a franchi la porte.', true);
         }
+        if (this.viewingRival) this.flashLives();
         break;
       default:
         break;
@@ -268,7 +320,10 @@ export class Game {
   }
 
   private frame(dt: number): void {
-    if (this.overlay === Overlay.Lost) this.updateLost(dt);
+    if (this.overlay === Overlay.Lost) {
+      if (this.frozenMs !== null) this.updateFrozen(dt);
+      else if (!this.duelLost) this.updateLost(dt);
+    }
     const w = this.world;
     this.fx.update(this.loop.paused ? 0 : dt * this.loop.speed);
 
@@ -284,7 +339,7 @@ export class Game {
     this.view.selectedCreep = this.selected?.kind === 'creep' ? this.selected.id : null;
     this.canvas.classList.toggle('building', !!this.buildDef);
 
-    this.renderer.draw(this.view, this.fx, w.time, this.loop.realTime);
+    this.renderer.draw(this.view, this.viewingRival ? this.noFx : this.fx, w.time, this.loop.realTime);
     this.renderer.pruneFacing();
     this.updateHud();
     this.updateCard();
@@ -379,14 +434,25 @@ export class Game {
   private callWave(): void {
     this.sfx.unlock();
     if (this.overlay) return;
+    if (this.duelRole) {
+      // En duel, l'appel de vague est une demande à deux (D5) : pas de commande, pas de dispatch local.
+      this.link?.send({ t: ClientMessageType.Ready });
+      return;
+    }
     const r = this.order({ c: CommandType.CallWave });
     if (!r.ok) this.fail(r.reason);
     else this.drainNow();
   }
 
-  private setSpeed(s: number): void {
+  /** Fixe la vitesse de la boucle et surligne le bouton `[data-speed]` correspondant. */
+  private showSpeed(s: number): void {
     this.loop.speed = s;
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === s)));
+  }
+
+  private setSpeed(s: number): void {
+    if (this.duelRole) return;
+    this.showSpeed(s);
     this.sendPace();
   }
 
@@ -396,6 +462,7 @@ export class Game {
   }
 
   private togglePause(): void {
+    if (this.duelRole) return;
     if (this.overlay === Overlay.Start || this.overlay === Overlay.End || this.overlay === Overlay.Lost) return;
     if (this.overlay === Overlay.Pause) {
       this.closeOverlay();
@@ -443,7 +510,7 @@ export class Game {
       this.view.previewRoute = null;
     });
     c.addEventListener('pointerdown', (e) => {
-      if (this.overlay) return;
+      if (this.overlay || this.viewingRival) return;
       this.sfx.unlock();
       if (e.button === 2) {
         this.escape();
@@ -491,6 +558,7 @@ export class Game {
 
     document.addEventListener('visibilitychange', () => {
       if (this.unloading) return;
+      if (this.duelRole) return;
       if (document.hidden) {
         if (!this.loop.paused) {
           this.pausedByVisibility = true;
@@ -535,6 +603,8 @@ export class Game {
       } else if (k === 'm') this.toggleMute();
       else if (k === '1' || k === '2' || k === '3') this.setSpeed(Number(k));
       else if (k === 'l') this.view.showRoute = !this.view.showRoute;
+      else if (k === 'o' && this.rivalWorld) this.toggleRivalView(true);
+      else if (k === 'i' && this.rivalWorld) this.toggleRivalView(false);
       else if (KEYS.includes(k) && !e.repeat) {
         const i = KEYS.indexOf(k);
         if (this.slots[i]) {
@@ -585,7 +655,7 @@ export class Game {
 
   private runSlot(i: number): void {
     const s = this.slots[i];
-    if (!s || this.overlay) return;
+    if (!s || this.overlay || this.viewingRival) return;
     s.run();
     this.cardKey = '';
   }
@@ -690,6 +760,18 @@ export class Game {
   // ─── Panneaux d'information ──────────────────────────────────────────────
 
   private updateInfo(): void {
+    if (this.viewingRival) {
+      // Aucune fiche d'info en vue adverse (H1).
+      if (this.infoCache !== '') {
+        this.infoCache = '';
+        $('info').innerHTML = '';
+      }
+      if (this.unitCache !== '') {
+        this.unitCache = '';
+        $('unitText').innerHTML = '';
+      }
+      return;
+    }
     const w = this.world;
     let html: string;
     const hover = this.hoverSlot !== null ? this.slots[this.hoverSlot] : null;
@@ -818,6 +900,76 @@ export class Game {
     }
   }
 
+  // ─── Carte adverse (duel) ────────────────────────────────────────────────
+
+  /** Crée l'encart adverse permanent et son bouton de bascule de vue, une fois par duel. */
+  private ensureRivalPanel(): void {
+    if (document.getElementById('rivalPanel')) return;
+    const bar = document.querySelector('header.bar');
+    if (!bar) return;
+    const panel = document.createElement('span');
+    panel.id = 'rivalPanel';
+    panel.className = 'res';
+    panel.innerHTML = `<small id="rivalNick"></small> <b id="rivalLives">0</b> vies · <b id="rivalGold">0</b> or <button type="button" class="btn" id="rivalViewBtn">Voir l'adversaire</button>`;
+    bar.insertBefore(panel, $('pauseBtn'));
+    $('rivalViewBtn').addEventListener('click', () => this.toggleRivalView(!this.viewingRival));
+  }
+
+  private removeRivalPanel(): void {
+    document.getElementById('rivalPanel')?.remove();
+  }
+
+  /** Reçoit l'instantané périodique de la carte adverse (`Rival`) : restaure, garde le pseudo, met à jour l'encart. */
+  private applyRival(msg: Extract<ServerMessage, { t: ServerMessageType.Rival }>): void {
+    this.applyRivalSnapshot(msg.snapshot, msg.nick);
+  }
+
+  private applyRivalSnapshot(snapshot: WorldSnapshot, nick = this.rivalNick): void {
+    this.ensureRivalPanel();
+    this.rivalWorld = restore(snapshot);
+    this.rivalNick = nick;
+    if (this.viewingRival) this.renderer.setWorld(this.rivalWorld);
+    this.updateRivalPanel();
+  }
+
+  private updateRivalPanel(): void {
+    if (!this.rivalWorld || !document.getElementById('rivalPanel')) return;
+    const set = (id: string, v: string) => {
+      if (this.rivalHud[id] === v) return;
+      this.rivalHud[id] = v;
+      $(id).textContent = v;
+    };
+    set('rivalNick', this.rivalNick);
+    set('rivalLives', fmt0(this.rivalWorld.lives));
+    set('rivalGold', fmt0(this.rivalWorld.gold));
+  }
+
+  /** Bascule entre sa propre carte et la carte adverse (touches `O`/`I`, boutons « Voir l'adversaire »/« Ma carte »). */
+  private toggleRivalView(rival: boolean): void {
+    if (rival === this.viewingRival || !this.rivalWorld) return;
+    this.viewingRival = rival;
+    this.renderer.setWorld(rival ? this.rivalWorld : this.world);
+    if (rival) {
+      // Sélection et aperçu de pose n'ont plus de sens sur la carte adverse (lecture seule).
+      this.selected = null;
+      this.setBuild(null);
+    }
+    const btn = document.getElementById('rivalViewBtn');
+    if (btn) btn.textContent = rival ? 'Ma carte' : "Voir l'adversaire";
+    this.resize();
+  }
+
+  /** Réagit à une fuite sur sa propre carte même en vue adverse : l'encart de vies tressaute un instant. */
+  private flashLives(): void {
+    const el = $('lives');
+    el.style.transition = 'none';
+    el.style.transform = 'scale(1.4)';
+    requestAnimationFrame(() => {
+      el.style.transition = 'transform 0.3s';
+      el.style.transform = 'scale(1)';
+    });
+  }
+
   private toast(msg: string, bad = false): void {
     const el = $('toast');
     el.textContent = msg;
@@ -862,9 +1014,10 @@ export class Game {
     }
   }
 
-  private loadPending(): { id: string; token: string } | null {
+  /** Reprise de partie (solo ou duel) : `{ id, token }` gardé sous `key`. */
+  private loadSeat(key: string): { id: string; token: string } | null {
     try {
-      const raw = localStorage.getItem(PENDING_KEY);
+      const raw = localStorage.getItem(key);
       if (!raw) return null;
       const p = JSON.parse(raw) as { id?: unknown; token?: unknown };
       return typeof p.id === 'string' && typeof p.token === 'string' ? { id: p.id, token: p.token } : null;
@@ -873,17 +1026,21 @@ export class Game {
     }
   }
 
-  private savePending(): void {
+  private saveSeat(key: string, id: string, token: string): void {
     try {
-      if (this.gameId && this.gameToken) localStorage.setItem(PENDING_KEY, JSON.stringify({ id: this.gameId, token: this.gameToken }));
+      localStorage.setItem(key, JSON.stringify({ id, token }));
     } catch {
       /* stockage indisponible : on s'en passe */
     }
   }
 
-  private clearPending(): void {
+  private savePending(): void {
+    if (this.gameId && this.gameToken) this.saveSeat(PENDING_KEY, this.gameId, this.gameToken);
+  }
+
+  private clearSeat(key: string): void {
     try {
-      localStorage.removeItem(PENDING_KEY);
+      localStorage.removeItem(key);
     } catch {
       /* stockage indisponible : on s'en passe */
     }
@@ -896,7 +1053,9 @@ export class Game {
     this.lostRemaining = -1;
     this.lostRetryAt = 0;
     this.lostFinal = false;
+    this.duelLost = false;
     this.reconnecting = false;
+    this.frozenMs = null;
   }
 
   private lostHtml(seconds: number): string {
@@ -905,6 +1064,24 @@ export class Game {
         <h2>Connexion perdue — ${seconds} s</h2>
         <p class="lede">Nouvelle tentative de connexion en cours…</p>
       </div>`;
+  }
+
+  private showFrozen(): void {
+    this.openOverlay(Overlay.Lost, `
+      <div class="sheet" style="width:min(360px,100%);text-align:center">
+        <h2>Adversaire déconnecté — ${Math.ceil(this.frozenMs! / 1000)} s</h2>
+        <div class="row" style="justify-content:center"><button type="button" class="btn" id="quitFrozen">Quitter la partie</button></div>
+      </div>`);
+    $('quitFrozen').addEventListener('click', () => {
+      this.link = null;
+      this.leaveLobby();
+    });
+  }
+
+  private updateFrozen(dt: number): void {
+    const before = Math.ceil(this.frozenMs! / 1000);
+    this.frozenMs = Math.max(0, this.frozenMs! - dt * 1000);
+    if (Math.ceil(this.frozenMs / 1000) !== before) this.showFrozen();
   }
 
   private showEndedOverlay(): void {
@@ -986,8 +1163,7 @@ export class Game {
     this.difficulty = this.world.difficulty;
     this.renderer.setWorld(this.world);
     this.resize();
-    this.loop.speed = msg.speed;
-    document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === msg.speed)));
+    this.showSpeed(msg.speed);
     this.setPaused(msg.paused);
     this.savePending();
     if (msg.paused) this.showPause();
@@ -998,7 +1174,7 @@ export class Game {
   private applyAbandon(link: ServerLink, msg: Extract<ServerMessage, { t: ServerMessageType.Over }>): void {
     link.close();
     this.link = null;
-    this.clearPending();
+    this.clearSeat(PENDING_KEY);
     this.world = restore(msg.snapshot);
     this.mapId = this.world.map.id;
     this.difficulty = this.world.difficulty;
@@ -1013,7 +1189,7 @@ export class Game {
   private applyEnded(link?: ServerLink): void {
     link?.close();
     this.link = null;
-    this.clearPending();
+    this.clearSeat(PENDING_KEY);
     this.showEndedOverlay();
     this.resetLostState();
   }
@@ -1053,6 +1229,10 @@ export class Game {
         <p class="label">Difficulté</p>
         <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
         <div class="row"><button type="button" class="btn primary" id="startBtn">Commencer</button><button type="button" class="btn" id="startHelp">Commandes et armures</button></div>
+        <p class="label">Partie à deux</p>
+        <div class="row"><input type="text" id="duelNick" maxlength="12" placeholder="Pseudo"></div>
+        <div class="row"><button type="button" class="btn" id="hostDuelBtn">Créer une partie partagée</button></div>
+        <div class="row"><input type="text" id="duelCode" maxlength="6" placeholder="Code"><button type="button" class="btn" id="joinDuelBtn">Rejoindre</button></div>
       </div>`);
     const el = $('overlay');
     el.querySelectorAll<HTMLCanvasElement>('[data-thumb]').forEach((c) => {
@@ -1082,13 +1262,15 @@ export class Game {
       this.newGame(this.difficulty);
     });
     $('startHelp').addEventListener('click', () => this.showHelp(true));
+    $('hostDuelBtn').addEventListener('click', () => this.hostDuel());
+    $('joinDuelBtn').addEventListener('click', () => this.joinDuel());
     ($('startBtn') as HTMLButtonElement).focus();
     this.offerResume();
   }
 
   /** Partie interrompue connue (clé locale) : propose de la reprendre, sans bloquer l'écran titre. Liaison de sondage refermée dès la réponse. */
   private async offerResume(): Promise<void> {
-    const pending = this.loadPending();
+    const pending = this.loadSeat(PENDING_KEY);
     if (!pending) return;
     const link = new ServerLink();
     try {
@@ -1102,7 +1284,7 @@ export class Game {
       });
       link.close();
       if (!reply.ok) {
-        this.clearPending();
+        this.clearSeat(PENDING_KEY);
         return;
       }
       if (this.overlay !== Overlay.Start) return;
@@ -1112,6 +1294,290 @@ export class Game {
     } catch {
       link.close();
     }
+  }
+
+  // ─── Partie à deux ───────────────────────────────────────────────────────
+
+  private async hostDuel(): Promise<void> {
+    if (this.duelLink) return;
+    const nick = $<HTMLInputElement>('duelNick').value;
+    const map = MAPS.find((m) => m.id === this.mapId) ?? MAPS[0];
+    const link = new ServerLink();
+    this.duelLink = link;
+    try {
+      await link.connect();
+    } catch {
+      if (this.duelLink === link) this.duelLink = null;
+      this.toast('Impossible de créer la partie, vérifiez votre connexion.', true);
+      return;
+    }
+    this.duelRole = 'host';
+    this.setDuelControlsHidden(true);
+    link.onMessage((msg) => this.onLobbyMessage(msg));
+    link.send({ t: ClientMessageType.Host, nick, map, difficulty: this.difficulty });
+  }
+
+  private async joinDuel(): Promise<void> {
+    if (this.duelLink) return;
+    const nick = $<HTMLInputElement>('duelNick').value;
+    const code = $<HTMLInputElement>('duelCode').value.toUpperCase();
+    const link = new ServerLink();
+    this.duelLink = link;
+    try {
+      await link.connect();
+    } catch {
+      if (this.duelLink === link) this.duelLink = null;
+      this.toast('Impossible de créer la partie, vérifiez votre connexion.', true);
+      return;
+    }
+    this.duelRole = 'guest';
+    this.setDuelControlsHidden(true);
+    link.onMessage((msg) => this.onLobbyMessage(msg));
+    const seat = this.loadSeat(DUEL_SEAT_KEY);
+    this.duelRejoining = !!seat && seat.id === code;
+    if (seat && this.duelRejoining) link.send({ t: ClientMessageType.Rejoin, code, token: seat.token });
+    else link.send({ t: ClientMessageType.Join, nick, code });
+  }
+
+  private onLobbyMessage(msg: ServerMessage): void {
+    switch (msg.t) {
+      case ServerMessageType.DuelStarted:
+        this.saveSeat(DUEL_SEAT_KEY, msg.code, msg.token);
+        this.startDuelGame(msg.snapshot);
+        break;
+      case ServerMessageType.Thawed:
+        this.duelRole = msg.seat === Seat.Host ? 'host' : 'guest';
+        this.startDuelGame(msg.snapshot);
+        this.applyRivalSnapshot(msg.rival);
+        break;
+      case ServerMessageType.Hosted:
+        this.duelCode = msg.code;
+        this.duelHostNick = msg.host;
+        this.duelGuestNick = null;
+        this.duelMap = msg.map;
+        this.duelDifficulty = msg.difficulty;
+        this.duelInRoom = true;
+        this.showLobby();
+        break;
+      case ServerMessageType.Room:
+        this.duelHostNick = msg.host;
+        this.duelGuestNick = msg.guest;
+        this.duelMap = msg.map;
+        this.duelDifficulty = msg.difficulty;
+        this.duelInRoom = true;
+        this.showLobby();
+        break;
+      case ServerMessageType.Refused:
+        if (this.duelRejoining) {
+          this.duelRejoining = false;
+          this.clearSeat(DUEL_SEAT_KEY);
+        }
+        this.toast(msg.reason, true);
+        if (!this.duelInRoom) this.closeDuelLink();
+        break;
+      case ServerMessageType.Cancelled:
+        this.closeDuelLink();
+        this.showStart();
+        this.toast('L’hôte a quitté la partie.', true);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** Passe du salon à la partie : mêmes réglages que `newGame`, mais la liaison de salon devient la liaison de jeu. */
+  private startDuelGame(snapshot: WorldSnapshot): void {
+    const link = this.duelLink;
+    if (!link) return;
+    this.world = restore(snapshot);
+    this.renderer.setWorld(this.world);
+    this.fx.clear();
+    this.selected = null;
+    this.buildDef = null;
+    this.anchor = null;
+    this.endShown = false;
+    this.cardKey = '';
+    this.hud = {};
+    this.rivalWorld = null;
+    this.rivalNick = '';
+    this.viewingRival = false;
+    this.rivalHud = {};
+    this.resetLostState();
+    this.resize();
+    this.closeOverlay();
+    this.showSpeed(1);
+    this.setPaused(false);
+    this.gameId = null;
+    this.gameToken = null;
+    this.link = link;
+    link.onMessage((m) => this.onDuelMessage(m));
+    link.onLost(() => {
+      if (this.link !== link) return;
+      this.onDuelLost();
+    });
+  }
+
+  /** Ordres du serveur reçus une fois le duel lancé : recalage (`Drift`), vue adverse (`Rival`) et issue (`DuelOver`). */
+  private onDuelMessage(msg: ServerMessage): void {
+    switch (msg.t) {
+      case ServerMessageType.Drift:
+        this.world = realign(msg.snapshot, this.world.log, this.world.tick);
+        if (!this.viewingRival) this.renderer.setWorld(this.world);
+        break;
+      case ServerMessageType.Rival:
+        this.applyRival(msg);
+        break;
+      case ServerMessageType.DuelOver:
+        this.clearSeat(DUEL_SEAT_KEY);
+        this.link = null;
+        this.resetLostState();
+        this.showDuelEnd(msg);
+        break;
+      case ServerMessageType.Readiness:
+        this.applyReadiness(msg);
+        break;
+      case ServerMessageType.Frozen:
+        this.frozenMs = msg.remainingMs;
+        this.showFrozen();
+        break;
+      case ServerMessageType.Thawed:
+        this.world = realign(msg.snapshot, this.world.log, this.world.tick);
+        if (!this.viewingRival) this.renderer.setWorld(this.world);
+        this.applyRivalSnapshot(msg.rival);
+        this.frozenMs = null;
+        this.closeOverlay();
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** Affiche l'état de la demande d'appel à deux (RM-08) ; rien tant que personne n'est prêt. */
+  private applyReadiness(msg: Extract<ServerMessage, { t: ServerMessageType.Readiness }>): void {
+    if (msg.self && !msg.rival) this.toast('Prêt — en attente de l\'adversaire.');
+    else if (!msg.self && msg.rival) this.toast('Adversaire prêt.');
+  }
+
+  /** Bilan d'une partie (tours, familles, vagues, briseurs), factorisé entre l'écran solo et l'écran de duel. */
+  private debriefBlockHtml(stats: Stats, gold: number): string {
+    return `
+      <div class="debrief-tabs" role="tablist">
+        <button type="button" class="debrief-tab active" data-tab="towers">Tours</button>
+        <button type="button" class="debrief-tab" data-tab="families">Familles</button>
+        <button type="button" class="debrief-tab" data-tab="waves">Vagues</button>
+        <button type="button" class="debrief-tab" data-tab="breakers">Briseurs</button>
+      </div>
+      <div class="debrief-panel" data-panel="towers">${debriefTowers(towerRanking(stats.towers.values()))}</div>
+      <div class="debrief-panel" data-panel="families" hidden>${debriefFamilies(familyDamage(stats.towers.values()))}</div>
+      <div class="debrief-panel" data-panel="waves" hidden>${debriefWaves(waveCurve(stats.waves, gold))}</div>
+      <div class="debrief-panel" data-panel="breakers" hidden>${debriefBreakers(breakerLosses(stats.towers.values()))}</div>`;
+  }
+
+  /** Bascule entre les panneaux `.debrief-tab`/`.debrief-panel` d'un conteneur (scindé du reste de l'écran). */
+  private bindDebriefTabs(container: ParentNode): void {
+    for (const tab of container.querySelectorAll<HTMLButtonElement>('.debrief-tab')) {
+      tab.addEventListener('click', () => {
+        for (const t of container.querySelectorAll('.debrief-tab')) t.classList.remove('active');
+        tab.classList.add('active');
+        for (const panel of container.querySelectorAll<HTMLElement>('.debrief-panel')) {
+          panel.hidden = panel.dataset.panel !== tab.dataset.tab;
+        }
+      });
+    }
+  }
+
+  /** Écran de fin de duel : verdict, vies et vague des deux joueurs, puis le bilan solo existant par onglet de joueur. */
+  private showDuelEnd(msg: Extract<ServerMessage, { t: ServerMessageType.DuelOver }>): void {
+    const own = restore(msg.snapshot);
+    const rival = restore(msg.rival);
+    const rivalNick = escapeHtml((this.duelRole === 'host' ? this.duelGuestNick : this.duelHostNick) ?? 'Adversaire');
+    this.world = own;
+    this.renderer.setWorld(this.world);
+    this.openOverlay(Overlay.End, `
+      <div class="sheet">
+        <h2>${escapeHtml(duelVerdictLabel(msg.verdict))}</h2>
+        <div class="endstats">
+          <div><b>${fmt0(own.wave + 1)}</b><span>Vague</span></div>
+          <div><b>${fmt0(own.lives)}</b><span>Vies</span></div>
+          <div><b>${fmt0(rival.wave + 1)}</b><span>Vague — ${rivalNick}</span></div>
+          <div><b>${fmt0(rival.lives)}</b><span>Vies — ${rivalNick}</span></div>
+        </div>
+        <div class="duel-tabs" role="tablist">
+          <button type="button" class="duel-tab active" data-player="own">Vous</button>
+          <button type="button" class="duel-tab" data-player="rival">${rivalNick}</button>
+        </div>
+        <div class="duel-panel" data-player="own">${this.debriefBlockHtml(own.stats, own.gold)}</div>
+        <div class="duel-panel" data-player="rival" hidden>${this.debriefBlockHtml(rival.stats, rival.gold)}</div>
+        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="again">Nouvelle partie</button></div>
+      </div>`);
+    const el = $('overlay');
+    for (const tab of el.querySelectorAll<HTMLButtonElement>('.duel-tab')) {
+      tab.addEventListener('click', () => {
+        for (const t of el.querySelectorAll('.duel-tab')) t.classList.remove('active');
+        tab.classList.add('active');
+        for (const panel of el.querySelectorAll<HTMLElement>('.duel-panel')) {
+          panel.hidden = panel.dataset.player !== tab.dataset.player;
+        }
+      });
+    }
+    this.bindDebriefTabs(el.querySelector<HTMLElement>('.duel-panel[data-player="own"]')!);
+    this.bindDebriefTabs(el.querySelector<HTMLElement>('.duel-panel[data-player="rival"]')!);
+    $('again').addEventListener('click', () => {
+      this.closeDuelLink();
+      this.showStart();
+    });
+  }
+
+  private lobbyHtml(): string {
+    const code = this.duelRole === 'host'
+      ? `<p class="label">Code</p><p style="font-size:1.5rem;letter-spacing:.2em">${escapeHtml(this.duelCode ?? '')}</p>`
+      : '';
+    const guest = this.duelGuestNick ? escapeHtml(this.duelGuestNick) : 'en attente…';
+    const host = escapeHtml(this.duelHostNick ?? '');
+    const map = this.duelMap ? escapeHtml(this.duelMap.name) : '';
+    const diff = this.duelDifficulty ? escapeHtml(DIFFICULTY[this.duelDifficulty].label) : '';
+    const startBtn = this.duelRole === 'host' ? '<button type="button" class="btn primary" id="startDuel">Lancer la partie</button>' : '';
+    return `
+      <div class="sheet" style="width:min(360px,100%);text-align:center">
+        <h2>Partie à deux</h2>
+        ${code}
+        <p>${host} contre ${guest}</p>
+        <p>${map} · ${diff}</p>
+        <div class="row" style="justify-content:center">${startBtn}<button type="button" class="btn" id="leaveLobby">Quitter</button></div>
+      </div>`;
+  }
+
+  private showLobby(): void {
+    this.openOverlay(Overlay.Lobby, this.lobbyHtml());
+    $('leaveLobby').addEventListener('click', () => this.leaveLobby());
+    if (this.duelRole === 'host') {
+      $('startDuel').addEventListener('click', () => this.duelLink?.send({ t: ClientMessageType.Start }));
+    }
+  }
+
+  private leaveLobby(): void {
+    this.resetLostState();
+    this.duelLink?.send({ t: ClientMessageType.Leave });
+    this.closeDuelLink();
+    this.showStart();
+  }
+
+  private closeDuelLink(): void {
+    this.duelLink?.close();
+    this.duelLink = null;
+    this.duelRole = null;
+    this.duelCode = null;
+    this.duelInRoom = false;
+    this.setDuelControlsHidden(false);
+    this.rivalWorld = null;
+    this.viewingRival = false;
+    this.removeRivalPanel();
+  }
+
+  /** Masque pause et vitesse pendant un duel : le rythme y est fixé, commun aux deux joueurs. */
+  private setDuelControlsHidden(hidden: boolean): void {
+    $('pauseBtn').hidden = hidden;
+    document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) => (b.hidden = hidden));
   }
 
   /** Bouton « Reprendre la partie » : ouvre une liaison neuve à chaque clic, la clé locale n'est jamais effacée sur échec réseau. */
@@ -1216,30 +1682,13 @@ export class Game {
           <div><b>${fmt0(s.longestMaze)}</b><span>Plus long trajet</span></div>
           <div><b>${fmt0(s.goldEarned)}</b><span>Or gagné</span></div>
         </div>
-        <div class="debrief-tabs" role="tablist">
-          <button type="button" class="debrief-tab active" data-tab="towers">Tours</button>
-          <button type="button" class="debrief-tab" data-tab="families">Familles</button>
-          <button type="button" class="debrief-tab" data-tab="waves">Vagues</button>
-          <button type="button" class="debrief-tab" data-tab="breakers">Briseurs</button>
-        </div>
-        <div class="debrief-panel" data-panel="towers">${debriefTowers(towerRanking(s.towers.values()))}</div>
-        <div class="debrief-panel" data-panel="families" hidden>${debriefFamilies(familyDamage(s.towers.values()))}</div>
-        <div class="debrief-panel" data-panel="waves" hidden>${debriefWaves(waveCurve(s.waves, w.gold))}</div>
-        <div class="debrief-panel" data-panel="breakers" hidden>${debriefBreakers(breakerLosses(s.towers.values()))}</div>
+        ${this.debriefBlockHtml(s, w.gold)}
         <div class="row">
           ${win ? '<button type="button" class="btn primary" id="endless">Continuer en mode infini</button>' : ''}
           <button type="button" class="btn ${win ? '' : 'primary'}" id="again">Nouvelle partie</button>
         </div>
       </div>`);
-    for (const tab of document.querySelectorAll<HTMLButtonElement>('.debrief-tab')) {
-      tab.addEventListener('click', () => {
-        for (const t of document.querySelectorAll('.debrief-tab')) t.classList.remove('active');
-        tab.classList.add('active');
-        for (const panel of document.querySelectorAll<HTMLElement>('.debrief-panel')) {
-          panel.hidden = panel.dataset.panel !== tab.dataset.tab;
-        }
-      });
-    }
+    this.bindDebriefTabs($('overlay'));
     $('again').addEventListener('click', () => this.showStart());
     if (win) {
       $('endless').addEventListener('click', () => {
