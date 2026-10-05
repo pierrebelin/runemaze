@@ -1,0 +1,15 @@
+# Service systemd utilisateur : installé par deploy/remote-deploy.sh dans ~/.config/systemd/user/.
+[Unit]
+Description=Tower Defense, serveur de partie
+
+[Service]
+WorkingDirectory=%h/app/current
+Environment=NODE_ENV=production
+Environment=PORT=3210
+Environment=HOST=127.0.0.1
+ExecStart=/usr/bin/node --import tsx src/server/main.ts
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

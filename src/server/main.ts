@@ -13,6 +13,8 @@ import type { Seat } from '../application/online/duel';
 /** Aucune logique de jeu ici : lit le message, appelle l'arbitre, renvoie le `ServerMessage`. */
 
 const PORT = Number(process.env.PORT) || 8080;
+/** Adresse d'écoute ; `127.0.0.1` en production derrière Nginx, toutes les interfaces sinon. */
+const HOST = process.env.HOST;
 const DIST_DIR = join(fileURLToPath(import.meta.url), '../../../dist');
 const ADVANCE_INTERVAL_MS = 50;
 
@@ -260,6 +262,6 @@ setInterval(() => {
   }
 }, ADVANCE_INTERVAL_MS);
 
-httpServer.listen(PORT, () => {
-  console.log(`Serveur sur http://localhost:${PORT}`);
+httpServer.listen(PORT, HOST, () => {
+  console.log(`Serveur sur http://${HOST ?? 'localhost'}:${PORT}`);
 });
