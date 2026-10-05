@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WAVES } from '../../../src/domain/catalog/creeps';
+import { CREEPS, WAVES } from '../../../src/domain/catalog/creeps';
 import type { WaveGroup } from '../../../src/domain/model/types';
 
 const G = (creep: string, count: number, interval = 0.8, delay = 0): WaveGroup => ({ creep, count, interval, delay });
@@ -58,5 +58,20 @@ describe('creeps', () => {
       expect(firstIndex, creep).toBeGreaterThanOrEqual(0);
       expect(WAVES[firstIndex].groups, creep).toHaveLength(1);
     }
+  });
+
+  it('[CU-01] rend envoyables rat, loup, maraudeur, harpie, golem et spectre aux prix et gains de la table, et aucun chef', () => {
+    const sendable = Object.values(CREEPS)
+      .filter((c) => c.send !== undefined)
+      .map((c) => [c.id, c.send]);
+
+    expect(sendable).toEqual([
+      ['rat', { cost: 7, income: 1 }],
+      ['wolf', { cost: 14, income: 2 }],
+      ['raider', { cost: 25, income: 3 }],
+      ['golem', { cost: 90, income: 8 }],
+      ['harpy', { cost: 45, income: 5 }],
+      ['wraith', { cost: 110, income: 9 }],
+    ]);
   });
 });

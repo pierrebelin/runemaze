@@ -3,6 +3,7 @@ import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage'
 import type { ArmorType, AttackType, Creep, CreepDef, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
 import type { breakerLosses, familyDamage, waveCurve } from '../domain/rules/debrief';
 import { towerYield } from '../domain/rules/debrief';
+import { CREEPS } from '../domain/catalog/creeps';
 import { creepSpeed } from '../domain/rules/speed';
 import { Verdict } from '../application/online/protocol';
 
@@ -135,10 +136,13 @@ function nextWaveGroup(g: WaveBriefingGroup): string {
       <div>${creepTags(g.creep)}</div>`;
 }
 
+const incomingLabel = (n: number) => `${n} envoi${n > 1 ? 's' : ''} en approche`;
+
 export function nextWaveInfo(b: WaveBriefing | null): string {
   if (!b) return `<h3>Dernière vague lancée</h3><p>Tenez jusqu'à ce que la dernière créature tombe.</p>`;
   return `<h3>Prochaine vague ${b.wave + 1}</h3>
       ${b.groups.map(nextWaveGroup).join('')}
+      ${b.incoming > 0 ? `<div>${incomingLabel(b.incoming)}</div>` : ''}
       <p>${esc(waveHint(b.groups[0].creep))}</p>`;
 }
 
@@ -150,7 +154,9 @@ function briefingEntry(g: WaveBriefingGroup): string {
 
 /** Résumé d'une ligne dans la barre du haut : « 12 Harpies · volants ». Un groupe par entrée. */
 export function briefingChip(b: WaveBriefing): string {
-  return b.groups.map(briefingEntry).join(' · ');
+  const entries = b.groups.map(briefingEntry);
+  if (b.incoming > 0) entries.push(incomingLabel(b.incoming));
+  return entries.join(' · ');
 }
 
 function briefingGroupInfo(g: WaveBriefingGroup): string {
@@ -219,6 +225,14 @@ export function debriefBreakers(losses: ReturnType<typeof breakerLosses>): strin
   if (losses.count === 0) return '<p class="debrief-breakers">Aucune tour perdue</p>';
   const noun = losses.count > 1 ? 'tours détruites' : 'tour détruite';
   return `<p class="debrief-breakers">${fmt0(losses.count)} ${noun} · ${fmt0(losses.gold)} or</p>`;
+}
+
+export function sendPanel(gold: number, income: number, cap: number): string {
+  const rows = Object.values(CREEPS)
+    .filter((c) => c.send)
+    .map((c) => `<button type="button" data-send="${c.id}"${gold < c.send!.cost ? ' disabled' : ''}>${esc(c.name)} · ${c.send!.cost} or · +${c.send!.income}</button>`)
+    .join('');
+  return `<h3>Revenu ${fmt0(income)} / ${fmt0(cap)}</h3><div class="sends">${rows}</div>`;
 }
 
 export function creepInfo(c: Creep): string {

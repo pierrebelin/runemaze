@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { snapshot, restore } from '../../../src/domain/model/snapshot';
-import { spawnCreep } from '../../../src/domain/systems/waves';
-import { newWorld, run } from '../../support/helpers';
+import { launchWave, spawnCreep } from '../../../src/domain/systems/waves';
+import { newDuelWorld, newWorld, run } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('snapshot', () => {
@@ -168,5 +168,34 @@ describe('snapshot', () => {
     const r2 = restore(s);
 
     expect(snapshot(r2)).toEqual(copie);
+  });
+
+  it('[RM-08] garde le mode duel et le revenu quand la partie est restaurée après un passage par JSON', () => {
+    const w = newDuelWorld('normal', 42);
+    w.income = 5;
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+
+    expect(restored.duel).toBe(true);
+    expect(restored.income).toBe(5);
+  });
+
+  it('[RM-08] garde les envois en attente quand la partie est restaurée après un passage par JSON', () => {
+    const w = newDuelWorld('normal', 42);
+    dispatch(w, { c: CommandType.Receive, creep: 'wolf' });
+    dispatch(w, { c: CommandType.Receive, creep: 'rat' });
+    expect(w.sends).toEqual(['wolf', 'rat']);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+
+    expect(restored.sends).toEqual(['wolf', 'rat']);
+
+    launchWave(w);
+    launchWave(restored);
+    run(w, 15);
+    run(restored, 15);
+
+    expect(restored.sends).toEqual([]);
+    expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
   });
 });

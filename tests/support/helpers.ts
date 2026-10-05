@@ -6,6 +6,10 @@ export function newWorld(difficulty: Difficulty = 'normal', seed = 42, map: MapD
   return new World({ map, difficulty, seed });
 }
 
+export function newDuelWorld(difficulty: Difficulty = 'normal', seed = 42, map: MapDef = MAP_CROSSING): World {
+  return new World({ map, difficulty, seed, duel: true });
+}
+
 export function run(world: World, seconds: number): void {
   const ticks = Math.round(seconds * 60);
   for (let i = 0; i < ticks; i++) world.step();

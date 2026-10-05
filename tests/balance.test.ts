@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newWorld } from './support/helpers';
+import { newDuelWorld, newWorld } from './support/helpers';
 import { Phase } from '../src/domain/model/types';
 import { playBot } from './support/bot';
 
@@ -17,6 +17,15 @@ describe('équilibrage', () => {
     console.log('normal', JSON.stringify(results));
     expect(results.every((r) => r.phase === Phase.Victory && r.lives >= 8)).toBe(true);
   }, 120_000);
+
+  it('[RM-02] gagne la campagne en duel sans intérêts sur trois graines en Recrue et au moins deux en Vétéran', () => {
+    for (const difficulty of ['easy', 'normal'] as const) {
+      const results = [1, 2, 3].map((seed) => playBot(newDuelWorld(difficulty, seed)));
+      console.log('duel', difficulty, JSON.stringify(results));
+      const wins = results.filter((r) => r.phase === Phase.Victory).length;
+      expect(wins).toBeGreaterThanOrEqual(difficulty === 'easy' ? 3 : 2);
+    }
+  }, 240_000);
 
   it('bot en hard', () => {
     const results = [1, 2, 3].map((seed) => playBot(newWorld('hard', seed)));

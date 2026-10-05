@@ -3,7 +3,7 @@ import { dispatch } from '../../../src/application/dispatch';
 import { realign } from '../../../src/application/online/realign';
 import { restore, snapshot } from '../../../src/domain/model/snapshot';
 import { fingerprint } from '../../../src/domain/rules/fingerprint';
-import { newWorld, run } from '../../support/helpers';
+import { newDuelWorld, newWorld, run } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('realign', () => {
@@ -90,5 +90,36 @@ describe('realign', () => {
     const result = realign(snap, ownLog, s + 120);
 
     expect(result.events).toEqual([]);
+  });
+
+  it('[RM-08] rejoue l\'ordre du joueur au tick de l\'instantané quand le serveur y a journalisé une réception', () => {
+    const server = newDuelWorld();
+    run(server, 30 / 60);
+    const s = server.tick;
+    expect(dispatch(server, { c: CommandType.Receive, creep: 'rat' }).ok).toBe(true);
+    const snap = snapshot(server);
+    const build = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
+    const ownLog = [{ tick: s, cmd: build }];
+
+    const result = realign(snap, ownLog, s + 10);
+
+    expect(result.towers).toHaveLength(1);
+    expect(result.log).toContainEqual({ tick: s, cmd: build });
+  });
+
+  it('[RM-08] ne rejoue pas les réceptions du journal local', () => {
+    const server = newDuelWorld();
+    run(server, 30 / 60);
+    const s = server.tick;
+    const snap = snapshot(server);
+    const receive = { c: CommandType.Receive, creep: 'rat' } as const;
+    const build = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
+    const ownLog = [{ tick: s + 5, cmd: receive }, { tick: s + 6, cmd: build }];
+
+    const result = realign(snap, ownLog, s + 10);
+
+    expect(result.towers).toHaveLength(1);
+    expect(result.sends).toEqual([]);
+    expect(result.log.filter((e) => e.cmd.c === CommandType.Receive)).toHaveLength(0);
   });
 });

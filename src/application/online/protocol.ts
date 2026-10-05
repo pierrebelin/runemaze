@@ -127,6 +127,11 @@ function readCommand(cmd: unknown): Command | null {
       return { c: CommandType.CallWave };
     case CommandType.Endless:
       return { c: CommandType.Endless };
+    case CommandType.Send:
+      if (isString(c.creep)) {
+        return { c: CommandType.Send, creep: c.creep };
+      }
+      return null;
     default:
       return null;
   }

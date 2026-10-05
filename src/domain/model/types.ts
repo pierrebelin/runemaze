@@ -61,6 +61,7 @@ export interface CreepDef {
   leak: number;
   radius: number;
   bountyFactor: number;
+  send?: { cost: number; income: number };
   shield?: number;
   sprint?: { mult: number; duration: number; cooldown: number };
   fury?: { below: number; mult: number };
@@ -206,7 +207,7 @@ export type GameEvent =
   | { t: GameEventType.Sold; x: number; y: number; refund: number }
   | { t: GameEventType.Destroyed; x: number; y: number }
   | { t: GameEventType.WaveStart; wave: number; creep: string; boss: boolean }
-  | { t: GameEventType.WaveCleared; wave: number; bonus: number; interest: number }
+  | { t: GameEventType.WaveCleared; wave: number; bonus: number; interest: number; income: number }
   | { t: GameEventType.Victory }
   | { t: GameEventType.Defeat };
 
@@ -224,6 +225,8 @@ export enum CommandType {
   Target = 'target',
   CallWave = 'callWave',
   Endless = 'endless',
+  Send = 'send',
+  Receive = 'receive',
 }
 
 export type Command =
@@ -232,6 +235,8 @@ export type Command =
   | { c: CommandType.Sell; tower: number }
   | { c: CommandType.Target; tower: number; mode: TargetMode }
   | { c: CommandType.CallWave }
-  | { c: CommandType.Endless };
+  | { c: CommandType.Endless }
+  | { c: CommandType.Send; creep: string }
+  | { c: CommandType.Receive; creep: string };
 
 export type Result = { ok: true; id?: number } | { ok: false; reason: string };

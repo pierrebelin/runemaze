@@ -8,7 +8,7 @@ import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   briefingChip, briefingInfo,
   creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, nextWaveInfo, towerInfo, towerSpecials,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, nextWaveInfo, sendPanel, towerInfo, towerSpecials,
 } from '../../src/presentation/describe';
 import { Verdict } from '../../src/application/online/protocol';
 import { infusionBlocker } from '../../src/domain/rules/infusion';
@@ -175,6 +175,7 @@ describe('aperçu de la prochaine vague', () => {
       { creep: CREEPS.wolf, count: 3, hp: 437, bounty: 23 },
       { creep: CREEPS.rat, count: 2, hp: 128, bounty: 9 },
     ],
+    incoming: 0,
   };
 
   it('[RM-03] résume chaque groupe dans la barre du haut quand la vague est mixte', () => {
@@ -202,6 +203,55 @@ describe('aperçu de la prochaine vague', () => {
     expect(html).toContain(fmt0(128));
     expect(html).toContain('23 or');
     expect(html).toContain('9 or');
+  });
+
+  const ratOnly = (incoming: number): WaveBriefing => ({
+    wave: 4,
+    groups: [{ creep: CREEPS.rat, count: 2, hp: 128, bounty: 9 }],
+    incoming,
+  });
+
+  it('[RM-06] affiche « 2 envois en approche » sans nommer leur créature', () => {
+    // Les envois sont des loups : le briefing ne porte que des rats.
+    for (const html of [nextWaveInfo(ratOnly(2)), briefingChip(ratOnly(2))]) {
+      expect(html).toContain('2 envois en approche');
+      expect(html).not.toContain(CREEPS.wolf.name);
+      expect(html).not.toContain(CREEPS.wolf.plural);
+    }
+  });
+
+  it('[RM-06] n\'affiche rien des envois quand aucun n\'est en approche', () => {
+    for (const show of [nextWaveInfo, briefingChip]) {
+      expect(show(ratOnly(2))).toContain('envoi');
+      expect(show(ratOnly(0))).not.toContain('envoi');
+    }
+  });
+});
+
+describe('panneau d’envois', () => {
+  const sendable = Object.values(CREEPS).filter((c) => c.send);
+  const row = (html: string, id: string) =>
+    html.split('data-send="').find((part) => part.startsWith(`${id}"`)) ?? '';
+
+  it('[CU-01] liste chaque créature envoyable avec son prix et son gain, et le revenu sur le plafond', () => {
+    const html = sendPanel(100, 6, 20);
+
+    expect(html).toContain('Revenu 6 / 20');
+    for (const c of sendable) {
+      expect(row(html, c.id)).toContain(c.name);
+      expect(row(html, c.id)).toContain(String(c.send!.cost));
+      expect(row(html, c.id)).toContain(`+${c.send!.income}`);
+    }
+    for (const c of Object.values(CREEPS).filter((c) => !c.send)) {
+      expect(html).not.toContain(`data-send="${c.id}"`);
+    }
+  });
+
+  it('[CU-01] grise une créature quand l’or ne suffit pas à l’envoyer', () => {
+    const html = sendPanel(20, 0, 20);
+
+    expect(row(html, 'raider')).toContain('disabled');
+    expect(row(html, 'rat')).not.toContain('disabled');
   });
 });
 

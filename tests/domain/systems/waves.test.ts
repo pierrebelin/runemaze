@@ -3,7 +3,7 @@ import { launchWave, waveDuration, WAVE_GAP } from '../../../src/domain/systems/
 import { applyDamage } from '../../../src/domain/systems/combat';
 import { WAVES, waveAt } from '../../../src/domain/catalog/creeps';
 import type { WaveDef } from '../../../src/domain/model/types';
-import { killAllCreeps, newWorld, run } from '../../support/helpers';
+import { killAllCreeps, newDuelWorld, newWorld, run } from '../../support/helpers';
 import { GameEventType } from '../../../src/domain/model/types';
 
 // Vague de substitution : un seul Limon (se scinde en 2 petits Limons à sa mort).
@@ -81,12 +81,13 @@ describe('waves', () => {
     expect(bossOnly.groups[0].count).toBe(1);
   });
 
-  it('[RM-02] verse prime et intérêts une seule fois quand toutes les créatures des groupes sont mortes ou sorties', () => {
+  it('[RM-01] verse toujours prime et intérêts quand la partie est en solo', () => {
     const w = newWorld();
     launchWave(w);
     run(w, 6);
 
     expect(w.creeps).toHaveLength(5); // 2 rats + 3 loups tous apparus
+    w.gold = 1000; // intérêts = min(floor(1000 × 0,04), 20 + 0 × 2) = min(40, 20) = 20
     const goldBefore = w.gold;
 
     killAllCreeps(w);
@@ -94,7 +95,29 @@ describe('waves', () => {
 
     const cleared = w.events.filter((e) => e.t === GameEventType.WaveCleared);
     expect(cleared).toHaveLength(1);
-    expect(w.gold).toBeGreaterThan(goldBefore);
+    const ev = cleared[0] as { bonus: number; interest: number; income: number };
+    expect(ev.interest).toBe(20);
+    expect(ev.income).toBe(0);
+    expect(w.gold - goldBefore).toBe(ev.bonus + ev.interest);
+  });
+
+  it('[RM-02] verse la prime plus le revenu, sans intérêts, quand une vague de duel est repoussée', () => {
+    const w = newDuelWorld();
+    launchWave(w);
+    run(w, 6);
+    w.income = 15;
+    w.gold = 1000; // en solo : intérêts = min(40, 20) = 20
+    const goldBefore = w.gold;
+
+    killAllCreeps(w);
+    run(w, 0.05);
+
+    const cleared = w.events.filter((e) => e.t === GameEventType.WaveCleared);
+    expect(cleared).toHaveLength(1);
+    const ev = cleared[0] as { bonus: number; interest: number; income: number };
+    expect(ev.interest).toBe(0);
+    expect(ev.income).toBe(15);
+    expect(w.gold - goldBefore).toBe(ev.bonus + 15);
   });
 
   it('[RM-02] ne termine pas la vague quand un groupe retardé n’est pas encore apparu', () => {

@@ -19,6 +19,26 @@ describe('readClientMessage', () => {
     });
   });
 
+  it('[RM-07] lit un ordre d\'envoi avec son id de créature', () => {
+    const order = (cmd: unknown) => JSON.stringify({ t: 'order', tick: 5, cmd, fingerprint: 'abc' });
+
+    expect(readClientMessage(order({ c: 'send', creep: 'grunt' }))).toEqual({
+      t: 'order',
+      tick: 5,
+      cmd: { c: 'send', creep: 'grunt' },
+      fingerprint: 'abc',
+    });
+    expect(readClientMessage(order({ c: 'send' }))).toBeNull();
+    expect(readClientMessage(order({ c: 'send', creep: 3 }))).toBeNull();
+  });
+
+  it('[RM-07] rejette un ordre de réception venu d\'un client', () => {
+    const order = (cmd: unknown) => JSON.stringify({ t: 'order', tick: 5, cmd, fingerprint: 'abc' });
+
+    expect(readClientMessage(order({ c: 'send', creep: 'grunt' }))).not.toBeNull();
+    expect(readClientMessage(order({ c: 'receive', creep: 'grunt' }))).toBeNull();
+  });
+
   it('rejette un message qui n\'est pas du JSON', () => {
     expect(readClientMessage('pas du json')).toBeNull();
     expect(readClientMessage('{')).toBeNull();

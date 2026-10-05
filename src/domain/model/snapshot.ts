@@ -18,6 +18,9 @@ export interface WorldSnapshot {
   time: number;
   phase: Phase;
   endless: boolean;
+  duel: boolean;
+  income: number;
+  sends: string[];
   gold: number;
   lives: number;
   wave: number;
@@ -80,6 +83,9 @@ export function snapshot(world: World): WorldSnapshot {
     time: world.time,
     phase: world.phase,
     endless: world.endless,
+    duel: world.duel,
+    income: world.income,
+    sends: [...world.sends],
     gold: world.gold,
     lives: world.lives,
     wave: world.wave,
@@ -104,13 +110,15 @@ export function snapshot(world: World): WorldSnapshot {
 }
 
 export function restore(snap: WorldSnapshot): World {
-  const world = new World({ map: snap.map, difficulty: snap.difficulty, seed: snap.rngState });
+  const world = new World({ map: snap.map, difficulty: snap.difficulty, seed: snap.rngState, duel: snap.duel });
 
   world.nextId = snap.nextId;
   world.tick = snap.tick;
   world.time = snap.time;
   world.phase = snap.phase;
   world.endless = snap.endless;
+  world.income = snap.income;
+  world.sends = [...snap.sends];
   world.gold = snap.gold;
   world.lives = snap.lives;
   world.wave = snap.wave;

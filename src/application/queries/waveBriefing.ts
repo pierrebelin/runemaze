@@ -14,6 +14,8 @@ export interface WaveBriefingGroup {
 export interface WaveBriefing {
   wave: number;
   groups: WaveBriefingGroup[];
+  /** Envois reçus de l'adversaire, en approche. */
+  incoming: number;
 }
 
 /** Ce qui attend le joueur à la prochaine vague, ou null s'il n'y en a plus. */
@@ -27,5 +29,5 @@ export function waveBriefing(world: World): WaveBriefing | null {
     })
     // Chef en premier ; tri stable, les autres groupes gardent leur ordre.
     .sort((a, b) => Number(!!b.creep.boss) - Number(!!a.creep.boss));
-  return { wave, groups };
+  return { wave, groups, incoming: world.sends.length };
 }

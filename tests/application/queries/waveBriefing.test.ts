@@ -4,7 +4,7 @@ import { waveBriefing } from '../../../src/application/queries/waveBriefing';
 import { WAVES } from '../../../src/domain/catalog/creeps';
 import type { WaveDef } from '../../../src/domain/model/types';
 import { creepHp } from '../../../src/domain/systems/waves';
-import { newWorld } from '../../support/helpers';
+import { newDuelWorld, newWorld } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
 // Vague mixte sans chef : loups ×3 (délai 0) puis rats ×2 (délai 3).
@@ -60,6 +60,16 @@ describe('waveBriefing', () => {
 
     expect(b.groups[0].creep.id).toBe('ogre');
     expect(b.groups[1].creep.id).toBe('wolf');
+  });
+
+  it('[RM-06] compte les envois en approche dans l\'aperçu de la prochaine vague', () => {
+    const w = newDuelWorld();
+    expect(waveBriefing(w)!.incoming).toBe(0);
+
+    dispatch(w, { c: CommandType.Receive, creep: 'wolf' });
+    dispatch(w, { c: CommandType.Receive, creep: 'rat' });
+
+    expect(waveBriefing(w)!.incoming).toBe(2);
   });
 
   it('ne renvoie rien quand la dernière vague de la campagne est lancée', () => {

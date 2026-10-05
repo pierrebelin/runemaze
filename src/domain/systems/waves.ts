@@ -34,6 +34,12 @@ export function launchWave(world: World): void {
     world.spawners.push({ wave: index, creep: g.creep, left: g.count, interval: g.interval, timer: g.delay });
     pending += g.count;
   }
+  // Les envois reçus sortent après la dernière créature de la vague, dans l'ordre d'achat.
+  world.sends.forEach((creep, k) => {
+    world.spawners.push({ wave: index, creep, left: 1, interval: 0.8, timer: waveDuration(index) + 0.8 * (k + 1) });
+  });
+  pending += world.sends.length;
+  world.sends = [];
   world.pending.set(index, pending);
   world.stats.waves[index] = { livesLost: 0, gold: null };
   world.nextWaveIn = canLaunchNext(world) ? waveDuration(index) + WAVE_GAP : Infinity;
@@ -107,10 +113,11 @@ export function updateWaves(world: World, dt: number): void {
     world.pending.delete(wave);
     if (world.phase === Phase.Defeat) continue;
     const bonus = clearBonus(wave);
-    const interest = Math.min(Math.floor(world.gold * 0.04), 20 + wave * 2);
-    world.addGold(bonus + interest);
+    const interest = world.duel ? 0 : Math.min(Math.floor(world.gold * 0.04), 20 + wave * 2);
+    const income = world.duel ? world.income : 0;
+    world.addGold(bonus + interest + income);
     world.stats.waves[wave].gold = world.gold;
-    world.emit({ t: GameEventType.WaveCleared, wave, bonus, interest });
+    world.emit({ t: GameEventType.WaveCleared, wave, bonus, interest, income });
   }
 
   if (

@@ -51,12 +51,14 @@ export class Duel {
   private lastWave: number;
   /** Vrai dès qu'une vague a franchi le compte à rebours sans que `advance` l'ait encore annoncée. */
   private waveLaunched = false;
+  /** Sièges dont la carte a reçu un envoi, à recaler à la prochaine annonce. */
+  private receivers = new Set<Seat>();
   /** Instant et siège de la coupure ; tant que `lostAt` est défini, l'horloge commune ne rattrape plus le temps réel. */
   lostAt?: number;
   lostSeat?: Seat;
 
   constructor(config: DuelConfig, now: number) {
-    const options = { map: config.map, difficulty: config.difficulty, seed: config.seed };
+    const options = { map: config.map, difficulty: config.difficulty, seed: config.seed, duel: true };
     this.worlds = [new World(options), new World(options)];
     this.lastNow = now;
     this.lastRivalAt = now;
@@ -81,6 +83,10 @@ export class Duel {
           { seat: Seat.Guest, msg: { t: ServerMessageType.Readiness, self: this.readiness[Seat.Guest], rival: this.readiness[Seat.Host] } },
         );
       }
+      for (const seat of this.receivers) {
+        messages.push({ seat, msg: { t: ServerMessageType.Drift, snapshot: snapshot(this.worlds[seat]) } });
+      }
+      this.receivers.clear();
       return messages;
     }
     this.announced = true;
@@ -180,6 +186,11 @@ export class Duel {
       return { t: ServerMessageType.Drift, snapshot: snapshot(world) };
     }
     const r = dispatch(world, msg.cmd);
+    if (r.ok && msg.cmd.c === CommandType.Send) {
+      const rival = seat === Seat.Host ? Seat.Guest : Seat.Host;
+      dispatch(this.worlds[rival], { c: CommandType.Receive, creep: msg.cmd.creep });
+      this.receivers.add(rival);
+    }
     if (overLimit || !r.ok || fingerprint(world) !== msg.fingerprint) {
       return { t: ServerMessageType.Drift, snapshot: snapshot(world) };
     }

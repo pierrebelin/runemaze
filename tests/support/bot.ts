@@ -1,5 +1,6 @@
 import { TOWERS } from '../../src/domain/catalog/towers';
 import { dispatch } from '../../src/application/dispatch';
+import { incomeCap } from '../../src/domain/rules/income';
 import { upgradeCost } from '../../src/domain/rules/pricing';
 import type { World } from '../../src/domain/model/World';
 import type { Tower } from '../../src/domain/model/types';
@@ -45,6 +46,20 @@ export class Bot {
   }
 
   act(): void {
+    this.send();
+    this.build();
+  }
+
+  /** Duel : après ses constructions, envoie des rats tant que le revenu est sous le plafond de la prochaine vague. */
+  private send(): void {
+    const w = this.w;
+    if (!w.duel || this.planIdx < this.plan.length) return;
+    while (w.income < incomeCap(w.wave + 2) && w.gold >= 60) {
+      if (!dispatch(w, { c: CommandType.Send, creep: 'rat' }).ok) return;
+    }
+  }
+
+  private build(): void {
     const w = this.w;
     for (let guard = 0; guard < 20; guard++) {
       const attackers = w.towers.filter((t) => t.def.attack).length;

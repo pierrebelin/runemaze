@@ -19,6 +19,7 @@ import { LOST_LIMIT_MS } from '../application/online/heldGame';
 import { ClientMessageType, ServerMessageType } from '../application/online/protocol';
 import type { ServerMessage } from '../application/online/protocol';
 import { refundValue, upgradeCost } from '../domain/rules/pricing';
+import { incomeCap } from '../domain/rules/income';
 import { canLaunchNext } from '../domain/systems/waves';
 import { World, type Stats } from '../domain/model/World';
 import { restore, type WorldSnapshot } from '../domain/model/snapshot';
@@ -27,7 +28,7 @@ import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, MapD
 import { CommandType, GameEventType, Phase } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
-import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, nextWaveInfo, TARGET_LABEL, towerInfo } from './describe';
+import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, nextWaveInfo, sendPanel, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -111,6 +112,7 @@ export class Game {
   private rivalNick = '';
   private viewingRival = false;
   private rivalHud: Record<string, string> = {};
+  private sendOpen = false;
 
   private selected: Selection = null;
   private buildDef: string | null = null;
@@ -305,7 +307,7 @@ export class Game {
     const w = this.world;
     switch (e.t) {
       case GameEventType.WaveCleared:
-        this.toast(`Vague ${e.wave + 1} repoussée : +${e.bonus} or${e.interest ? `, +${e.interest} d'intérêts` : ''}.`);
+        this.toast(`Vague ${e.wave + 1} repoussée : +${e.bonus} or${e.income > 0 ? `, +${e.income} de revenu` : e.interest ? `, +${e.interest} d'intérêts` : ''}.`);
         break;
       case GameEventType.Leak:
         if (w.time - this.leakToastAt > 3) {
@@ -429,6 +431,16 @@ export class Game {
       this.drainNow();
       this.selected = null;
     }
+  }
+
+  private toggleSendPanel(): void {
+    if (this.duelRole) this.sendOpen = !this.sendOpen;
+  }
+
+  private sendCreep(id: string): void {
+    const r = this.order({ c: CommandType.Send, creep: id });
+    if (!r.ok) this.fail(r.reason);
+    else this.drainNow();
   }
 
   private callWave(): void {
@@ -576,6 +588,19 @@ export class Game {
 
     $('callBtn').addEventListener('click', () => this.callWave());
     $('pauseBtn').addEventListener('click', () => this.togglePause());
+    $('sendBtn').addEventListener('click', () => this.toggleSendPanel());
+    // Souris sur `pointerdown` : `#info` est reconstruit quand l'or franchit un seuil, un `click` serait perdu.
+    // `click` ne sert qu'au clavier (`detail === 0`).
+    const sendFrom = (e: Event): void => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-send]');
+      if (b && !this.overlay && !b.matches(':disabled')) this.sendCreep(b.dataset.send!);
+    };
+    $('info').addEventListener('pointerdown', (e) => {
+      if (e.button === 0) sendFrom(e);
+    });
+    $('info').addEventListener('click', (e) => {
+      if (e.detail === 0) sendFrom(e);
+    });
     $('muteBtn').addEventListener('click', () => this.toggleMute());
     $('helpBtn').addEventListener('click', () => (this.overlay === Overlay.Help ? this.escape() : this.showHelp()));
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) =>
@@ -602,6 +627,7 @@ export class Game {
         if (!e.repeat) this.callWave();
       } else if (k === 'm') this.toggleMute();
       else if (k === '1' || k === '2' || k === '3') this.setSpeed(Number(k));
+      else if (k === 't') this.toggleSendPanel();
       else if (k === 'l') this.view.showRoute = !this.view.showRoute;
       else if (k === 'o' && this.rivalWorld) this.toggleRivalView(true);
       else if (k === 'i' && this.rivalWorld) this.toggleRivalView(false);
@@ -760,6 +786,14 @@ export class Game {
   // ─── Panneaux d'information ──────────────────────────────────────────────
 
   private updateInfo(): void {
+    if (this.sendOpen) {
+      const html = sendPanel(this.world.gold, this.world.income, incomeCap(this.world.wave + 2));
+      if (html !== this.infoCache) {
+        this.infoCache = html;
+        $('info').innerHTML = html;
+      }
+      return;
+    }
     if (this.viewingRival) {
       // Aucune fiche d'info en vue adverse (H1).
       if (this.infoCache !== '') {
@@ -885,6 +919,11 @@ export class Game {
     set('wave', String(Math.max(0, w.wave + 1)));
     set('waveMax', w.endless ? '/ ∞' : `/ ${CAMPAIGN_LENGTH}`);
     set('maze', fmt0(w.mazeLength()));
+    const sendHidden = String(!this.duelRole);
+    if (this.hud.sendHidden !== sendHidden) {
+      this.hud.sendHidden = sendHidden;
+      $('sendBtn').hidden = !this.duelRole;
+    }
     const can = canLaunchNext(w);
     const secs = Math.ceil(Math.max(0, w.nextWaveIn));
     set('timerLabel', can ? 'Vague suivante : ' : '');
@@ -910,7 +949,7 @@ export class Game {
     const panel = document.createElement('span');
     panel.id = 'rivalPanel';
     panel.className = 'res';
-    panel.innerHTML = `<small id="rivalNick"></small> <b id="rivalLives">0</b> vies · <b id="rivalGold">0</b> or <button type="button" class="btn" id="rivalViewBtn">Voir l'adversaire</button>`;
+    panel.innerHTML = `<small id="rivalNick"></small> <b id="rivalLives">0</b> vies · <b id="rivalGold">0</b> or · revenu <b id="rivalIncome">0</b> <button type="button" class="btn" id="rivalViewBtn">Voir l'adversaire</button>`;
     bar.insertBefore(panel, $('pauseBtn'));
     $('rivalViewBtn').addEventListener('click', () => this.toggleRivalView(!this.viewingRival));
   }
@@ -942,6 +981,7 @@ export class Game {
     set('rivalNick', this.rivalNick);
     set('rivalLives', fmt0(this.rivalWorld.lives));
     set('rivalGold', fmt0(this.rivalWorld.gold));
+    set('rivalIncome', fmt0(this.rivalWorld.income));
   }
 
   /** Bascule entre sa propre carte et la carte adverse (touches `O`/`I`, boutons « Voir l'adversaire »/« Ma carte »). */
@@ -1586,6 +1626,7 @@ export class Game {
     this.duelLink?.close();
     this.duelLink = null;
     this.duelRole = null;
+    this.sendOpen = false;
     this.duelCode = null;
     this.duelInRoom = false;
     this.setDuelControlsHidden(false);

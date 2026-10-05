@@ -17,7 +17,7 @@ describe('Duel', () => {
       0,
     );
 
-    const attendu = fingerprint(new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 }));
+    const attendu = fingerprint(new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true }));
 
     expect(fingerprint(duel.worlds[0])).toBe(attendu);
     expect(fingerprint(duel.worlds[1])).toBe(attendu);
@@ -39,7 +39,7 @@ describe('Duel', () => {
   });
 
   it('[CU-04] construit sur la carte de l\'hôte sans écart quand son empreinte concorde', () => {
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -58,9 +58,9 @@ describe('Duel', () => {
   });
 
   it('[RM-01] laisse or et tours de l\'invité intacts quand l\'hôte construit', () => {
-    const freshGold = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 }).gold;
+    const freshGold = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true }).gold;
 
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -93,7 +93,7 @@ describe('Duel', () => {
   });
 
   it('[RM-08] renvoie un écart quand un joueur envoie un appel de vague direct', () => {
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
     run(witness, 45 / 60);
     expect(dispatch(witness, { c: CommandType.CallWave }).ok).toBe(true);
     const fp = fingerprint(witness);
@@ -145,7 +145,7 @@ describe('Duel', () => {
     duel.advance(1000);
     expect(duel.worlds[Seat.Guest].tick).toBe(45);
 
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
     run(witness, 55 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -207,7 +207,7 @@ describe('Duel', () => {
   });
 
   it('[RM-07] ne garde pas les événements de rendu du serveur d\'un pas à l\'autre', () => {
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'archer', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -233,7 +233,7 @@ describe('Duel', () => {
     );
     duel.advance(1000);
 
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -450,7 +450,7 @@ describe('Duel', () => {
     const duel = new Duel(config, 0);
     duel.ready(Seat.Host, 0);
 
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
     run(witness, 2115 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -595,7 +595,7 @@ describe('Duel', () => {
   });
 
   it('[RM-12] refuse les ordres et n\'avance aucune carte pendant la coupure d\'un joueur', () => {
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7 });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -662,5 +662,84 @@ describe('Duel', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0].seat).toBe(Seat.Host);
     expect(messages[0].msg).toMatchObject({ t: ServerMessageType.DuelOver, verdict: Verdict.Forfeit });
+  });
+
+  const config = {
+    map: MAP_SPIRAL,
+    difficulty: 'normal' as const,
+    seed: 7,
+    nicks: ['A', 'B'] as [string, string],
+    tokens: ['th', 'tg'] as [string, string],
+  };
+  const sendWolf = { c: CommandType.Send, creep: 'wolf' } as const;
+
+  const witnessSend = () => {
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    run(witness, 45 / 60);
+    expect(dispatch(witness, sendWolf).ok).toBe(true);
+    return witness;
+  };
+
+  it('[CU-01] débite l\'hôte et met l\'envoi en attente chez l\'invité quand l\'hôte envoie un loup', () => {
+    const witness = witnessSend();
+    const duel = new Duel(config, 0);
+    duel.advance(1000);
+
+    const res = duel.order(Seat.Host, { tick: 45, cmd: sendWolf, fingerprint: fingerprint(witness) }, 1000);
+
+    expect(res).toBeNull();
+    expect(duel.worlds[Seat.Host].gold).toBe(witness.gold);
+    expect(duel.worlds[Seat.Guest].sends).toEqual(['wolf']);
+    expect(duel.worlds[Seat.Guest].log.some((e) => e.cmd.c === CommandType.Receive)).toBe(true);
+  });
+
+  it('[RM-06] pousse un recalage à l\'invité seul à la prochaine annonce quand il reçoit un envoi', () => {
+    const witness = witnessSend();
+    const duel = new Duel(config, 0);
+    duel.advance(1000);
+    duel.order(Seat.Host, { tick: 45, cmd: sendWolf, fingerprint: fingerprint(witness) }, 1000);
+
+    const messages = duel.advance(1200);
+
+    const guest = messages.find((m) => m.seat === Seat.Guest && m.msg.t === ServerMessageType.Drift)?.msg;
+    expect(guest).toEqual({ t: ServerMessageType.Drift, snapshot: snapshot(duel.worlds[Seat.Guest]) });
+    expect(messages.some((m) => m.seat === Seat.Host && m.msg.t === ServerMessageType.Drift)).toBe(false);
+  });
+
+  it('[RM-07] laisse la carte de l\'invité intacte quand l\'envoi de l\'hôte est refusé', () => {
+    const witness = witnessSend();
+    const duel = new Duel(config, 0);
+    duel.advance(1000);
+    duel.order(Seat.Host, { tick: 45, cmd: sendWolf, fingerprint: fingerprint(witness) }, 1000);
+    duel.advance(1200);
+    duel.worlds[Seat.Host].gold = 0;
+    const logBefore = duel.worlds[Seat.Guest].log.length;
+
+    duel.order(Seat.Host, { tick: 57, cmd: sendWolf, fingerprint: fingerprint(duel.worlds[Seat.Host]) }, 1200);
+    const messages = duel.advance(1400);
+
+    expect(duel.worlds[Seat.Guest].sends).toEqual(['wolf']);
+    expect(duel.worlds[Seat.Guest].log).toHaveLength(logBefore);
+    expect(messages.some((m) => m.seat === Seat.Guest && m.msg.t === ServerMessageType.Drift)).toBe(false);
+  });
+
+  it('[RM-08] rejoue chaque carte à l\'identique depuis son journal, envois compris', () => {
+    const witness = witnessSend();
+    const duel = new Duel(config, 0);
+    duel.advance(1000);
+    duel.order(Seat.Host, { tick: 45, cmd: sendWolf, fingerprint: fingerprint(witness) }, 1000);
+    duel.advance(3000);
+
+    for (const seat of [Seat.Host, Seat.Guest]) {
+      const original = duel.worlds[seat];
+      const replay = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+      for (const entry of original.log) {
+        while (replay.tick < entry.tick) replay.step();
+        expect(dispatch(replay, entry.cmd).ok).toBe(true);
+      }
+      while (replay.tick < original.tick) replay.step();
+
+      expect(fingerprint(replay)).toBe(fingerprint(original));
+    }
   });
 });

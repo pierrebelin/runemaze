@@ -17,6 +17,7 @@ export interface WorldOptions {
   map: MapDef;
   difficulty: Difficulty;
   seed: number;
+  duel?: boolean;
 }
 
 export interface Stats {
@@ -44,6 +45,8 @@ export class World {
   readonly spawnCenter: { x: number; y: number };
   readonly waypoints: { x: number; y: number }[];
 
+  readonly duel: boolean;
+  income = 0;
   tick = 0;
   time = 0;
   phase: Phase = Phase.Prep;
@@ -54,6 +57,7 @@ export class World {
   wave = -1;
   nextWaveIn = FIRST_WAVE_DELAY;
   spawners: Spawner[] = [];
+  sends: string[] = [];
   /** Créatures restantes (vivantes ou pas encore apparues) par vague. */
   pending = new Map<number, number>();
 
@@ -77,6 +81,7 @@ export class World {
     this.grid = new Grid(opts.map);
     this.rng = new Rng(opts.seed);
     this.difficulty = opts.difficulty;
+    this.duel = opts.duel ?? false;
     this.map = opts.map;
     const d = DIFFICULTY[opts.difficulty];
     this.gold = d.gold;
