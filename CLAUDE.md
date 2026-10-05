@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Dédale TD : tower defense de *mazing* (TypeScript, Canvas 2D, Vite). Règles du jeu : [README.md](README.md).
+Tower Defense : tower defense de *mazing* (TypeScript, Canvas 2D, Vite). Règles du jeu : [README.md](README.md).
 
 ## Commandes
 

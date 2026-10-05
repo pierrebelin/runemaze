@@ -985,9 +985,17 @@ export class Game {
     this.overlay = kind;
     el.innerHTML = html;
     el.hidden = false;
+    // Ni barre de ressources ni console des tours tant qu'aucune partie n'a commencé (écran titre, aide ouverte depuis le titre, salon).
+    this.setGameChromeHidden(kind === Overlay.Start || kind === Overlay.Lobby || (kind === Overlay.Help && this.helpFromStart));
+  }
+
+  private setGameChromeHidden(hidden: boolean): void {
+    $('bar').hidden = hidden;
+    $('console').hidden = hidden;
   }
 
   private closeOverlay(): void {
+    this.setGameChromeHidden(false);
     this.overlay = null;
     $('overlay').hidden = true;
     $('overlay').innerHTML = '';
@@ -1216,7 +1224,7 @@ export class Game {
     ).join('');
     this.openOverlay(Overlay.Start, `
       <div class="sheet">
-        <h1>Dédale</h1>
+        <h1>Tower Defense</h1>
         <p class="lede">Bâtissez le labyrinthe, tenez la porte. Trente vagues, trois chefs, et un seul chemin que vous dessinez vous-même.</p>
         <ol>
           <li><b>Les créatures passent par les pierres runiques, dans l'ordre</b> avant de rejoindre la porte : votre champ est traversé à chaque tronçon.</li>
@@ -1229,10 +1237,22 @@ export class Game {
         <p class="label">Difficulté</p>
         <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
         <div class="row"><button type="button" class="btn primary" id="startBtn">Commencer</button><button type="button" class="btn" id="startHelp">Commandes et armures</button></div>
-        <p class="label">Partie à deux</p>
-        <div class="row"><input type="text" id="duelNick" maxlength="12" placeholder="Pseudo"></div>
-        <div class="row"><button type="button" class="btn" id="hostDuelBtn">Créer une partie partagée</button></div>
-        <div class="row"><input type="text" id="duelCode" maxlength="6" placeholder="Code"><button type="button" class="btn" id="joinDuelBtn">Rejoindre</button></div>
+        <section class="duel">
+          <p class="label">Partie à deux</p>
+          <label class="field"><span>Votre pseudo</span><input type="text" id="duelNick" maxlength="12" placeholder="Anonyme" autocomplete="nickname" spellcheck="false"></label>
+          <div class="duel-ways">
+            <div class="duel-way">
+              <h3>Héberger</h3>
+              <p>Sur la carte et la difficulté choisies. Un code à transmettre vous sera donné.</p>
+              <button type="button" class="btn" id="hostDuelBtn">Créer une partie</button>
+            </div>
+            <div class="duel-way">
+              <h3>Rejoindre</h3>
+              <p>Saisissez le code reçu de votre adversaire.</p>
+              <div class="code-join"><input type="text" id="duelCode" maxlength="6" placeholder="······" aria-label="Code de la partie" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="btn" id="joinDuelBtn">Rejoindre</button></div>
+            </div>
+          </div>
+        </section>
       </div>`);
     const el = $('overlay');
     el.querySelectorAll<HTMLCanvasElement>('[data-thumb]').forEach((c) => {

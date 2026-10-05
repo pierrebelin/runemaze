@@ -1,4 +1,4 @@
-# Dédale TD
+# Tower Defense
 
 Tower defense de *mazing* dans l'esprit des cartes personnalisées de Warcraft III
 (Wintermaul, Element TD) : pas de chemin imposé, c'est vous qui dessinez le
@@ -103,7 +103,7 @@ construit un vrai labyrinthe fait nettement mieux : Légende est pensée pour lu
 
 ## Esprit du projet
 
-Dédale TD est un projet pour le plaisir, fait pour jouer entre amis, et entièrement
+Tower Defense est un projet pour le plaisir, fait pour jouer entre amis, et entièrement
 *vibe codé*. Il ne cherche pas à appliquer des pratiques industrielles : le but est
 d'apporter vite de la valeur, c'est-à-dire de pouvoir jouer, en évitant les complexités
 d'un code de production (pas de CI, de déploiement, de surveillance ni de compatibilité
