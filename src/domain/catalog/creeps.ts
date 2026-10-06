@@ -1,15 +1,15 @@
 import type { CreepDef, WaveDef, WaveGroup, Difficulty } from '../model/types';
 
 const C: CreepDef[] = [
-  { id: 'rat', name: 'Rat des marais', plural: 'Rats des marais', hpFactor: 0.7, speed: 2.2, armorType: 'unarmored', armor: 0, leak: 1, radius: 0.28, bountyFactor: 0.8, send: { cost: 7, income: 1 } },
-  { id: 'wolf', name: 'Loup gris', plural: 'Loups gris', hpFactor: 0.8, speed: 2.9, armorType: 'light', armor: 1, leak: 1, radius: 0.32, bountyFactor: 1, send: { cost: 14, income: 2 } },
-  { id: 'raider', name: 'Maraudeur', plural: 'Maraudeurs', hpFactor: 1, speed: 2, armorType: 'medium', armor: 2, leak: 1, radius: 0.34, bountyFactor: 1, send: { cost: 25, income: 3 } },
+  { id: 'rat', name: 'Rat des marais', plural: 'Rats des marais', hpFactor: 0.7, speed: 2.2, armorType: 'unarmored', armor: 0, leak: 1, radius: 0.28, bountyFactor: 0.8, send: { cost: 10, income: 3 } },
+  { id: 'wolf', name: 'Loup gris', plural: 'Loups gris', hpFactor: 0.8, speed: 2.9, armorType: 'light', armor: 1, leak: 1, radius: 0.32, bountyFactor: 1, send: { cost: 16, income: 4 } },
+  { id: 'raider', name: 'Maraudeur', plural: 'Maraudeurs', hpFactor: 1, speed: 2, armorType: 'medium', armor: 2, leak: 1, radius: 0.34, bountyFactor: 1, send: { cost: 24, income: 6 } },
   { id: 'troll', name: 'Troll des tourbières', plural: 'Trolls des tourbières', hpFactor: 1.05, speed: 1.9, armorType: 'medium', armor: 1, regen: 0.02, leak: 1, radius: 0.36, bountyFactor: 1.1 },
-  { id: 'golem', name: 'Golem de pierre', plural: 'Golems de pierre', hpFactor: 1.6, speed: 1.45, armorType: 'fortified', armor: 4, leak: 1, radius: 0.4, bountyFactor: 1.3, send: { cost: 90, income: 8 } },
+  { id: 'golem', name: 'Golem de pierre', plural: 'Golems de pierre', hpFactor: 1.6, speed: 1.45, armorType: 'fortified', armor: 4, leak: 1, radius: 0.4, bountyFactor: 1.3, send: { cost: 50, income: 10 } },
   { id: 'knight', name: 'Colosse cuirassé', plural: 'Colosses cuirassés', hpFactor: 1.35, speed: 1.7, armorType: 'heavy', armor: 5, leak: 1, radius: 0.38, bountyFactor: 1.2 },
-  { id: 'harpy', name: 'Harpie', plural: 'Harpies', hpFactor: 0.75, speed: 2.1, armorType: 'light', armor: 0, air: true, leak: 1, radius: 0.32, bountyFactor: 1, send: { cost: 45, income: 5 } },
+  { id: 'harpy', name: 'Harpie', plural: 'Harpies', hpFactor: 0.75, speed: 2.1, armorType: 'light', armor: 0, air: true, leak: 1, radius: 0.32, bountyFactor: 1, send: { cost: 30, income: 6 } },
   { id: 'wyvern', name: 'Vouivre', plural: 'Vouivres', hpFactor: 1.05, speed: 1.9, armorType: 'medium', armor: 3, air: true, leak: 1, radius: 0.38, bountyFactor: 1.2 },
-  { id: 'wraith', name: 'Spectre', plural: 'Spectres', hpFactor: 0.95, speed: 2.1, armorType: 'medium', armor: 2, magicImmune: true, leak: 1, radius: 0.33, bountyFactor: 1.1, send: { cost: 110, income: 9 } },
+  { id: 'wraith', name: 'Spectre', plural: 'Spectres', hpFactor: 0.95, speed: 2.1, armorType: 'medium', armor: 2, magicImmune: true, leak: 1, radius: 0.33, bountyFactor: 1.1, send: { cost: 60, income: 12 } },
   { id: 'ogre', name: 'Ogre chef de guerre', plural: 'Ogre chef de guerre', hpFactor: 22, speed: 1.35, armorType: 'hero', armor: 4, boss: true, leak: 5, radius: 0.6, bountyFactor: 18, fury: { below: 0.5, mult: 1.5 } },
   { id: 'hydra', name: 'Hydre des marais', plural: 'Hydre des marais', hpFactor: 24, speed: 1.3, armorType: 'hero', armor: 6, regen: 0.012, boss: true, leak: 5, radius: 0.65, bountyFactor: 22, brood: { creep: 'hydrahead', count: 2, below: [0.75, 0.5, 0.25] } },
   { id: 'hydrahead', name: 'Tête d\'Hydre', plural: 'Têtes d\'Hydre', hpFactor: 1.5, speed: 2, armorType: 'medium', armor: 3, leak: 1, radius: 0.3, bountyFactor: 0.5 },

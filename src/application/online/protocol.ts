@@ -132,6 +132,8 @@ function readCommand(cmd: unknown): Command | null {
         return { c: CommandType.Send, creep: c.creep };
       }
       return null;
+    case CommandType.Gleaner:
+      return { c: CommandType.Gleaner };
     default:
       return null;
   }

@@ -673,9 +673,12 @@ describe('Duel', () => {
   };
   const sendWolf = { c: CommandType.Send, creep: 'wolf' } as const;
 
+  const WOLF_ETHER = 16;
+
   const witnessSend = () => {
     const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
     run(witness, 45 / 60);
+    witness.ether = WOLF_ETHER;
     expect(dispatch(witness, sendWolf).ok).toBe(true);
     return witness;
   };
@@ -684,11 +687,12 @@ describe('Duel', () => {
     const witness = witnessSend();
     const duel = new Duel(config, 0);
     duel.advance(1000);
+    duel.worlds[Seat.Host].ether = WOLF_ETHER;
 
     const res = duel.order(Seat.Host, { tick: 45, cmd: sendWolf, fingerprint: fingerprint(witness) }, 1000);
 
     expect(res).toBeNull();
-    expect(duel.worlds[Seat.Host].gold).toBe(witness.gold);
+    expect(duel.worlds[Seat.Host].ether).toBe(witness.ether);
     expect(duel.worlds[Seat.Guest].sends).toEqual(['wolf']);
     expect(duel.worlds[Seat.Guest].log.some((e) => e.cmd.c === CommandType.Receive)).toBe(true);
   });
@@ -697,6 +701,7 @@ describe('Duel', () => {
     const witness = witnessSend();
     const duel = new Duel(config, 0);
     duel.advance(1000);
+    duel.worlds[Seat.Host].ether = WOLF_ETHER;
     duel.order(Seat.Host, { tick: 45, cmd: sendWolf, fingerprint: fingerprint(witness) }, 1000);
 
     const messages = duel.advance(1200);
@@ -710,9 +715,10 @@ describe('Duel', () => {
     const witness = witnessSend();
     const duel = new Duel(config, 0);
     duel.advance(1000);
+    duel.worlds[Seat.Host].ether = WOLF_ETHER;
     duel.order(Seat.Host, { tick: 45, cmd: sendWolf, fingerprint: fingerprint(witness) }, 1000);
     duel.advance(1200);
-    duel.worlds[Seat.Host].gold = 0;
+    duel.worlds[Seat.Host].ether = 0;
     const logBefore = duel.worlds[Seat.Guest].log.length;
 
     duel.order(Seat.Host, { tick: 57, cmd: sendWolf, fingerprint: fingerprint(duel.worlds[Seat.Host]) }, 1200);
@@ -727,12 +733,14 @@ describe('Duel', () => {
     const witness = witnessSend();
     const duel = new Duel(config, 0);
     duel.advance(1000);
+    duel.worlds[Seat.Host].ether = WOLF_ETHER;
     duel.order(Seat.Host, { tick: 45, cmd: sendWolf, fingerprint: fingerprint(witness) }, 1000);
     duel.advance(3000);
 
     for (const seat of [Seat.Host, Seat.Guest]) {
       const original = duel.worlds[seat];
       const replay = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+      replay.ether = seat === Seat.Host ? WOLF_ETHER : 0;
       for (const entry of original.log) {
         while (replay.tick < entry.tick) replay.step();
         expect(dispatch(replay, entry.cmd).ok).toBe(true);

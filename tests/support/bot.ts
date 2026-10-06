@@ -1,6 +1,6 @@
 import { TOWERS } from '../../src/domain/catalog/towers';
+import { GLEANER } from '../../src/domain/catalog/ether';
 import { dispatch } from '../../src/application/dispatch';
-import { incomeCap } from '../../src/domain/rules/income';
 import { upgradeCost } from '../../src/domain/rules/pricing';
 import type { World } from '../../src/domain/model/World';
 import type { Tower } from '../../src/domain/model/types';
@@ -22,6 +22,7 @@ export function mazePlan(): [number, number][] {
   return plan;
 }
 
+const GOLD_RESERVE = 150;
 const FAMILY_CYCLE = ['archer', 'cannon', 'frost', 'storm', 'venom', 'archer', 'cannon', 'storm'];
 const BRANCH: Record<string, string[]> = {
   archer: ['volley', 'sniper'], cannon: ['mortar', 'mortar', 'flak'], frost: ['glacier', 'iceshard'],
@@ -46,15 +47,18 @@ export class Bot {
   }
 
   act(): void {
-    this.send();
     this.build();
+    this.send();
   }
 
-  /** Duel : après ses constructions, envoie des rats tant que le revenu est sous le plafond de la prochaine vague. */
+  /** Duel : après ses constructions, achète des glaneurs en gardant une réserve d'or, puis envoie des rats dès 10 éther. */
   private send(): void {
     const w = this.w;
     if (!w.duel || this.planIdx < this.plan.length) return;
-    while (w.income < incomeCap(w.wave + 2) && w.gold >= 60) {
+    while (w.gold >= GLEANER.cost + GOLD_RESERVE) {
+      if (!dispatch(w, { c: CommandType.Gleaner }).ok) break;
+    }
+    while (w.ether >= 10) {
       if (!dispatch(w, { c: CommandType.Send, creep: 'rat' }).ok) return;
     }
   }

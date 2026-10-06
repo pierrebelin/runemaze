@@ -4,6 +4,7 @@ import type { World } from '../domain/model/World';
 import { build } from './commands/build';
 import { callWave } from './commands/callWave';
 import { endless } from './commands/endless';
+import { gleaner } from './commands/gleaner';
 import { receive } from './commands/receive';
 import { sell } from './commands/sell';
 import { send } from './commands/send';
@@ -30,5 +31,6 @@ function execute(world: World, cmd: Command): Result {
     case CommandType.Endless: return endless(world);
     case CommandType.Send: return send(world, cmd);
     case CommandType.Receive: return receive(world, cmd);
+    case CommandType.Gleaner: return gleaner(world);
   }
 }

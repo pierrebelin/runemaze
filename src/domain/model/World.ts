@@ -3,6 +3,7 @@ import { CAMPAIGN_LENGTH, DIFFICULTY } from '../catalog/creeps';
 import { FlowField } from '../rules/FlowField';
 import { Grid } from './Grid';
 import { updateAbilities } from '../systems/abilities';
+import { updateGleaners } from '../systems/gleaners';
 import { updateCombat, updateProjectiles } from '../systems/combat';
 import { updateMovement } from '../systems/movement';
 import { updateStatuses } from '../systems/status';
@@ -47,6 +48,8 @@ export class World {
 
   readonly duel: boolean;
   income = 0;
+  ether = 0;
+  gleaners: number[] = [];
   tick = 0;
   time = 0;
   phase: Phase = Phase.Prep;
@@ -182,6 +185,7 @@ export class World {
     this.tick++;
     this.time += dt;
     updateWaves(this, dt);
+    updateGleaners(this);
     updateStatuses(this, dt);
     updateAbilities(this, dt);
     updateMovement(this, dt);

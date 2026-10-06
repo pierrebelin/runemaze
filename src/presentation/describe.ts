@@ -1,9 +1,10 @@
 import type { WaveBriefing, WaveBriefingGroup } from '../application/queries/waveBriefing';
 import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage';
-import type { ArmorType, AttackType, Creep, CreepDef, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
+import type { ArmorType, AttackType, Creep, CreepDef, Result, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
 import type { breakerLosses, familyDamage, waveCurve } from '../domain/rules/debrief';
 import { towerYield } from '../domain/rules/debrief';
 import { CREEPS } from '../domain/catalog/creeps';
+import { GLEANER } from '../domain/catalog/ether';
 import { creepSpeed } from '../domain/rules/speed';
 import { Verdict } from '../application/online/protocol';
 
@@ -227,12 +228,17 @@ export function debriefBreakers(losses: ReturnType<typeof breakerLosses>): strin
   return `<p class="debrief-breakers">${fmt0(losses.count)} ${noun} · ${fmt0(losses.gold)} or</p>`;
 }
 
-export function sendPanel(gold: number, income: number, cap: number): string {
+export function sendPanel(ether: number, income: number): string {
   const rows = Object.values(CREEPS)
     .filter((c) => c.send)
-    .map((c) => `<button type="button" data-send="${c.id}"${gold < c.send!.cost ? ' disabled' : ''}>${esc(c.name)} · ${c.send!.cost} or · +${c.send!.income}</button>`)
+    .map((c) => `<button type="button" data-send="${c.id}"${ether < c.send!.cost ? ' disabled' : ''}>${esc(c.name)} · ${c.send!.cost} éther · +${c.send!.income}</button>`)
     .join('');
-  return `<h3>Revenu ${fmt0(income)} / ${fmt0(cap)}</h3><div class="sends">${rows}</div>`;
+  return `<h3>Revenu ${fmt0(income)}</h3><div class="sends">${rows}</div>`;
+}
+
+export function gleanerPanel(ether: number, gleaners: number, buy: Result): string {
+  const attrs = buy.ok ? '' : ` disabled title="${esc(buy.reason)}"`;
+  return `<h3>Glaneurs : ${fmt0(gleaners)}</h3><p>Éther : ${fmt0(ether)}</p><div class="sends"><button type="button" data-gleaner${attrs}>Glaneur · ${GLEANER.cost} or</button></div>`;
 }
 
 export function creepInfo(c: Creep): string {

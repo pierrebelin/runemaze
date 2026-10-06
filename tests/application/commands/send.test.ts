@@ -4,48 +4,50 @@ import { newDuelWorld, newWorld } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('send', () => {
-  it('[CU-01] débite le prix et augmente le revenu quand le joueur en duel envoie un rat', () => {
+  it('[CU-02] débite 10 éther, laisse l\'or intact et augmente le revenu de 3 quand le joueur envoie un rat', () => {
     const w = newDuelWorld();
+    w.ether = 100;
     const gold = w.gold;
+    const income = w.income;
 
     const r = dispatch(w, { c: CommandType.Send, creep: 'rat' });
 
     expect(r.ok).toBe(true);
-    expect(gold - w.gold).toBe(7);
-    expect(w.income).toBe(1);
+    expect(w.ether).toBe(90);
+    expect(w.gold).toBe(gold);
+    expect(w.income - income).toBe(3);
   });
 
-  it('[RM-03] débite l\'or sans dépasser le plafond quand le revenu est déjà au plafond', () => {
+  it('[RM-06] ajoute tout le gain au revenu quand le revenu dépasse l\'ancien plafond', () => {
     const w = newDuelWorld();
-    w.gold = 1000;
-    for (let i = 0; i < 5; i++) dispatch(w, { c: CommandType.Send, creep: 'rat' });
-    expect(w.income).toBe(5);
-    const gold = w.gold;
+    w.ether = 100;
+    w.income = 40;
 
-    const r = dispatch(w, { c: CommandType.Send, creep: 'wolf' });
+    const r = dispatch(w, { c: CommandType.Send, creep: 'rat' });
 
     expect(r.ok).toBe(true);
-    expect(w.income).toBe(6);
-    expect(gold - w.gold).toBe(14);
-    expect(1000 - w.gold).toBe(5 * 7 + 14);
+    expect(w.income).toBe(43);
   });
 
   it('[CU-01] journalise l\'envoi accepté', () => {
     const w = newDuelWorld();
+    w.ether = 100;
 
     dispatch(w, { c: CommandType.Send, creep: 'rat' });
 
     expect(w.log).toEqual([{ tick: w.tick, cmd: { c: CommandType.Send, creep: 'rat' } }]);
   });
 
-  it('[CU-01] refuse l\'envoi sans rien changer quand l\'or manque', () => {
+  it('[CU-02] refuse avec « Pas assez d\'éther. » et laisse l\'état inchangé quand l\'éther manque, même avec de l\'or', () => {
     const w = newDuelWorld();
-    w.gold = 6;
+    w.gold = 1000;
+    w.ether = 9;
 
     const r = dispatch(w, { c: CommandType.Send, creep: 'rat' });
 
-    expect(r).toEqual({ ok: false, reason: 'Pas assez d\'or.' });
-    expect(w.gold).toBe(6);
+    expect(r).toEqual({ ok: false, reason: 'Pas assez d\'éther.' });
+    expect(w.ether).toBe(9);
+    expect(w.gold).toBe(1000);
     expect(w.income).toBe(0);
     expect(w.log).toHaveLength(0);
   });
@@ -53,6 +55,7 @@ describe('send', () => {
   it('[CU-01] refuse l\'envoi quand la dernière vague est déjà lancée', () => {
     const w = newDuelWorld();
     w.wave = w.campaignLength - 1;
+    w.ether = 100;
     const gold = w.gold;
 
     const r = dispatch(w, { c: CommandType.Send, creep: 'rat' });
@@ -65,6 +68,7 @@ describe('send', () => {
 
   it('[RM-01] refuse l\'envoi en solo', () => {
     const w = newWorld();
+    w.ether = 100;
     const gold = w.gold;
 
     const r = dispatch(w, { c: CommandType.Send, creep: 'rat' });
@@ -77,6 +81,7 @@ describe('send', () => {
 
   it('refuse l\'envoi d\'une créature non envoyable', () => {
     const w = newDuelWorld();
+    w.ether = 100;
     const gold = w.gold;
 
     const r = dispatch(w, { c: CommandType.Send, creep: 'ogre' });

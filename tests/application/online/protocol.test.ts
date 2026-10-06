@@ -32,6 +32,17 @@ describe('readClientMessage', () => {
     expect(readClientMessage(order({ c: 'send', creep: 3 }))).toBeNull();
   });
 
+  it('[RM-12] lit un ordre d\'achat de glaneur reçu du client', () => {
+    const raw = JSON.stringify({ t: 'order', tick: 5, cmd: { c: 'gleaner' }, fingerprint: 'abc' });
+
+    expect(readClientMessage(raw)).toEqual({
+      t: 'order',
+      tick: 5,
+      cmd: { c: 'gleaner' },
+      fingerprint: 'abc',
+    });
+  });
+
   it('[RM-07] rejette un ordre de réception venu d\'un client', () => {
     const order = (cmd: unknown) => JSON.stringify({ t: 'order', tick: 5, cmd, fingerprint: 'abc' });
 

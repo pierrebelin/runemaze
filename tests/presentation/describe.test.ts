@@ -8,8 +8,9 @@ import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   briefingChip, briefingInfo,
   creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, nextWaveInfo, sendPanel, towerInfo, towerSpecials,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gleanerPanel, nextWaveInfo, sendPanel, towerInfo, towerSpecials,
 } from '../../src/presentation/describe';
+import { GLEANER } from '../../src/domain/catalog/ether';
 import { Verdict } from '../../src/application/online/protocol';
 import { infusionBlocker } from '../../src/domain/rules/infusion';
 import { TOWERS } from '../../src/domain/catalog/towers';
@@ -233,13 +234,15 @@ describe('panneau d’envois', () => {
   const row = (html: string, id: string) =>
     html.split('data-send="').find((part) => part.startsWith(`${id}"`)) ?? '';
 
-  it('[CU-01] liste chaque créature envoyable avec son prix et son gain, et le revenu sur le plafond', () => {
-    const html = sendPanel(100, 6, 20);
+  it('[CU-02] liste chaque créature envoyable avec son prix en éther et son gain, et le revenu sans plafond', () => {
+    const html = sendPanel(100, 6);
 
-    expect(html).toContain('Revenu 6 / 20');
+    expect(html).toContain('Revenu 6');
+    expect(html).not.toContain('Revenu 6 /');
     for (const c of sendable) {
       expect(row(html, c.id)).toContain(c.name);
-      expect(row(html, c.id)).toContain(String(c.send!.cost));
+      expect(row(html, c.id)).toContain(`${c.send!.cost} éther`);
+      expect(row(html, c.id)).not.toContain(' or ');
       expect(row(html, c.id)).toContain(`+${c.send!.income}`);
     }
     for (const c of Object.values(CREEPS).filter((c) => !c.send)) {
@@ -247,11 +250,32 @@ describe('panneau d’envois', () => {
     }
   });
 
-  it('[CU-01] grise une créature quand l’or ne suffit pas à l’envoyer', () => {
-    const html = sendPanel(20, 0, 20);
+  it('[CU-02] grise une créature quand l’éther ne suffit pas à l’envoyer', () => {
+    const html = sendPanel(20, 0);
 
     expect(row(html, 'raider')).toContain('disabled');
+    expect(row(html, 'raider')).toContain('24 éther');
     expect(row(html, 'rat')).not.toContain('disabled');
+    expect(row(html, 'rat')).toContain('10 éther');
+  });
+});
+
+describe('panneau des glaneurs', () => {
+  it('[CU-01] affiche le nombre de glaneurs, l’éther et le prix d’un glaneur', () => {
+    const html = gleanerPanel(1234, 7, { ok: true });
+
+    expect(html).toContain(`Glaneurs : ${fmt0(7)}`);
+    expect(html).toContain(`Éther : ${fmt0(1234)}`);
+    expect(html).toContain(String(GLEANER.cost));
+    expect(html).toContain('data-gleaner');
+  });
+
+  it('[CU-01] grise l’achat et donne la raison du refus quand l’achat est refusé', () => {
+    const refused = gleanerPanel(0, 0, { ok: false, reason: 'Pas assez d’or.' });
+
+    expect(refused).toContain('disabled');
+    expect(refused).toContain('title="Pas assez d’or."');
+    expect(gleanerPanel(0, 0, { ok: true })).not.toContain('disabled');
   });
 });
 

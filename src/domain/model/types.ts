@@ -227,6 +227,7 @@ export enum CommandType {
   Endless = 'endless',
   Send = 'send',
   Receive = 'receive',
+  Gleaner = 'gleaner',
 }
 
 export type Command =
@@ -237,6 +238,7 @@ export type Command =
   | { c: CommandType.CallWave }
   | { c: CommandType.Endless }
   | { c: CommandType.Send; creep: string }
-  | { c: CommandType.Receive; creep: string };
+  | { c: CommandType.Receive; creep: string }
+  | { c: CommandType.Gleaner };
 
 export type Result = { ok: true; id?: number } | { ok: false; reason: string };

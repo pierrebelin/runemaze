@@ -10,6 +10,7 @@ import { drawCreep, drawMapThumbnail, drawTower } from '../infrastructure/render
 import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage';
 import { dispatch } from '../application/dispatch';
 import { canBuild } from '../application/queries/canBuild';
+import { canBuyGleaner } from '../application/queries/canBuyGleaner';
 import { infusionLock } from '../application/queries/infusionLock';
 import { previewRoute } from '../application/queries/previewRoute';
 import { waveBriefing } from '../application/queries/waveBriefing';
@@ -19,7 +20,6 @@ import { LOST_LIMIT_MS } from '../application/online/heldGame';
 import { ClientMessageType, ServerMessageType } from '../application/online/protocol';
 import type { ServerMessage } from '../application/online/protocol';
 import { refundValue, upgradeCost } from '../domain/rules/pricing';
-import { incomeCap } from '../domain/rules/income';
 import { canLaunchNext } from '../domain/systems/waves';
 import { World, type Stats } from '../domain/model/World';
 import { restore, type WorldSnapshot } from '../domain/model/snapshot';
@@ -28,7 +28,7 @@ import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, MapD
 import { CommandType, GameEventType, Phase } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
-import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, nextWaveInfo, sendPanel, TARGET_LABEL, towerInfo } from './describe';
+import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gleanerPanel, nextWaveInfo, sendPanel, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -113,6 +113,7 @@ export class Game {
   private viewingRival = false;
   private rivalHud: Record<string, string> = {};
   private sendOpen = false;
+  private sendTab: 'sends' | 'gleaners' | 'gate' = 'sends';
 
   private selected: Selection = null;
   private buildDef: string | null = null;
@@ -443,6 +444,12 @@ export class Game {
     else this.drainNow();
   }
 
+  private buyGleaner(): void {
+    const r = this.order({ c: CommandType.Gleaner });
+    if (!r.ok) this.fail(r.reason);
+    else this.drainNow();
+  }
+
   private callWave(): void {
     this.sfx.unlock();
     if (this.overlay) return;
@@ -594,6 +601,10 @@ export class Game {
     const sendFrom = (e: Event): void => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-send]');
       if (b && !this.overlay && !b.matches(':disabled')) this.sendCreep(b.dataset.send!);
+      const g = (e.target as HTMLElement).closest<HTMLElement>('[data-gleaner]');
+      if (g && !this.overlay && !g.matches(':disabled')) this.buyGleaner();
+      const tab = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
+      if (tab) this.sendTab = tab.dataset.tab as typeof this.sendTab;
     };
     $('info').addEventListener('pointerdown', (e) => {
       if (e.button === 0) sendFrom(e);
@@ -787,7 +798,13 @@ export class Game {
 
   private updateInfo(): void {
     if (this.sendOpen) {
-      const html = sendPanel(this.world.gold, this.world.income, incomeCap(this.world.wave + 2));
+      const tabs = (['sends', 'gleaners', 'gate'] as const)
+        .map((t) => `<button type="button" data-tab="${t}"${t === this.sendTab ? ' class="active"' : ''}>${{ sends: 'Envois', gleaners: 'Glaneurs', gate: 'Porte' }[t]}</button>`)
+        .join('');
+      const body = this.sendTab === 'sends'
+        ? sendPanel(this.world.ether, this.world.income)
+        : this.sendTab === 'gleaners' ? gleanerPanel(this.world.ether, this.world.gleaners.length, canBuyGleaner(this.world)) : '';
+      const html = `<div class="tabs">${tabs}</div>${body}`;
       if (html !== this.infoCache) {
         this.infoCache = html;
         $('info').innerHTML = html;

@@ -198,4 +198,26 @@ describe('snapshot', () => {
     expect(restored.sends).toEqual([]);
     expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
   });
+
+  it('[RM-12] restaure l\'éther et le tick d\'achat de chaque glaneur depuis un instantané', () => {
+    const w = newDuelWorld('normal', 42);
+    w.gold = 1000;
+    dispatch(w, { c: CommandType.Gleaner });
+    run(w, 1);
+    dispatch(w, { c: CommandType.Gleaner });
+    run(w, 5);
+    expect(w.ether).toBeGreaterThan(0);
+    expect(w.gleaners).toHaveLength(2);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+
+    expect(restored.ether).toBe(w.ether);
+    expect(restored.gleaners).toEqual(w.gleaners);
+
+    run(w, 10);
+    run(restored, 10);
+
+    expect(restored.ether).toBe(w.ether);
+    expect(restored.gleaners).toEqual(w.gleaners);
+  });
 });

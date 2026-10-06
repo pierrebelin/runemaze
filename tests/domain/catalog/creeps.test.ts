@@ -60,18 +60,19 @@ describe('creeps', () => {
     }
   });
 
-  it('[CU-01] rend envoyables rat, loup, maraudeur, harpie, golem et spectre aux prix et gains de la table, et aucun chef', () => {
+  it('[RM-04] envoie chaque créature au prix et au gain du barème', () => {
     const sendable = Object.values(CREEPS)
       .filter((c) => c.send !== undefined)
       .map((c) => [c.id, c.send]);
 
     expect(sendable).toEqual([
-      ['rat', { cost: 7, income: 1 }],
-      ['wolf', { cost: 14, income: 2 }],
-      ['raider', { cost: 25, income: 3 }],
-      ['golem', { cost: 90, income: 8 }],
-      ['harpy', { cost: 45, income: 5 }],
-      ['wraith', { cost: 110, income: 9 }],
+      ['rat', { cost: 10, income: 3 }],
+      ['wolf', { cost: 16, income: 4 }],
+      ['raider', { cost: 24, income: 6 }],
+      ['golem', { cost: 50, income: 10 }],
+      ['harpy', { cost: 30, income: 6 }],
+      ['wraith', { cost: 60, income: 12 }],
     ]);
+    expect(Object.values(CREEPS).filter((c) => c.boss && c.send !== undefined)).toEqual([]);
   });
 });

@@ -20,6 +20,8 @@ export interface WorldSnapshot {
   endless: boolean;
   duel: boolean;
   income: number;
+  ether: number;
+  gleaners: number[];
   sends: string[];
   gold: number;
   lives: number;
@@ -85,6 +87,8 @@ export function snapshot(world: World): WorldSnapshot {
     endless: world.endless,
     duel: world.duel,
     income: world.income,
+    ether: world.ether,
+    gleaners: [...world.gleaners],
     sends: [...world.sends],
     gold: world.gold,
     lives: world.lives,
@@ -118,6 +122,8 @@ export function restore(snap: WorldSnapshot): World {
   world.phase = snap.phase;
   world.endless = snap.endless;
   world.income = snap.income;
+  world.ether = snap.ether;
+  world.gleaners = [...snap.gleaners];
   world.sends = [...snap.sends];
   world.gold = snap.gold;
   world.lives = snap.lives;
