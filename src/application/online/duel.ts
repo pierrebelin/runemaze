@@ -7,7 +7,6 @@ import type { WorldSnapshot } from '../../domain/model/snapshot';
 import { fingerprint } from '../../domain/rules/fingerprint';
 import { duelOutcome, DuelOutcome } from '../../domain/rules/duelOutcome';
 import type { DuelSide } from '../../domain/rules/duelOutcome';
-import { canLaunchNext } from '../../domain/systems/waves';
 import { LAG_TICKS, LOST_LIMIT_MS } from './heldGame';
 import { ServerMessageType, Verdict } from './protocol';
 import type { ServerMessage } from './protocol';
@@ -123,12 +122,10 @@ export class Duel {
   ready(seat: Seat, now: number): SeatMessage[] {
     if (this.lostAt !== undefined) return [];
     this.tick(now);
+    if (this.isOver()) return [];
     this.readiness[seat] = !this.readiness[seat];
     const rival = seat === Seat.Host ? Seat.Guest : Seat.Host;
-    if (
-      this.readiness[Seat.Host] && this.readiness[Seat.Guest] &&
-      canLaunchNext(this.worlds[Seat.Host]) && canLaunchNext(this.worlds[Seat.Guest])
-    ) {
+    if (this.readiness[Seat.Host] && this.readiness[Seat.Guest]) {
       this.readiness = [false, false];
       dispatch(this.worlds[Seat.Host], { c: CommandType.CallWave });
       dispatch(this.worlds[Seat.Guest], { c: CommandType.CallWave });
@@ -192,7 +189,7 @@ export class Duel {
     this.tick(now);
     const overLimit = this.stepBounded(seat, msg.tick);
     const world = this.worlds[seat];
-    if (msg.cmd.c === CommandType.CallWave || msg.cmd.c === CommandType.Endless) {
+    if (msg.cmd.c === CommandType.CallWave) {
       return { t: ServerMessageType.Drift, snapshot: snapshot(world) };
     }
     const r = dispatch(world, msg.cmd);
@@ -271,7 +268,7 @@ export class Duel {
 
   private side(seat: Seat): DuelSide {
     const world = this.worlds[seat];
-    return { phase: world.phase, lives: world.lives };
+    return { phase: world.phase };
   }
 
   private overMessage(seat: Seat): ServerMessage {

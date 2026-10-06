@@ -89,14 +89,13 @@ describe('receive', () => {
     expect(w.spawners.filter((s) => s.wave === 0 && s.creep === 'rat').length).toBeLessThanOrEqual(1);
   });
 
-  it('refuse la réception quand la dernière vague est déjà lancée', () => {
+  it('[RM-03] accepte la réception quand la vague 30 est lancée', () => {
     const w = newDuelWorld();
-    w.wave = w.campaignLength - 1;
+    w.wave = 29;
 
     const r = dispatch(w, receive('rat'));
 
-    expect(r).toEqual({ ok: false, reason: 'Plus aucune vague à venir.' });
-    expect(w.sends).toEqual([]);
-    expect(w.log).toHaveLength(0);
+    expect(r.ok).toBe(true);
+    expect(w.sends).toEqual(['rat']);
   });
 });

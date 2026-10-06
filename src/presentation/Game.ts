@@ -1,6 +1,6 @@
 import { Sfx } from '../infrastructure/audio/Sfx';
 import { GameLoop } from '../infrastructure/GameLoop';
-import { CAMPAIGN_LENGTH, CREEPS, DIFFICULTY, waveAt } from '../domain/catalog/creeps';
+import { CREEPS, DIFFICULTY, waveAt } from '../domain/catalog/creeps';
 import { MAPS } from '../domain/catalog/map';
 import { BUILDERS } from '../domain/catalog/builders';
 import { TOWERS } from '../domain/catalog/towers';
@@ -21,12 +21,11 @@ import { LOST_LIMIT_MS } from '../application/online/heldGame';
 import { ClientMessageType, ServerMessageType } from '../application/online/protocol';
 import type { ServerMessage } from '../application/online/protocol';
 import { refundValue, upgradeCost } from '../domain/rules/pricing';
-import { canLaunchNext } from '../domain/systems/waves';
 import { World, type Stats } from '../domain/model/World';
 import { restore, type WorldSnapshot } from '../domain/model/snapshot';
 import { fingerprint } from '../domain/rules/fingerprint';
 import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, GateUpgrade, MapDef, Result, TargetMode, Tower } from '../domain/model/types';
-import { CommandType, GameEventType, Phase } from '../domain/model/types';
+import { CommandType, GameEventType } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
 import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, rivalEconomy, sendPanel, TARGET_LABEL, towerInfo } from './describe';
@@ -133,6 +132,7 @@ export class Game {
   private slots: (Slot | null)[] = [];
   private cardKey = '';
   private infoCache = '';
+  private sendCache = '';
   private unitCache = '';
   private briefingCache = '';
   private hud: Record<string, string> = {};
@@ -609,7 +609,7 @@ export class Game {
     $('callBtn').addEventListener('click', () => this.callWave());
     $('pauseBtn').addEventListener('click', () => this.togglePause());
     $('sendBtn').addEventListener('click', () => this.toggleSendPanel());
-    // Souris sur `pointerdown` : `#info` est reconstruit quand l'or franchit un seuil, un `click` serait perdu.
+    // Souris sur `pointerdown` : `#sendPanel` est reconstruit quand l'or franchit un seuil, un `click` serait perdu.
     // `click` ne sert qu'au clavier (`detail === 0`).
     const sendFrom = (e: Event): void => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-send]');
@@ -621,10 +621,10 @@ export class Game {
       const tab = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
       if (tab) this.sendTab = tab.dataset.tab as typeof this.sendTab;
     };
-    $('info').addEventListener('pointerdown', (e) => {
+    $('sendPanel').addEventListener('pointerdown', (e) => {
       if (e.button === 0) sendFrom(e);
     });
-    $('info').addEventListener('click', (e) => {
+    $('sendPanel').addEventListener('click', (e) => {
       if (e.detail === 0) sendFrom(e);
     });
     $('muteBtn').addEventListener('click', () => this.toggleMute());
@@ -804,7 +804,9 @@ export class Game {
 
   // ─── Panneaux d'information ──────────────────────────────────────────────
 
-  private updateInfo(): void {
+  /** Panneau Envois / Glaneurs / Porte, à part de `#info` pour ne pas masquer la fiche des tours. */
+  private updateSendPanel(): void {
+    let html = '';
     if (this.sendOpen) {
       const tabs = (['sends', 'gleaners', 'gate'] as const)
         .map((t) => `<button type="button" data-tab="${t}"${t === this.sendTab ? ' class="active"' : ''}>${{ sends: 'Envois', gleaners: 'Glaneurs', gate: 'Porte' }[t]}</button>`)
@@ -812,13 +814,17 @@ export class Game {
       const body = this.sendTab === 'sends'
         ? sendPanel(this.world.ether, this.world.income)
         : this.sendTab === 'gleaners' ? gleanerPanel(this.world.ether, this.world.gleaners.length, canBuyGleaner(this.world)) : gatePanel(this.world.ether, this.world.gate);
-      const html = `<div class="tabs">${tabs}</div>${body}`;
-      if (html !== this.infoCache) {
-        this.infoCache = html;
-        $('info').innerHTML = html;
-      }
-      return;
+      html = `<div class="tabs">${tabs}</div>${body}`;
     }
+    if (html === this.sendCache) return;
+    this.sendCache = html;
+    const panel = $('sendPanel');
+    panel.innerHTML = html;
+    panel.hidden = html === '';
+  }
+
+  private updateInfo(): void {
+    this.updateSendPanel();
     if (this.viewingRival) {
       // Aucune fiche d'info en vue adverse (H1).
       if (this.infoCache !== '') {
@@ -877,12 +883,9 @@ export class Game {
         : '';
     } else {
       const i = w.wave + 1;
-      if (!w.endless && i >= CAMPAIGN_LENGTH) unit = `<h2>Tenez bon</h2><div class="sub">Dernière vague en cours</div>`;
-      else {
-        const wg = waveAt(i).groups[0];
-        const def = CREEPS[wg.creep];
-        unit = `<h2>${def.boss ? def.name : def.plural}</h2><div class="sub">Vague ${i + 1}${wg.count > 1 ? ` · ×${wg.count}` : ' · chef'}</div><div class="facts">Armure ${ARMOR_LABEL[def.armorType].toLowerCase()}${def.air ? ' · volants' : ''}${def.magicImmune ? ' · immunisés' : ''}</div>`;
-      }
+      const wg = waveAt(i).groups[0];
+      const def = CREEPS[wg.creep];
+      unit = `<h2>${def.boss ? def.name : def.plural}</h2><div class="sub">Vague ${i + 1}${wg.count > 1 ? ` · ×${wg.count}` : ' · chef'}</div><div class="facts">Armure ${ARMOR_LABEL[def.armorType].toLowerCase()}${def.air ? ' · volants' : ''}${def.magicImmune ? ' · immunisés' : ''}</div>`;
     }
     if (unit !== this.unitCache) {
       this.unitCache = unit;
@@ -893,11 +896,10 @@ export class Game {
   /** Résumé de la prochaine vague dans la barre du haut ; détail au survol. */
   private updateBriefing(): void {
     const b = waveBriefing(this.world);
-    const html = b ? briefingChip(b) + briefingInfo(b) : '';
+    const html = briefingChip(b) + briefingInfo(b);
     if (html === this.briefingCache) return;
     this.briefingCache = html;
-    $('briefing').hidden = !b;
-    if (!b) return;
+    $('briefing').hidden = false;
     $('briefingChip').innerHTML = briefingChip(b);
     $('briefingDetail').innerHTML = briefingInfo(b);
   }
@@ -921,7 +923,7 @@ export class Game {
     }
     let creep: Creep | undefined;
     if (this.selected?.kind === 'creep') creep = w.creeps.find((k) => k.id === this.selected!.id);
-    const def = creep ? creep.def : CREEPS[waveAt(Math.min(w.wave + 1, w.endless ? Infinity : CAMPAIGN_LENGTH - 1)).groups[0].creep];
+    const def = creep ? creep.def : CREEPS[waveAt(w.wave + 1).groups[0].creep];
     const span = Math.max(1.4, def.radius * 4.2);
     const s = c.width / span;
     ctx.setTransform(s, 0, 0, s, 0, 0);
@@ -939,21 +941,22 @@ export class Game {
       $(id).textContent = v;
     };
     set('gold', fmt0(w.gold));
+    set('ether', fmt0(w.ether));
+    $('etherRes').hidden = !this.duelRole;
     set('lives', fmt0(w.lives));
     $('lives').style.color = w.lives <= 5 ? PAL.danger : '';
     set('wave', String(Math.max(0, w.wave + 1)));
-    set('waveMax', w.endless ? '/ ∞' : `/ ${CAMPAIGN_LENGTH}`);
     set('maze', fmt0(w.mazeLength()));
     const sendHidden = String(!this.duelRole);
     if (this.hud.sendHidden !== sendHidden) {
       this.hud.sendHidden = sendHidden;
       $('sendBtn').hidden = !this.duelRole;
     }
-    const can = canLaunchNext(w);
+    const can = !w.isOver();
     const secs = Math.ceil(Math.max(0, w.nextWaveIn));
     set('timerLabel', can ? 'Vague suivante : ' : '');
-    set('timer', can ? `${secs} s` : w.phase === Phase.Playing ? 'Dernière vague' : '');
-    const bonus = can && Number.isFinite(w.nextWaveIn) ? Math.floor(Math.max(0, w.nextWaveIn) * 0.5) : 0;
+    set('timer', can ? `${secs} s` : '');
+    const bonus = can ? Math.floor(Math.max(0, w.nextWaveIn) * 0.5) : 0;
     const label = can ? (bonus > 0 ? `Appeler +${bonus}` : 'Appeler') : 'Appeler';
     if (this.hud.call !== label + can) {
       this.hud.call = label + can;
@@ -1079,7 +1082,7 @@ export class Game {
 
   private saveBest(): void {
     const w = this.world;
-    const reached = w.phase === Phase.Victory ? w.wave + 1 : Math.max(0, w.wave);
+    const reached = Math.max(0, w.wave);
     try {
       const best = withRecord(this.loadBest(), this.mapId, this.difficulty, reached);
       localStorage.setItem(BEST_KEY, JSON.stringify(best));
@@ -1814,13 +1817,12 @@ export class Game {
 
   private showEnd(): void {
     const w = this.world;
-    const win = w.phase === Phase.Victory;
     const s = w.stats;
-    const reached = win ? w.wave + 1 : Math.max(1, w.wave + 1);
+    const reached = Math.max(1, w.wave + 1);
     this.openOverlay(Overlay.End, `
       <div class="sheet">
-        <h2>${win ? (w.endless ? 'Vous tenez encore' : 'Victoire') : 'La porte est tombée'}</h2>
-        <p class="lede">${win ? `Les trente vagues sont venues se briser sur votre labyrinthe, avec ${w.lives} vies restantes.` : `Votre défense a tenu jusqu'à la vague ${reached}.`}</p>
+        <h2>La porte est tombée</h2>
+        <p class="lede">Votre défense a tenu jusqu'à la vague ${reached}.</p>
         <div class="endstats">
           <div><b>${reached}</b><span>Vagues</span></div>
           <div><b>${fmt0(s.kills)}</b><span>Éliminations</span></div>
@@ -1830,20 +1832,10 @@ export class Game {
         </div>
         ${this.debriefBlockHtml(s, w.gold)}
         <div class="row">
-          ${win ? '<button type="button" class="btn primary" id="endless">Continuer en mode infini</button>' : ''}
-          <button type="button" class="btn ${win ? '' : 'primary'}" id="again">Nouvelle partie</button>
+          <button type="button" class="btn primary" id="again">Nouvelle partie</button>
         </div>
       </div>`);
     this.bindDebriefTabs($('overlay'));
     $('again').addEventListener('click', () => this.showStart());
-    if (win) {
-      $('endless').addEventListener('click', () => {
-        const r = this.order({ c: CommandType.Endless });
-        if (r.ok) this.savePending();
-        this.endShown = false;
-        this.closeOverlay();
-        this.toast('Mode infini : les vagues ne s’arrêtent plus.');
-      });
-    }
   }
 }

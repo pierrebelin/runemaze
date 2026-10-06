@@ -124,6 +124,11 @@ export interface Creep {
   /** Case vers laquelle la créature terrestre se dirige. */
   tx: number;
   ty: number;
+  /**
+   * Cap retenu quand une construction a dévié la créature : aucune construction ne peut ensuite
+   * l'en écarter de plus de 90°. Oublié quand elle reprend ce cap ou change de tronçon.
+   */
+  heading?: { x: number; y: number };
   slowPct: number;
   slowTimer: number;
   shred: number;
@@ -204,7 +209,6 @@ export enum GameEventType {
   Destroyed = 'destroyed',
   WaveStart = 'waveStart',
   WaveCleared = 'waveCleared',
-  Victory = 'victory',
   Defeat = 'defeat',
 }
 
@@ -220,13 +224,11 @@ export type GameEvent =
   | { t: GameEventType.Destroyed; x: number; y: number }
   | { t: GameEventType.WaveStart; wave: number; creep: string; boss: boolean }
   | { t: GameEventType.WaveCleared; wave: number; bonus: number; interest: number; income: number }
-  | { t: GameEventType.Victory }
   | { t: GameEventType.Defeat };
 
 export enum Phase {
   Prep = 'prep',
   Playing = 'playing',
-  Victory = 'victory',
   Defeat = 'defeat',
 }
 
@@ -236,7 +238,6 @@ export enum CommandType {
   Sell = 'sell',
   Target = 'target',
   CallWave = 'callWave',
-  Endless = 'endless',
   Send = 'send',
   Receive = 'receive',
   Gleaner = 'gleaner',
@@ -249,7 +250,6 @@ export type Command =
   | { c: CommandType.Sell; tower: number }
   | { c: CommandType.Target; tower: number; mode: TargetMode }
   | { c: CommandType.CallWave }
-  | { c: CommandType.Endless }
   | { c: CommandType.Send; creep: string }
   | { c: CommandType.Receive; creep: string }
   | { c: CommandType.Gleaner }

@@ -69,6 +69,12 @@ describe('readClientMessage', () => {
     expect(readClientMessage(order({ c: 'receive', creep: 'grunt' }))).toBeNull();
   });
 
+  it('[RM-04] ignore l\'ordre de mode infini venu du réseau', () => {
+    const raw = JSON.stringify({ t: 'order', tick: 5, cmd: { c: 'endless' }, fingerprint: 'abc' });
+
+    expect(readClientMessage(raw)).toBeNull();
+  });
+
   it('rejette un message qui n\'est pas du JSON', () => {
     expect(readClientMessage('pas du json')).toBeNull();
     expect(readClientMessage('{')).toBeNull();

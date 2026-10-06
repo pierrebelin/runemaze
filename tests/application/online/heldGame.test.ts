@@ -5,8 +5,7 @@ import { fingerprint } from '../../../src/domain/rules/fingerprint';
 import { restore, snapshot } from '../../../src/domain/model/snapshot';
 import { ServerMessageType, Verdict } from '../../../src/application/online/protocol';
 import type { ServerMessage } from '../../../src/application/online/protocol';
-import { CAMPAIGN_LENGTH } from '../../../src/domain/catalog/creeps';
-import { newWorld, run, killAllCreeps } from '../../support/helpers';
+import { newWorld, run } from '../../support/helpers';
 import { CommandType, Phase } from '../../../src/domain/model/types';
 
 describe('HeldGame', () => {
@@ -61,45 +60,6 @@ describe('HeldGame', () => {
     held.pace({ tick: 1_000_000, paused: false, speed: 1 }, 1000);
 
     expect(held.world.tick).toBe(60);
-  });
-
-  it('[RM-10] reprend au tick du joueur quand le mode infini suit la victoire', () => {
-    const world = newWorld();
-    const held = new HeldGame(world, 'tok', 0);
-    held.advance(1000);
-    const v = world.tick;
-    world.phase = Phase.Victory;
-
-    held.advance(11_000);
-    expect(world.tick).toBe(v);
-
-    dispatch(world, { c: CommandType.Endless });
-    held.advance(12_000);
-
-    expect(world.tick).toBe(v + 60);
-  });
-
-  it('[RM-08] annonce la défaite d\'une partie poursuivie en mode infini après la victoire', () => {
-    const world = newWorld();
-    const held = new HeldGame(world, 'tok', 0);
-    held.advance(1000);
-    world.phase = Phase.Victory;
-
-    const victoryMsg = held.advance(2000);
-    expect(victoryMsg?.t).toBe(ServerMessageType.Over);
-
-    expect(dispatch(world, { c: CommandType.Endless }).ok).toBe(true);
-    expect(world.phase).toBe(Phase.Playing);
-
-    world.lives = 0;
-    world.phase = Phase.Defeat;
-
-    const res = held.advance(3000);
-
-    expect(res?.t).toBe(ServerMessageType.Over);
-    const over = res as { t: ServerMessageType.Over; verdict: string; snapshot: ReturnType<typeof snapshot> };
-    expect(over.verdict).toBe(Verdict.Defeat);
-    expect(over.snapshot.phase).toBe(Phase.Defeat);
   });
 
   it('[RM-04] applique l\'ordre au tick du joueur sans écart quand les deux parties sont identiques', () => {
@@ -207,25 +167,6 @@ describe('HeldGame', () => {
     expect(over?.verdict).toBe(Verdict.Defeat);
     expect(over?.snapshot.phase).toBe(Phase.Defeat);
     expect(over?.snapshot.lives).toBeLessThanOrEqual(0);
-  });
-
-  it('[RM-08] annonce la victoire avec son instantané quand sa dernière vague est repoussée', () => {
-    const held = new HeldGame(newWorld('easy', 1), 'tok', 0);
-    const world = held.world;
-    for (let w = 0; w < CAMPAIGN_LENGTH; w++) {
-      expect(dispatch(world, { c: CommandType.CallWave }).ok).toBe(true);
-      for (let guard = 0; guard < 60 * 60 && (world.spawners.length > 0 || world.creeps.length > 0 || world.pending.size > 0); guard++) {
-        world.step();
-        killAllCreeps(world);
-      }
-    }
-
-    const res = held.advance(1000);
-
-    expect(res?.t).toBe(ServerMessageType.Over);
-    const over = res as { t: ServerMessageType.Over; verdict: string; snapshot: ReturnType<typeof snapshot> };
-    expect(over.verdict).toBe(Verdict.Victory);
-    expect(over.snapshot.phase).toBe(Phase.Victory);
   });
 
   it('[RM-05] signale un écart quand le joueur déclare une fin que le serveur n\'atteint pas au même tick', () => {

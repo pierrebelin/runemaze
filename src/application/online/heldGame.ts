@@ -1,5 +1,4 @@
 import { dispatch } from '../dispatch';
-import { Phase } from '../../domain/model/types';
 import type { Command } from '../../domain/model/types';
 import type { World } from '../../domain/model/World';
 import { snapshot } from '../../domain/model/snapshot';
@@ -21,8 +20,8 @@ export class HeldGame {
   private lastNow: number;
   private paused = false;
   private speed = 1;
-  /** Phase de fin déjà annoncée (`victory` ou `defeat`) ; permet de réannoncer si la partie reprend puis finit autrement. */
-  private announcedPhase?: Phase;
+  /** Défaite déjà annoncée : fin définitive, annoncée une seule fois. */
+  private announced = false;
   /** Instant de la coupure ; effacé au retour du joueur. Tant qu'il est défini, l'horloge ne rattrape plus le temps réel. */
   lostAt?: number;
 
@@ -40,10 +39,9 @@ export class HeldGame {
   advance(now: number): ServerMessage | null {
     this.tick(now);
     this.world.drainEvents();
-    if (this.world.isOver() && this.announcedPhase !== this.world.phase) {
-      this.announcedPhase = this.world.phase;
-      const verdict = this.world.phase === Phase.Victory ? Verdict.Victory : Verdict.Defeat;
-      return { t: ServerMessageType.Over, verdict, snapshot: snapshot(this.world) };
+    if (this.world.isOver() && !this.announced) {
+      this.announced = true;
+      return { t: ServerMessageType.Over, verdict: Verdict.Defeat, snapshot: snapshot(this.world) };
     }
     return null;
   }

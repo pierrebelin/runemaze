@@ -1,13 +1,16 @@
 import { TOWERS } from '../../domain/catalog/towers';
 import { buildMenu } from '../../domain/rules/builder';
-import type { Result } from '../../domain/model/types';
+import { capOf, opposes } from '../../domain/rules/heading';
+import type { Creep, Result } from '../../domain/model/types';
 import type { World } from '../../domain/model/World';
 import { fail } from '../result';
 
 /**
  * Vérifie qu'une tour peut être posée en (x, y) : terrain constructible,
  * aucune créature dessous, et surtout le labyrinthe ne doit jamais être
- * fermé — ni pour le trajet complet, ni pour une créature déjà en route.
+ * fermé — ni pour le trajet complet, ni pour une créature déjà en route —,
+ * et aucune créature en route ne doit faire demi-tour : son pas suivant ne peut
+ * pas s'écarter de plus de 90° de son cap (voir `Creep.heading`).
  */
 export function canBuild(world: World, defId: string, x: number, y: number): Result {
   const def = TOWERS[defId];
@@ -25,28 +28,41 @@ export function canBuild(world: World, defId: string, x: number, y: number): Res
     if (c.x + r > x && c.x - r < x + 2 && c.y + r > y && c.y - r < y + 2) return fail('Une créature bloque l’emplacement.');
     if (fp.has(g.idx(c.tx, c.ty))) return fail('Une créature bloque l’emplacement.');
   }
-  if (!pathsStayOpen(world, fp)) return fail('Impossible de bloquer le chemin.');
-  return { ok: true };
+  return checkPaths(world, fp);
 }
 
-function pathsStayOpen(world: World, blocked: Set<number>): boolean {
+function checkPaths(world: World, blocked: Set<number>): Result {
+  const g = world.grid;
+  const ground = world.creeps.filter((c) => c.alive && !c.def.air);
+  const nextBefore = nextSteps(world, ground);
   const fields = world.fields;
   for (const f of fields) f.compute(blocked);
-  const g = world.grid;
   let ok = fields[0].reachable(world.spawnCell);
   for (let k = 1; ok && k < fields.length; k++) {
     ok = g.checkpoints[k - 1].some((i) => fields[k].reachable(i));
   }
-  if (ok) {
-    for (const c of world.creeps) {
-      if (!c.alive || c.def.air) continue;
-      if (!world.fields[c.leg].reachable(g.idx(c.tx, c.ty))) {
-        ok = false;
-        break;
-      }
+  let result: Result = ok ? { ok: true } : fail('Impossible de bloquer le chemin.');
+  for (const [k, c] of ground.entries()) {
+    if (!result.ok) break;
+    const cell = g.idx(c.tx, c.ty);
+    if (!fields[c.leg].reachable(cell)) result = fail('Impossible de bloquer le chemin.');
+    else if (fields[c.leg].next[cell] !== nextBefore[k] && turnsBack(world, c, fields[c.leg].next[cell])) {
+      result = fail('Les créatures en route ne peuvent pas faire demi-tour.');
     }
   }
   // Restaure les champs de la grille réelle.
   world.refreshPaths();
-  return ok;
+  return result;
+}
+
+/** Case suivante de chaque créature terrestre, depuis la case qu'elle vise, sur les champs actuels. */
+export function nextSteps(world: World, creeps: Creep[]): number[] {
+  return creeps.map((c) => world.fields[c.leg].next[world.grid.idx(c.tx, c.ty)]);
+}
+
+/** Vrai si le pas suivant `next` s'écarte de plus de 90° du cap de la créature. */
+function turnsBack(world: World, c: Creep, next: number): boolean {
+  if (next < 0) return false; // Case d'arrivée du tronçon : pas de pas suivant.
+  const g = world.grid;
+  return opposes(capOf(c), { x: g.cx(next) - c.tx, y: g.cy(next) - c.ty });
 }

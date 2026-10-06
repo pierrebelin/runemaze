@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { newWorld } from '../../support/helpers';
-import { MAP_GATED_STONES } from '../../support/maps';
+import { MAP_GATED_STONES, MAP_LOOP, MAP_TWO_STONES } from '../../support/maps';
 import { MAP_CROSSING } from '../../../src/domain/catalog/map';
 import { CommandType } from '../../../src/domain/model/types';
 
@@ -121,5 +121,95 @@ describe('build', () => {
 
     expect(r).toEqual({ ok: false, reason: 'Impossible de bloquer le chemin.' });
     expect(w.towers).toHaveLength(0);
+  });
+});
+
+describe('build : pas de demi-tour', () => {
+  /** Rat engagé dans le couloir du haut de la boucle, entre les cases (5, 1) et (6, 1), vers la pierre 1. */
+  const ratHeadingRight = (w: ReturnType<typeof newWorld>) => {
+    const c = spawnCreep(w, 'rat', 0);
+    c.leg = 0;
+    c.tx = 6;
+    c.ty = 1;
+    c.x = 5.6;
+    c.y = 1.5;
+    return c;
+  };
+
+  it('refuse une construction qui ferait faire demi-tour à une créature en route', () => {
+    const w = newWorld('normal', 42, MAP_LOOP);
+    ratHeadingRight(w);
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 7, y: 1 });
+
+    expect(r).toEqual({ ok: false, reason: 'Les créatures en route ne peuvent pas faire demi-tour.' });
+    expect(w.towers).toHaveLength(0);
+    expect(w.gold).toBe(gold);
+  });
+
+  it('accepte la même construction quand aucune créature n’est engagée dans le couloir', () => {
+    const w = newWorld('normal', 42, MAP_LOOP);
+
+    expect(dispatch(w, { c: CommandType.Build, def: 'wall', x: 7, y: 1 }).ok).toBe(true);
+  });
+
+  it('accepte une construction derrière la créature, qui garde son sens de marche', () => {
+    const w = newWorld('normal', 42, MAP_LOOP);
+    ratHeadingRight(w);
+
+    expect(dispatch(w, { c: CommandType.Build, def: 'wall', x: 3, y: 1 }).ok).toBe(true);
+  });
+
+  it('laisse les champs de flux intacts après un refus', () => {
+    const w = newWorld('normal', 42, MAP_LOOP);
+    ratHeadingRight(w);
+    const before = w.mazeLength();
+
+    dispatch(w, { c: CommandType.Build, def: 'wall', x: 7, y: 1 });
+
+    expect(w.mazeLength()).toBe(before);
+  });
+
+  /** Rat du dernier tronçon (pierre 2 → porte) du Champ des Deux Pierres, entre (7, 3) et (8, 3), vers la droite. */
+  const ratInField = (w: ReturnType<typeof newWorld>) => {
+    const c = spawnCreep(w, 'rat', 0);
+    c.leg = 2;
+    c.tx = 8;
+    c.ty = 3;
+    c.x = 7.6;
+    c.y = 3.5;
+    return c;
+  };
+
+  it('retient le cap de la créature déviée par une construction', () => {
+    const w = newWorld('normal', 42, MAP_TWO_STONES);
+    const c = ratInField(w);
+
+    // Le mur en (9, 3) barre la droite : le rat tourne de 90° vers le haut.
+    expect(dispatch(w, { c: CommandType.Build, def: 'wall', x: 9, y: 3 }).ok).toBe(true);
+
+    expect(c.heading!.x).toBeGreaterThan(0);
+    expect(c.heading!.y).toBe(0);
+  });
+
+  it('ne retient aucun cap pour une créature dont le pas suivant ne change pas', () => {
+    const w = newWorld('normal', 42, MAP_TWO_STONES);
+    const c = ratInField(w);
+
+    expect(dispatch(w, { c: CommandType.Build, def: 'wall', x: 2, y: 4 }).ok).toBe(true);
+
+    expect(c.heading).toBeUndefined();
+  });
+
+  it('refuse une construction qui écarterait la créature de plus de 90° de son cap retenu', () => {
+    const w = newWorld('normal', 42, MAP_TWO_STONES);
+    const c = ratInField(w);
+    // Cap retenu d'une déviation précédente : le rat descendait avant de tourner à droite.
+    c.heading = { x: 0, y: 1 };
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 9, y: 3 });
+
+    expect(r).toEqual({ ok: false, reason: 'Les créatures en route ne peuvent pas faire demi-tour.' });
   });
 });

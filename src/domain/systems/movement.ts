@@ -1,6 +1,7 @@
 import type { World } from '../model/World';
 import type { Creep } from '../model/types';
 import { GameEventType, Phase } from '../model/types';
+import { realigns } from '../rules/heading';
 import { creepSpeed } from '../rules/speed';
 
 export function updateMovement(world: World, dt: number): void {
@@ -54,6 +55,7 @@ function moveGround(world: World, c: Creep, budget: number): void {
       }
       const nxt = field.next[cell];
       if (nxt < 0) return; // Aucun chemin : impossible en jeu normal (constructions validées).
+      if (c.heading && realigns(c.heading, { x: g.cx(nxt) - c.tx, y: g.cy(nxt) - c.ty })) c.heading = undefined;
       c.tx = g.cx(nxt);
       c.ty = g.cy(nxt);
     } else {
@@ -72,6 +74,7 @@ function advanceLeg(world: World, c: Creep): boolean {
   const lastLeg = world.fields.length - 1;
   if (c.leg < lastLeg) {
     c.leg++;
+    c.heading = undefined;
     return true;
   }
   c.alive = false;

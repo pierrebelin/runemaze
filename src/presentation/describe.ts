@@ -147,8 +147,7 @@ function nextWaveGroup(g: WaveBriefingGroup): string {
 
 const incomingLabel = (n: number) => `${n} envoi${n > 1 ? 's' : ''} en approche`;
 
-export function nextWaveInfo(b: WaveBriefing | null): string {
-  if (!b) return `<h3>Dernière vague lancée</h3><p>Tenez jusqu'à ce que la dernière créature tombe.</p>`;
+export function nextWaveInfo(b: WaveBriefing): string {
   return `<h3>Prochaine vague ${b.wave + 1}</h3>
       ${b.groups.map(nextWaveGroup).join('')}
       ${b.incoming > 0 ? `<div>${incomingLabel(b.incoming)}</div>` : ''}
@@ -239,14 +238,14 @@ export function debriefBreakers(losses: ReturnType<typeof breakerLosses>): strin
 export function sendPanel(ether: number, income: number): string {
   const rows = Object.values(CREEPS)
     .filter((c) => c.send)
-    .map((c) => `<button type="button" data-send="${c.id}"${ether < c.send!.cost ? ' disabled' : ''}>${esc(c.name)} · ${c.send!.cost} éther · +${c.send!.income}</button>`)
+    .map((c) => `<button type="button" data-send="${c.id}"${ether < c.send!.cost ? ' disabled' : ''}>${esc(c.name)}<span class="cost">${c.send!.cost} éther</span><span class="gain">+${c.send!.income}</span></button>`)
     .join('');
   return `<h3>Revenu ${fmt0(income)}</h3><div class="sends">${rows}</div>`;
 }
 
 export function gleanerPanel(ether: number, gleaners: number, buy: Result): string {
   const attrs = buy.ok ? '' : ` disabled title="${esc(buy.reason)}"`;
-  return `<h3>Glaneurs : ${fmt0(gleaners)}</h3><p>Éther : ${fmt0(ether)}</p><div class="sends"><button type="button" data-gleaner${attrs}>Glaneur · ${GLEANER.cost} or</button></div>`;
+  return `<h3>Glaneurs : ${fmt0(gleaners)}</h3><p>Éther : ${fmt0(ether)}</p><div class="sends"><button type="button" data-gleaner${attrs}>Glaneur<span class="cost">${GLEANER.cost} or</span></button></div>`;
 }
 
 export function gatePanel(ether: number, gate: World['gate']): string {
@@ -255,7 +254,7 @@ export function gatePanel(ether: number, gate: World['gate']): string {
     const name = k === 'shot' ? 'Tir' : 'Remparts';
     if (level >= GATE[k].maxLevel) return `<p>${name} · Niveau ${level}</p><p>Niveau maximal atteint</p><button type="button" data-gate="${k}" disabled>${name}</button>`;
     const cost = gateLevelCost(level + 1);
-    return `<p>${name} · Niveau ${level}</p><button type="button" data-gate="${k}"${ether < cost ? ' disabled' : ''}>${name} · ${cost} éther · +${gateLevelIncome(level + 1)}</button>`;
+    return `<p>${name} · Niveau ${level}</p><button type="button" data-gate="${k}"${ether < cost ? ' disabled' : ''}>${name}<span class="cost">${cost} éther</span><span class="gain">+${gateLevelIncome(level + 1)}</span></button>`;
   });
   return `<h3>Porte</h3><div class="sends">${rows.join('')}</div>`;
 }

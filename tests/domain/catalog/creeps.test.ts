@@ -60,18 +60,27 @@ describe('creeps', () => {
     }
   });
 
-  it('[RM-04] envoie chaque créature au prix et au gain du barème', () => {
+  it('[RM-06] envoie chaque créature au prix et au gain du barème', () => {
     const sendable = Object.values(CREEPS)
       .filter((c) => c.send !== undefined)
       .map((c) => [c.id, c.send]);
 
     expect(sendable).toEqual([
-      ['rat', { cost: 10, income: 3 }],
+      ['rat', { cost: 10, income: 2 }],
       ['wolf', { cost: 16, income: 4 }],
-      ['raider', { cost: 24, income: 6 }],
+      ['raider', { cost: 24, income: 5 }],
       ['golem', { cost: 50, income: 10 }],
       ['harpy', { cost: 30, income: 6 }],
       ['wraith', { cost: 60, income: 12 }],
     ]);
+  });
+
+  it('[RM-06] rembourse chaque envoi en 5 vagues au plus', () => {
+    const sendable = Object.values(CREEPS).filter((c) => c.send !== undefined);
+
+    expect(sendable.length).toBeGreaterThan(0);
+    for (const c of sendable) {
+      expect(c.send!.income, c.id).toBe(Math.ceil(c.send!.cost / 5));
+    }
   });
 });

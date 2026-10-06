@@ -17,7 +17,6 @@ export interface WorldSnapshot {
   tick: number;
   time: number;
   phase: Phase;
-  endless: boolean;
   duel: boolean;
   builder: string;
   income: number;
@@ -59,6 +58,7 @@ function storeCreep(c: Creep): StoredCreep {
     defId: def.id,
     poisons: rest.poisons.map((p) => ({ ...p })),
     breaker: rest.breaker ? { ...rest.breaker } : rest.breaker,
+    heading: rest.heading ? { ...rest.heading } : rest.heading,
   };
 }
 
@@ -74,6 +74,7 @@ function loadCreep(s: StoredCreep): Creep {
     def: CREEPS[defId],
     poisons: rest.poisons.map((p) => ({ ...p })),
     breaker: rest.breaker ? { ...rest.breaker } : rest.breaker,
+    heading: rest.heading ? { ...rest.heading } : rest.heading,
   };
 }
 
@@ -86,7 +87,6 @@ export function snapshot(world: World): WorldSnapshot {
     tick: world.tick,
     time: world.time,
     phase: world.phase,
-    endless: world.endless,
     duel: world.duel,
     builder: world.builder.id,
     income: world.income,
@@ -124,7 +124,6 @@ export function restore(snap: WorldSnapshot): World {
   world.tick = snap.tick;
   world.time = snap.time;
   world.phase = snap.phase;
-  world.endless = snap.endless;
   world.income = snap.income;
   world.ether = snap.ether;
   world.gleaners = [...snap.gleaners];

@@ -120,9 +120,6 @@ export class Sfx {
           this.tone(660, 0.12, 'triangle', 0.1);
           this.tone(880, 0.2, 'triangle', 0.1, undefined, 0.1);
           break;
-        case GameEventType.Victory:
-          [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.4, 'triangle', 0.14, undefined, i * 0.15));
-          break;
         case GameEventType.Defeat:
           [330, 262, 196, 131].forEach((f, i) => this.tone(f, 0.5, 'sawtooth', 0.12, undefined, i * 0.2));
           break;

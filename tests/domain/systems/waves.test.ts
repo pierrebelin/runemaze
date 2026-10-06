@@ -4,7 +4,7 @@ import { applyDamage } from '../../../src/domain/systems/combat';
 import { WAVES, waveAt } from '../../../src/domain/catalog/creeps';
 import type { WaveDef } from '../../../src/domain/model/types';
 import { killAllCreeps, newDuelWorld, newWorld, run } from '../../support/helpers';
-import { GameEventType } from '../../../src/domain/model/types';
+import { GameEventType, Phase } from '../../../src/domain/model/types';
 
 // Vague de substitution : un seul Limon (se scinde en 2 petits Limons à sa mort).
 const SLIME_WAVE: WaveDef = {
@@ -79,6 +79,32 @@ describe('waves', () => {
     const bossOnly = waveAt(39);
     expect(bossOnly.groups[0].creep).toBe('hydra');
     expect(bossOnly.groups[0].count).toBe(1);
+  });
+
+  it('[RM-01] lance la vague 31 au bout du compte à rebours quand la vague 30 est repoussée', () => {
+    const w = newWorld();
+    w.lives = 1e6;
+    w.wave = 28;
+    launchWave(w); // vague 30 (index 29)
+    expect(w.wave).toBe(29);
+    expect(Number.isFinite(w.nextWaveIn)).toBe(true);
+
+    run(w, w.nextWaveIn + 0.1);
+
+    expect(w.wave).toBe(30);
+  });
+
+  it('[RM-02] laisse la partie en cours quand la vague 30 est repoussée', () => {
+    const w = newWorld();
+    w.lives = 1e6;
+    w.wave = 28;
+    launchWave(w);
+    run(w, waveDuration(29) + 0.5);
+
+    killAllCreeps(w);
+    run(w, 0.05);
+
+    expect(w.phase).toBe(Phase.Playing);
   });
 
   it('[RM-01] verse toujours prime et intérêts quand la partie est en solo', () => {

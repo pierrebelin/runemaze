@@ -33,7 +33,7 @@ En développement, deux serveurs en parallèle : `npm run server` (arbitre + Web
 - Remboursement à 50 % de l'or investi, à tout moment : vendre coûte la moitié de la
   mise, le *juggling* (vendre et reconstruire pour détourner le flot) ne paie plus.
 - Prime de fin de vague, intérêts de 4 % plafonnés, bonus pour appeler une vague en avance.
-- 30 vagues, puis mode infini.
+- Vagues sans fin.
 
 Commandes : `Q W E R A S` construire, clic pour poser (clic droit / `Échap` pour annuler),
 `Espace` appeler la vague, `1 2 3` vitesse, `P` pause, `M` son, `L` trajet, `H` aide.

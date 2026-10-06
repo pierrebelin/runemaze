@@ -88,21 +88,6 @@ describe('Duel', () => {
     expect(duel.worlds[Seat.Guest].towers).toHaveLength(0);
   });
 
-  it('[RM-10] renvoie un écart quand un joueur demande le mode infini', () => {
-    const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
-      0,
-    );
-    duel.advance(1000);
-    duel.worlds[Seat.Host].phase = Phase.Victory;
-    const fp = fingerprint(duel.worlds[Seat.Host]);
-
-    const res = duel.order(Seat.Host, { tick: 45, cmd: { c: CommandType.Endless }, fingerprint: fp }, 1000);
-
-    expect(res?.t).toBe(ServerMessageType.Drift);
-    expect(duel.worlds[Seat.Host].endless).toBe(false);
-  });
-
   it('[RM-08] renvoie un écart quand un joueur envoie un appel de vague direct', () => {
     const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 45 / 60);
@@ -184,37 +169,6 @@ describe('Duel', () => {
     expect(host && 'rival' in host && host.rival).toEqual({ ...snapshot(duel.worlds[Seat.Guest]), ether: 0 });
     expect(guest && 'snapshot' in guest && guest.snapshot).toEqual(snapshot(duel.worlds[Seat.Guest]));
     expect(guest && 'rival' in guest && guest.rival).toEqual({ ...snapshot(duel.worlds[Seat.Host]), ether: 0 });
-  });
-
-  it('[RM-10] continue d\'avancer la carte encore en jeu quand l\'autre a fini la campagne', () => {
-    const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
-      0,
-    );
-    duel.advance(1000);
-    duel.worlds[Seat.Host].phase = Phase.Victory;
-
-    const messages = duel.advance(2000);
-
-    expect(duel.worlds[Seat.Guest].tick).toBe(105);
-    expect(duel.isOver()).toBe(false);
-    expect(messages.some((m) => m.msg.t === ServerMessageType.DuelOver)).toBe(false);
-  });
-
-  it('[RM-11] continue d\'envoyer la carte adverse quand l\'autre carte a fini la campagne', () => {
-    const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
-      0,
-    );
-    duel.advance(1000);
-    duel.worlds[Seat.Host].phase = Phase.Victory;
-
-    const messages = duel.advance(2000);
-
-    const host = messages.find((m) => m.seat === Seat.Host && m.msg.t === ServerMessageType.Rival);
-    const guest = messages.find((m) => m.seat === Seat.Guest && m.msg.t === ServerMessageType.Rival);
-    expect(host).toBeDefined();
-    expect(guest).toBeDefined();
   });
 
   it('[RM-07] ne garde pas les événements de rendu du serveur d\'un pas à l\'autre', () => {
@@ -398,29 +352,19 @@ describe('Duel', () => {
     expect(guest).toEqual({ t: ServerMessageType.Drift, snapshot: snapshot(duel.worlds[Seat.Guest]) });
   });
 
-  it('[RM-08] ignore la demande quand plus aucune vague ne peut être appelée', () => {
+  it('[RM-01] lance la vague 31 quand les deux joueurs sont prêts après la vague 30', () => {
     const duel = new Duel(
       { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
-    const campaignLength = duel.worlds[Seat.Host].campaignLength;
-    while (duel.worlds[Seat.Host].wave + 1 < campaignLength) {
-      duel.ready(Seat.Host, 1000);
-      duel.ready(Seat.Guest, 1000);
-    }
-    const waveHost = duel.worlds[Seat.Host].wave;
-    const waveGuest = duel.worlds[Seat.Guest].wave;
-    const callsHost = duel.worlds[Seat.Host].log.filter((e) => e.cmd.c === CommandType.CallWave).length;
-    const callsGuest = duel.worlds[Seat.Guest].log.filter((e) => e.cmd.c === CommandType.CallWave).length;
+    duel.worlds[Seat.Host].wave = 29;
+    duel.worlds[Seat.Guest].wave = 29;
 
     duel.ready(Seat.Host, 1000);
-    const messages = duel.ready(Seat.Guest, 1000);
+    duel.ready(Seat.Guest, 1000);
 
-    expect(messages.every((m) => m.msg.t === ServerMessageType.Readiness)).toBe(true);
-    expect(duel.worlds[Seat.Host].wave).toBe(waveHost);
-    expect(duel.worlds[Seat.Guest].wave).toBe(waveGuest);
-    expect(duel.worlds[Seat.Host].log.filter((e) => e.cmd.c === CommandType.CallWave)).toHaveLength(callsHost);
-    expect(duel.worlds[Seat.Guest].log.filter((e) => e.cmd.c === CommandType.CallWave)).toHaveLength(callsGuest);
+    expect(duel.worlds[Seat.Host].wave).toBe(30);
+    expect(duel.worlds[Seat.Guest].wave).toBe(30);
   });
 
   it('[CU-06] efface les demandes sans bonus quand le compte à rebours lance la vague', () => {
@@ -524,6 +468,24 @@ describe('Duel', () => {
     const guest = messages.find((m) => m.seat === Seat.Guest)?.msg;
     expect(host).toEqual({ t: ServerMessageType.Drift, snapshot: snapshot(duel.worlds[Seat.Host]) });
     expect(guest).toEqual({ t: ServerMessageType.Drift, snapshot: snapshot(duel.worlds[Seat.Guest]) });
+  });
+
+  it('[RM-02] ne lance aucune vague quand un joueur se déclare prêt après la chute d\'une Porte', () => {
+    const duel = new Duel(
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
+      0,
+    );
+    duel.ready(Seat.Host, 1000);
+    duel.worlds[Seat.Host].lives = 0;
+    duel.worlds[Seat.Host].phase = Phase.Defeat;
+    const waveGuest = duel.worlds[Seat.Guest].wave;
+
+    const messages = duel.ready(Seat.Guest, 2000);
+
+    expect(duel.isOver()).toBe(true);
+    expect(duel.worlds[Seat.Guest].wave).toBe(waveGuest);
+    expect(duel.worlds[Seat.Guest].log.some((e) => e.cmd.c === CommandType.CallWave)).toBe(false);
+    expect(messages.some((m) => m.msg.t === ServerMessageType.Drift)).toBe(false);
   });
 
   it('[RM-12] n\'avance plus aucune des deux cartes pendant la coupure d\'un joueur', () => {

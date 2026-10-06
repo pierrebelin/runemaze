@@ -147,13 +147,13 @@ describe('snapshot', () => {
     expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
   });
 
-  it('[RM-04] continue à l’identique après un passage par JSON quand la dernière vague est lancée', () => {
+  it('[RM-01] continue à l’identique après un passage par JSON au-delà de la vague 30', () => {
     const w = newWorld('normal', 42);
-    while (w.wave + 1 < w.campaignLength) {
-      dispatch(w, { c: CommandType.CallWave });
-    }
+    w.lives = 1e6;
+    while (w.wave < 30) launchWave(w);
+    dispatch(w, { c: CommandType.CallWave });
     run(w, 3);
-    expect(w.nextWaveIn).toBe(Infinity);
+    expect(Number.isFinite(w.nextWaveIn)).toBe(true);
 
     const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
 
@@ -258,5 +258,16 @@ describe('snapshot', () => {
     expect(restored.gate.shot).toBe(2);
     expect(restored.gate.ramparts).toBe(1);
     expect(restored.gate.cooldown).toBe(1.5);
+  });
+
+  it('garde le cap retenu d’une créature, sans partager l’objet', () => {
+    const w = newWorld('normal', 42);
+    const c = spawnCreep(w, 'rat', 0);
+    c.heading = { x: 1, y: 0 };
+
+    const restored = restore(snapshot(w));
+
+    expect(restored.creeps[0].heading).toEqual({ x: 1, y: 0 });
+    expect(restored.creeps[0].heading).not.toBe(c.heading);
   });
 });

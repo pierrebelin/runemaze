@@ -1,9 +1,9 @@
 import type { CreepDef, WaveDef, WaveGroup, Difficulty } from '../model/types';
 
 const C: CreepDef[] = [
-  { id: 'rat', name: 'Rat des marais', plural: 'Rats des marais', hpFactor: 0.7, speed: 2.2, armorType: 'unarmored', armor: 0, leak: 1, radius: 0.28, bountyFactor: 0.8, send: { cost: 10, income: 3 } },
+  { id: 'rat', name: 'Rat des marais', plural: 'Rats des marais', hpFactor: 0.7, speed: 2.2, armorType: 'unarmored', armor: 0, leak: 1, radius: 0.28, bountyFactor: 0.8, send: { cost: 10, income: 2 } },
   { id: 'wolf', name: 'Loup gris', plural: 'Loups gris', hpFactor: 0.8, speed: 2.9, armorType: 'light', armor: 1, leak: 1, radius: 0.32, bountyFactor: 1, send: { cost: 16, income: 4 } },
-  { id: 'raider', name: 'Maraudeur', plural: 'Maraudeurs', hpFactor: 1, speed: 2, armorType: 'medium', armor: 2, leak: 1, radius: 0.34, bountyFactor: 1, send: { cost: 24, income: 6 } },
+  { id: 'raider', name: 'Maraudeur', plural: 'Maraudeurs', hpFactor: 1, speed: 2, armorType: 'medium', armor: 2, leak: 1, radius: 0.34, bountyFactor: 1, send: { cost: 24, income: 5 } },
   { id: 'troll', name: 'Troll des tourbières', plural: 'Trolls des tourbières', hpFactor: 1.05, speed: 1.9, armorType: 'medium', armor: 1, regen: 0.02, leak: 1, radius: 0.36, bountyFactor: 1.1 },
   { id: 'golem', name: 'Golem de pierre', plural: 'Golems de pierre', hpFactor: 1.6, speed: 1.45, armorType: 'fortified', armor: 4, leak: 1, radius: 0.4, bountyFactor: 1.3, send: { cost: 50, income: 10 } },
   { id: 'knight', name: 'Colosse cuirassé', plural: 'Colosses cuirassés', hpFactor: 1.35, speed: 1.7, armorType: 'heavy', armor: 5, leak: 1, radius: 0.38, bountyFactor: 1.2 },

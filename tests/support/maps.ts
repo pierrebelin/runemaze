@@ -79,3 +79,25 @@ export const MAP_TWO_STONES: MapDef = {
     '#############',
   ],
 };
+
+// Boucle à deux couloirs de 2 cases de large entre le portail (S) et la pierre 1 :
+// le couloir du haut (lignes 1-2) est le plus court, celui du bas (lignes 5-6, par
+// les colonnes 1-2 et 8-9) le contourne. Une tour posée en (6, 1) ferme le couloir
+// du haut sans fermer le passage : une créature déjà engagée dedans devrait faire
+// demi-tour pour prendre le couloir du bas.
+export const MAP_LOOP: MapDef = {
+  id: 'loop',
+  name: 'Boucle',
+  width: 11,
+  height: 8,
+  rows: [
+    '###########',
+    '#SS......1#',
+    '#SS......1#',
+    '#..#####..#',
+    '#..#####..#',
+    '#.........#',
+    '#EE.......#',
+    '###########',
+  ],
+};

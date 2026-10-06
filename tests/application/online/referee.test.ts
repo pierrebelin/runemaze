@@ -8,8 +8,6 @@ import { CommandType, Phase } from '../../../src/domain/model/types';
 import { fingerprint } from '../../../src/domain/rules/fingerprint';
 import { MAP_CROSSING } from '../../../src/domain/catalog/map';
 import { snapshot } from '../../../src/domain/model/snapshot';
-import { CAMPAIGN_LENGTH } from '../../../src/domain/catalog/creeps';
-import { killAllCreeps } from '../../support/helpers';
 
 describe('Referee', () => {
   it('[RM-02] ouvre la partie à la carte, la difficulté et la graine fixées par le serveur', () => {
@@ -161,30 +159,6 @@ describe('Referee', () => {
 
     expect(referee.sweep(now)).toEqual(['a']);
     expect(referee.game('a')).toBeUndefined();
-  });
-
-  it('[RM-10] garde au balayage la partie passée en mode infini après la victoire', () => {
-    const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'easy', seed: 1, id: 'a', token: 'tok-a', builder: 'bastion' }, 0);
-    const held = referee.game('a')!;
-    const world = held.world;
-    let now = 0;
-    for (let w = 0; w < CAMPAIGN_LENGTH; w++) {
-      expect(dispatch(world, { c: CommandType.CallWave }).ok).toBe(true);
-      for (let guard = 0; guard < 60 * 60 && (world.spawners.length > 0 || world.creeps.length > 0 || world.pending.size > 0); guard++) {
-        world.step();
-        killAllCreeps(world);
-      }
-    }
-    now += 1000;
-    const res = held.advance(now);
-    expect(res?.t).toBe(ServerMessageType.Over);
-    expect(world.phase).toBe(Phase.Victory);
-
-    dispatch(world, { c: CommandType.Endless });
-
-    expect(referee.sweep(now)).toEqual([]);
-    expect(referee.game('a')).toBeDefined();
   });
 
   it('[CU-04] propose la reprise quand le jeton correspond et que la coupure date de moins de 30 s', () => {

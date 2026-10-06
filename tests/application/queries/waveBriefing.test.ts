@@ -37,7 +37,7 @@ describe('waveBriefing', () => {
   it('[RM-03] annonce chaque groupe avec sa créature, son nombre et ses PV', () => {
     WAVES[0] = MIXED_WAVE;
     const w = newWorld();
-    const b = waveBriefing(w)!;
+    const b = waveBriefing(w);
     expect(b.wave).toBe(0);
 
     expect(b.groups[0].creep.id).toBe('wolf');
@@ -56,7 +56,7 @@ describe('waveBriefing', () => {
   it('[RM-03] place le chef en premier quand la vague a un chef', () => {
     WAVES[0] = MIXED_WAVE_WITH_BOSS;
     const w = newWorld();
-    const b = waveBriefing(w)!;
+    const b = waveBriefing(w);
 
     expect(b.groups[0].creep.id).toBe('ogre');
     expect(b.groups[1].creep.id).toBe('wolf');
@@ -64,17 +64,20 @@ describe('waveBriefing', () => {
 
   it('[RM-06] compte les envois en approche dans l\'aperçu de la prochaine vague', () => {
     const w = newDuelWorld();
-    expect(waveBriefing(w)!.incoming).toBe(0);
+    expect(waveBriefing(w).incoming).toBe(0);
 
     dispatch(w, { c: CommandType.Receive, creep: 'wolf' });
     dispatch(w, { c: CommandType.Receive, creep: 'rat' });
 
-    expect(waveBriefing(w)!.incoming).toBe(2);
+    expect(waveBriefing(w).incoming).toBe(2);
   });
 
-  it('ne renvoie rien quand la dernière vague de la campagne est lancée', () => {
+  it('[RM-01] annonce la vague 31 quand la vague 30 est lancée', () => {
     const w = newWorld();
-    w.wave = w.campaignLength - 1;
-    expect(waveBriefing(w)).toBeNull();
+    w.wave = 29;
+
+    const b = waveBriefing(w);
+
+    expect(b.wave).toBe(30);
   });
 });

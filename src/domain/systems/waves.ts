@@ -1,4 +1,4 @@
-import { baseHp, bountyFor, clearBonus, CREEPS, DIFFICULTY, waveAt } from '../catalog/creeps';
+import { baseHp, bountyFor, CAMPAIGN_LENGTH, clearBonus, CREEPS, DIFFICULTY, waveAt } from '../catalog/creeps';
 import type { World } from '../model/World';
 import type { Creep, CreepDef } from '../model/types';
 import { BreakerPhase, GameEventType, Phase } from '../model/types';
@@ -19,11 +19,6 @@ export function waveDuration(index: number): number {
   return Math.max(...w.groups.map((g) => g.delay + (g.count - 1) * g.interval));
 }
 
-export function canLaunchNext(world: World): boolean {
-  if (world.phase !== Phase.Prep && world.phase !== Phase.Playing) return false;
-  return world.endless || world.wave + 1 < world.campaignLength;
-}
-
 export function launchWave(world: World): void {
   const index = world.wave + 1;
   const w = waveAt(index);
@@ -42,14 +37,14 @@ export function launchWave(world: World): void {
   world.sends = [];
   world.pending.set(index, pending);
   world.stats.waves[index] = { livesLost: 0, gold: null };
-  world.nextWaveIn = canLaunchNext(world) ? waveDuration(index) + WAVE_GAP : Infinity;
+  world.nextWaveIn = waveDuration(index) + WAVE_GAP;
   const first = w.groups[0];
   world.emit({ t: GameEventType.WaveStart, wave: index, creep: first.creep, boss: w.groups.some((g) => CREEPS[g.creep].boss) });
 }
 
-/** PV d'une créature à la vague `wave`, difficulté et mode infini compris. */
+/** PV d'une créature à la vague `wave`, difficulté comprise, avec la croissance au-delà de la campagne. */
 export function creepHp(world: World, def: CreepDef, wave: number): number {
-  const endlessMult = wave >= world.campaignLength ? Math.pow(1.08, wave - world.campaignLength + 1) : 1;
+  const endlessMult = wave >= CAMPAIGN_LENGTH ? Math.pow(1.08, wave - CAMPAIGN_LENGTH + 1) : 1;
   return Math.round(baseHp(wave) * def.hpFactor * DIFFICULTY[world.difficulty].hp * endlessMult);
 }
 
@@ -92,10 +87,8 @@ export function spawnOffspring(world: World, parent: Creep, defId: string, count
 
 export function updateWaves(world: World, dt: number): void {
   // Compte à rebours vers la prochaine vague.
-  if (canLaunchNext(world)) {
-    world.nextWaveIn -= dt;
-    if (world.nextWaveIn <= 0) launchWave(world);
-  }
+  world.nextWaveIn -= dt;
+  if (world.nextWaveIn <= 0) launchWave(world);
 
   for (const s of world.spawners) {
     s.timer -= dt;
@@ -122,14 +115,5 @@ export function updateWaves(world: World, dt: number): void {
     }
     world.stats.waves[wave].gold = world.gold;
     world.emit({ t: GameEventType.WaveCleared, wave, bonus, interest, income });
-  }
-
-  if (
-    world.phase === Phase.Playing && !world.endless &&
-    world.wave >= world.campaignLength - 1 &&
-    world.spawners.length === 0 && world.creeps.length === 0 && world.pending.size === 0
-  ) {
-    world.phase = Phase.Victory;
-    world.emit({ t: GameEventType.Victory });
   }
 }

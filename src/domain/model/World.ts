@@ -1,5 +1,5 @@
 import { Rng } from '../Rng';
-import { CAMPAIGN_LENGTH, DIFFICULTY } from '../catalog/creeps';
+import { DIFFICULTY } from '../catalog/creeps';
 import { builder } from '../catalog/builders';
 import { FlowField } from '../rules/FlowField';
 import { Grid } from './Grid';
@@ -58,7 +58,6 @@ export class World {
   tick = 0;
   time = 0;
   phase: Phase = Phase.Prep;
-  endless = false;
   gold: number;
   lives: number;
   /** Index de la dernière vague lancée (-1 avant la première). */
@@ -115,10 +114,6 @@ export class World {
 
   id(): number {
     return this.nextId++;
-  }
-
-  get campaignLength(): number {
-    return CAMPAIGN_LENGTH;
   }
 
   /** Cellule d'apparition de référence pour mesurer le labyrinthe. */
@@ -180,9 +175,9 @@ export class World {
     this.stats.goldEarned += n;
   }
 
-  /** Vrai quand la partie est gagnée ou perdue : `step()` n'avance plus. */
+  /** Vrai quand la partie est perdue : `step()` n'avance plus. */
   isOver(): boolean {
-    return this.phase === Phase.Victory || this.phase === Phase.Defeat;
+    return this.phase === Phase.Defeat;
   }
 
   step(): void {
@@ -218,12 +213,5 @@ export class World {
   creepGone(c: Creep): void {
     const left = (this.pending.get(c.wave) ?? 1) - 1;
     this.pending.set(c.wave, left);
-  }
-
-  continueEndless(): void {
-    if (this.phase !== Phase.Victory) return;
-    this.endless = true;
-    this.phase = Phase.Playing;
-    this.nextWaveIn = 20;
   }
 }

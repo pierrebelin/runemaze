@@ -4,7 +4,7 @@ import { newDuelWorld, newWorld } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('send', () => {
-  it('[CU-02] débite 10 éther, laisse l\'or intact et augmente le revenu de 3 quand le joueur envoie un rat', () => {
+  it('[CU-02] débite 10 éther, laisse l\'or intact et augmente le revenu de 2 quand le joueur envoie un rat', () => {
     const w = newDuelWorld();
     w.ether = 100;
     const gold = w.gold;
@@ -15,7 +15,7 @@ describe('send', () => {
     expect(r.ok).toBe(true);
     expect(w.ether).toBe(90);
     expect(w.gold).toBe(gold);
-    expect(w.income - income).toBe(3);
+    expect(w.income - income).toBe(2);
   });
 
   it('[RM-06] ajoute tout le gain au revenu quand le revenu dépasse l\'ancien plafond', () => {
@@ -26,7 +26,7 @@ describe('send', () => {
     const r = dispatch(w, { c: CommandType.Send, creep: 'rat' });
 
     expect(r.ok).toBe(true);
-    expect(w.income).toBe(43);
+    expect(w.income).toBe(42);
   });
 
   it('[CU-02] journalise l\'envoi accepté', () => {
@@ -52,18 +52,14 @@ describe('send', () => {
     expect(w.log).toHaveLength(0);
   });
 
-  it('[CU-02] refuse l\'envoi quand la dernière vague est déjà lancée', () => {
+  it('[RM-03] accepte l\'envoi d\'un Golem quand la vague 30 est lancée', () => {
     const w = newDuelWorld();
-    w.wave = w.campaignLength - 1;
-    w.ether = 100;
-    const gold = w.gold;
+    w.wave = 29;
+    w.ether = 1000;
 
-    const r = dispatch(w, { c: CommandType.Send, creep: 'rat' });
+    const r = dispatch(w, { c: CommandType.Send, creep: 'golem' });
 
-    expect(r).toEqual({ ok: false, reason: 'Plus aucune vague à venir.' });
-    expect(w.gold).toBe(gold);
-    expect(w.income).toBe(0);
-    expect(w.log).toHaveLength(0);
+    expect(r.ok).toBe(true);
   });
 
   it('[RM-01] refuse l\'envoi en solo', () => {
