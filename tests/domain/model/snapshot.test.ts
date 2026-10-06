@@ -220,4 +220,19 @@ describe('snapshot', () => {
     expect(restored.ether).toBe(w.ether);
     expect(restored.gleaners).toEqual(w.gleaners);
   });
+
+  it('[RM-12] restaure les niveaux de Tir et de Remparts et la recharge du Tir depuis un instantané', () => {
+    const w = newDuelWorld('normal', 42);
+    w.ether = 100;
+    dispatch(w, { c: CommandType.Gate, upgrade: 'shot' });
+    dispatch(w, { c: CommandType.Gate, upgrade: 'shot' });
+    dispatch(w, { c: CommandType.Gate, upgrade: 'ramparts' });
+    w.gate.cooldown = 1.5;
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+
+    expect(restored.gate.shot).toBe(2);
+    expect(restored.gate.ramparts).toBe(1);
+    expect(restored.gate.cooldown).toBe(1.5);
+  });
 });

@@ -7,6 +7,7 @@ export type TargetMode = 'first' | 'last' | 'strong' | 'weak' | 'close';
 export type TargetLayer = 'ground' | 'air' | 'both';
 export type Family = 'wall' | 'archer' | 'cannon' | 'frost' | 'storm' | 'venom';
 export type Difficulty = 'easy' | 'normal' | 'hard';
+export type GateUpgrade = 'shot' | 'ramparts';
 
 export interface AttackDef {
   type: AttackType;
@@ -228,6 +229,7 @@ export enum CommandType {
   Send = 'send',
   Receive = 'receive',
   Gleaner = 'gleaner',
+  Gate = 'gate',
 }
 
 export type Command =
@@ -239,6 +241,7 @@ export type Command =
   | { c: CommandType.Endless }
   | { c: CommandType.Send; creep: string }
   | { c: CommandType.Receive; creep: string }
-  | { c: CommandType.Gleaner };
+  | { c: CommandType.Gleaner }
+  | { c: CommandType.Gate; upgrade: GateUpgrade };
 
 export type Result = { ok: true; id?: number } | { ok: false; reason: string };

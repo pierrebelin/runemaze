@@ -1,4 +1,5 @@
 import { TOWERS } from '../../src/domain/catalog/towers';
+import { CREEPS } from '../../src/domain/catalog/creeps';
 import { GLEANER } from '../../src/domain/catalog/ether';
 import { dispatch } from '../../src/application/dispatch';
 import { upgradeCost } from '../../src/domain/rules/pricing';
@@ -51,14 +52,14 @@ export class Bot {
     this.send();
   }
 
-  /** Duel : après ses constructions, achète des glaneurs en gardant une réserve d'or, puis envoie des rats dès 10 éther. */
+  /** Duel : après ses constructions, achète des glaneurs en gardant une réserve d'or, puis envoie des rats dès que l'éther couvre leur coût. */
   private send(): void {
     const w = this.w;
     if (!w.duel || this.planIdx < this.plan.length) return;
     while (w.gold >= GLEANER.cost + GOLD_RESERVE) {
       if (!dispatch(w, { c: CommandType.Gleaner }).ok) break;
     }
-    while (w.ether >= 10) {
+    while (w.ether >= CREEPS.rat.send!.cost) {
       if (!dispatch(w, { c: CommandType.Send, creep: 'rat' }).ok) return;
     }
   }

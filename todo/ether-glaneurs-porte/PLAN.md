@@ -8,8 +8,8 @@
 |-----|-----------|-------|-----------|------|
 | F1 | Le joueur en duel achète des glaneurs en or, qui produisent de l'éther en continu. | RM-01, RM-02, RM-03, RM-12 / CU-01 | — | ✅ |
 | F2 | Les envois se paient en éther, au nouveau barème, et le revenu n'a plus de plafond. | RM-04, RM-05, RM-06, RM-07 / CU-02 | F1 | ✅ |
-| F3 | Le joueur améliore Tir et Remparts de sa Porte avec de l'éther ; la Porte tire et rend des vies. | RM-08, RM-09, RM-10, RM-12 / CU-03 | F2 | ⬜ |
-| F4 | L'encart adverse montre revenu, glaneurs, Tir et Remparts, jamais l'éther. | RM-11 / CU-04 | F3 | ⬜ |
+| F3 | Le joueur améliore Tir et Remparts de sa Porte avec de l'éther ; la Porte tire et rend des vies. | RM-08, RM-09, RM-10, RM-12 / CU-03 | F2 | ✅ |
+| F4 | L'encart adverse montre revenu, glaneurs, Tir et Remparts, jamais l'éther. | RM-11 / CU-04 | F3 | ✅ |
 
 ## Périmètre
 
@@ -197,7 +197,7 @@ Pas de nouveau test. `npx tsc --noEmit` + `npm test` (inclut `balance.test.ts` :
 
 ---
 
-## Lot F3 — Porte : Tir et Remparts — ⬜
+## Lot F3 — Porte : Tir et Remparts — ✅
 
 ### Intention
 Le joueur achète des niveaux de Tir et de Remparts en éther ; la Porte tire sur les créatures proches de la sortie et rend des vies en fin de vague. **RM** : RM-08, RM-09, RM-10, RM-12, RM-06 · **CU** : CU-03
@@ -213,7 +213,7 @@ Le joueur achète des niveaux de Tir et de Remparts en éther ; la Porte tire su
 
 ### Étapes et tests
 
-#### Étape 1 — Le joueur achète un niveau de Porte — ⬜
+#### Étape 1 — Le joueur achète un niveau de Porte — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-08] coûte 12 éther au niveau 1, 20 au niveau 3, 48 au niveau 10` | `tests/domain/rules/pricing.test.ts` | RM-08 |
@@ -227,7 +227,7 @@ Le joueur achète des niveaux de Tir et de Remparts en éther ; la Porte tire su
 
 **Production autorisée** : `src/domain/catalog/ether.ts` (`GATE`), `src/domain/rules/pricing.ts`, `src/domain/model/types.ts` (`GateUpgrade`, `CommandType.Gate`, variante de `Command`), `src/domain/model/World.ts` (`gate`), `src/application/commands/gate.ts` (nouveau, calqué sur `send.ts`), `src/application/dispatch.ts`.
 
-#### Étape 2 — La Porte tire sur la créature la plus proche — ⬜
+#### Étape 2 — La Porte tire sur la créature la plus proche — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-09] inflige 30 dégâts Chaos à la créature la plus proche de la sortie quand le Tir est au niveau 2` | `tests/domain/systems/gate.test.ts` | RM-09 |
@@ -239,7 +239,7 @@ Le joueur achète des niveaux de Tir et de Remparts en éther ; la Porte tire su
 
 **Production autorisée** : `src/domain/systems/gate.ts` (nouveau, `updateGate`), `src/domain/systems/combat.ts` (`acquireTargets` accepte un tireur `Pick<Tower, 'cx' | 'cy' | 'targetMode'>`), `src/domain/model/World.ts` (appel dans `step()`).
 
-#### Étape 3 — Les Remparts rendent des vies en fin de vague — ⬜
+#### Étape 3 — Les Remparts rendent des vies en fin de vague — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-10] rend autant de vies que le niveau de Remparts quand une vague est repoussée` | `tests/domain/systems/waves.test.ts` | RM-10 |
@@ -248,7 +248,7 @@ Le joueur achète des niveaux de Tir et de Remparts en éther ; la Porte tire su
 
 **Production autorisée** : `src/domain/systems/waves.ts` (fin de vague).
 
-#### Étape 4 — Le duel avec Porte se rejoue et se recale à l'identique — ⬜
+#### Étape 4 — Le duel avec Porte se rejoue et se recale à l'identique — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-12] restaure les niveaux de Tir et de Remparts et la recharge du Tir depuis un instantané` | `tests/domain/model/snapshot.test.ts` | RM-12 |
@@ -257,7 +257,7 @@ Le joueur achète des niveaux de Tir et de Remparts en éther ; la Porte tire su
 
 **Production autorisée** : `src/domain/model/snapshot.ts` (`gate`), `src/application/online/protocol.ts` (`readCommand`).
 
-#### Étape 5 — Le joueur voit et achète les niveaux dans l'onglet Porte — ⬜
+#### Étape 5 — Le joueur voit et achète les niveaux dans l'onglet Porte — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[CU-03] affiche le niveau de Tir et de Remparts, le prix et le gain de revenu du niveau suivant` | `tests/presentation/describe.test.ts` | CU-03 |
@@ -265,7 +265,7 @@ Le joueur achète des niveaux de Tir et de Remparts en éther ; la Porte tire su
 
 **Production autorisée** : `src/presentation/describe.ts` (`gatePanel`), `src/presentation/Game.ts` (onglet Porte, bouton `data-gate`, envoi de l'ordre via `order`).
 
-#### Étape 6 — Vérification — ⬜
+#### Étape 6 — Vérification — ✅
 Pas de nouveau test. `npx tsc --noEmit` + `npm test` (inclut `balance.test.ts` : le solo ne doit pas bouger, la Porte y reste au niveau 0).
 
 ### Éléments de code
@@ -283,11 +283,15 @@ Pas de nouveau test. `npx tsc --noEmit` + `npm test` (inclut `balance.test.ts` :
 - `presentation/describe.ts` — `export function gatePanel(ether: number, gate: World['gate']): string`
 
 ### Hypothèses
-_Vide à l'écriture. Rempli par `/implement-tdd` : `Hn — [hypothèse] — à valider par [qui]`._
+- H1 — La recharge du Tir démarre à 0 : la Porte tire dès le premier tick où une créature est à portée, puis toutes les secondes — à valider par Pierre
+- H2 — « La plus proche de la sortie » = distance euclidienne au centre de la porte (mode `close` des tours), pas le chemin restant — à valider par Pierre
+- H3 — L'onglet Porte affiche le niveau actuel sous la forme « Niveau N » — à valider par Pierre
+- H4 — Hors lot F3 : les modifications de `tests/application/commands/receive.test.ts`, `send.test.ts` (libellés RM/CU), `tests/domain/catalog/creeps.test.ts` (assertion boss redondante retirée) et `tests/support/bot.ts` (seuil d'envoi = `CREEPS.rat.send!.cost`) existaient avant le lot ; ce sont des correctifs de F2, laissés tels quels — à valider par Pierre
+- H5 — La garde `if (world.gate.ramparts > 0)` dans `waves.ts` est conservée : sans elle, le plafond ramène aux vies de départ les tests de `World.test.ts` qui fixent `lives = 1_000_000` — à valider par Pierre
 
 ---
 
-## Lot F4 — Économie adverse visible — ⬜
+## Lot F4 — Économie adverse visible — ✅
 
 ### Intention
 L'encart adverse affiche revenu, glaneurs, Tir et Remparts en direct ; l'éther adverse ne quitte jamais le serveur. **RM** : RM-11 · **CU** : CU-04
@@ -303,7 +307,7 @@ L'encart adverse affiche revenu, glaneurs, Tir et Remparts en direct ; l'éther 
 
 ### Étapes et tests
 
-#### Étape 1 — L'adversaire ne reçoit jamais l'éther — ⬜
+#### Étape 1 — L'adversaire ne reçoit jamais l'éther — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-11] envoie l'instantané adverse avec revenu, glaneurs et niveaux de Porte mais l'éther à 0` | `tests/application/online/duel.test.ts` | RM-11 |
@@ -313,7 +317,7 @@ Test existant de `duel.test.ts` qui compare `rival` à `snapshot(world)` : adapt
 
 **Production autorisée** : `src/application/online/duel.ts` (construction du message `Rival`).
 
-#### Étape 2 — Le joueur lit l'économie adverse dans l'encart — ⬜
+#### Étape 2 — Le joueur lit l'économie adverse dans l'encart — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[CU-04] affiche revenu, nombre de glaneurs, niveaux de Tir et de Remparts de l'adversaire` | `tests/presentation/describe.test.ts` | CU-04 |
@@ -321,7 +325,7 @@ Test existant de `duel.test.ts` qui compare `rival` à `snapshot(world)` : adapt
 
 **Production autorisée** : `src/presentation/describe.ts` (`rivalEconomy`), `src/presentation/Game.ts` (`rivalPanel`, mise à jour à chaque `Rival`).
 
-#### Étape 3 — Vérification — ⬜
+#### Étape 3 — Vérification — ✅
 Pas de nouveau test. `npx tsc --noEmit` + `npm test`.
 
 ### Éléments de code
@@ -329,4 +333,4 @@ Pas de nouveau test. `npx tsc --noEmit` + `npm test`.
 - `presentation/describe.ts` — `export function rivalEconomy(income: number, gleaners: number, gate: World['gate']): string`
 
 ### Hypothèses
-_Vide à l'écriture. Rempli par `/implement-tdd` : `Hn — [hypothèse] — à valider par [qui]`._
+- H1 — L'instantané adverse part aussi dans `Thawed` (reprise) et `DuelOver` (verdict) : l'éther y est masqué de même, RM-11 disant « jamais ». Test ajouté à l'étape 1 : `[RM-11] masque l'éther adverse à la reprise et au verdict`. — à valider par Pierre

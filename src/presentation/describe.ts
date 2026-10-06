@@ -1,10 +1,12 @@
+import type { World } from '../domain/model/World';
 import type { WaveBriefing, WaveBriefingGroup } from '../application/queries/waveBriefing';
 import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage';
 import type { ArmorType, AttackType, Creep, CreepDef, Result, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
 import type { breakerLosses, familyDamage, waveCurve } from '../domain/rules/debrief';
 import { towerYield } from '../domain/rules/debrief';
 import { CREEPS } from '../domain/catalog/creeps';
-import { GLEANER } from '../domain/catalog/ether';
+import { GATE, GLEANER } from '../domain/catalog/ether';
+import { gateLevelCost, gateLevelIncome } from '../domain/rules/pricing';
 import { creepSpeed } from '../domain/rules/speed';
 import { Verdict } from '../application/online/protocol';
 
@@ -239,6 +241,21 @@ export function sendPanel(ether: number, income: number): string {
 export function gleanerPanel(ether: number, gleaners: number, buy: Result): string {
   const attrs = buy.ok ? '' : ` disabled title="${esc(buy.reason)}"`;
   return `<h3>Glaneurs : ${fmt0(gleaners)}</h3><p>Éther : ${fmt0(ether)}</p><div class="sends"><button type="button" data-gleaner${attrs}>Glaneur · ${GLEANER.cost} or</button></div>`;
+}
+
+export function gatePanel(ether: number, gate: World['gate']): string {
+  const rows = (['shot', 'ramparts'] as const).map((k) => {
+    const level = gate[k];
+    const name = k === 'shot' ? 'Tir' : 'Remparts';
+    if (level >= GATE[k].maxLevel) return `<p>${name} · Niveau ${level}</p><p>Niveau maximal atteint</p><button type="button" data-gate="${k}" disabled>${name}</button>`;
+    const cost = gateLevelCost(level + 1);
+    return `<p>${name} · Niveau ${level}</p><button type="button" data-gate="${k}"${ether < cost ? ' disabled' : ''}>${name} · ${cost} éther · +${gateLevelIncome(level + 1)}</button>`;
+  });
+  return `<h3>Porte</h3><div class="sends">${rows.join('')}</div>`;
+}
+
+export function rivalEconomy(income: number, gleaners: number, gate: World['gate']): string {
+  return `revenu ${fmt0(income)} · glaneurs ${gleaners} · Tir ${gate.shot} · Remparts ${gate.ramparts}`;
 }
 
 export function creepInfo(c: Creep): string {

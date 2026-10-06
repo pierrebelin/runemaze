@@ -120,6 +120,49 @@ describe('waves', () => {
     expect(w.gold - goldBefore).toBe(ev.bonus + 15);
   });
 
+  /** Lance la vague 0, fait apparaître toutes les créatures puis les tue : la vague est repoussée. */
+  function repousseVague(w: ReturnType<typeof newWorld>): void {
+    launchWave(w);
+    run(w, 6);
+    killAllCreeps(w);
+    run(w, 0.05);
+  }
+
+  it('[RM-10] rend autant de vies que le niveau de Remparts quand une vague est repoussée', () => {
+    const w = newWorld('normal');
+    w.lives = 10;
+    w.gate.ramparts = 3;
+
+    repousseVague(w);
+
+    expect(w.lives).toBe(13);
+  });
+
+  it('[RM-10] plafonne aux vies de départ : 21 vies et non 22 en Vétéran avec Remparts 3 et 19 vies', () => {
+    const w = newWorld('normal');
+    w.lives = 19;
+    w.gate.ramparts = 3;
+
+    repousseVague(w);
+
+    expect(w.lives).toBe(21);
+  });
+
+  it('[RM-10] ne rend aucune vie quand les Remparts sont au niveau 0', () => {
+    const sans = newWorld('normal');
+    sans.lives = 10;
+    sans.gate.ramparts = 0;
+    const avec = newWorld('normal');
+    avec.lives = 10;
+    avec.gate.ramparts = 2;
+
+    repousseVague(sans);
+    repousseVague(avec);
+
+    expect(sans.lives).toBe(10);
+    expect(avec.lives).toBe(12);
+  });
+
   it('[RM-02] ne termine pas la vague quand un groupe retardé n’est pas encore apparu', () => {
     const w = newWorld();
     launchWave(w);

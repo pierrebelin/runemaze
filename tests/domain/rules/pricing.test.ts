@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
-import { refundValue } from '../../../src/domain/rules/pricing';
+import { gateLevelCost, gateLevelIncome, refundValue } from '../../../src/domain/rules/pricing';
 import { newWorld } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
@@ -34,5 +34,17 @@ describe('pricing', () => {
     const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y: 8 });
     const t = w.towerById.get((r as { id: number }).id)!;
     expect(refundValue(t)).toBe(1);
+  });
+
+  it('[RM-08] coûte 12 éther au niveau 1, 20 au niveau 3, 48 au niveau 10', () => {
+    expect(gateLevelCost(1)).toBe(12);
+    expect(gateLevelCost(3)).toBe(20);
+    expect(gateLevelCost(10)).toBe(48);
+  });
+
+  it('[RM-08] rapporte un quart du prix en revenu : +3 au niveau 1, +5 au niveau 3, +12 au niveau 10', () => {
+    expect(gateLevelIncome(1)).toBe(3);
+    expect(gateLevelIncome(3)).toBe(5);
+    expect(gateLevelIncome(10)).toBe(12);
   });
 });

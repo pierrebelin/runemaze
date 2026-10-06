@@ -7,6 +7,7 @@ import { snapshot } from '../../../src/domain/model/snapshot';
 import { MAP_SPIRAL } from '../../../src/domain/catalog/map';
 import { CommandType, Phase } from '../../../src/domain/model/types';
 import { ServerMessageType, Verdict } from '../../../src/application/online/protocol';
+import type { ServerMessage } from '../../../src/application/online/protocol';
 import { LOST_LIMIT_MS } from '../../../src/application/online/heldGame';
 import { run } from '../../support/helpers';
 
@@ -170,9 +171,9 @@ describe('Duel', () => {
     const host = messages.find((m) => m.seat === Seat.Host)?.msg;
     const guest = messages.find((m) => m.seat === Seat.Guest)?.msg;
     expect(host && 'snapshot' in host && host.snapshot).toEqual(snapshot(duel.worlds[Seat.Host]));
-    expect(host && 'rival' in host && host.rival).toEqual(snapshot(duel.worlds[Seat.Guest]));
+    expect(host && 'rival' in host && host.rival).toEqual({ ...snapshot(duel.worlds[Seat.Guest]), ether: 0 });
     expect(guest && 'snapshot' in guest && guest.snapshot).toEqual(snapshot(duel.worlds[Seat.Guest]));
-    expect(guest && 'rival' in guest && guest.rival).toEqual(snapshot(duel.worlds[Seat.Host]));
+    expect(guest && 'rival' in guest && guest.rival).toEqual({ ...snapshot(duel.worlds[Seat.Host]), ether: 0 });
   });
 
   it('[RM-10] continue d\'avancer la carte encore en jeu quand l\'autre a fini la campagne', () => {
@@ -584,7 +585,7 @@ describe('Duel', () => {
         t: ServerMessageType.DuelOver,
         verdict: Verdict.Forfeit,
         snapshot: snapshot(duel.worlds[Seat.Host]),
-        rival: snapshot(duel.worlds[Seat.Guest]),
+        rival: { ...snapshot(duel.worlds[Seat.Guest]), ether: 0 },
       },
     });
     expect(messages.some((m) => m.seat === Seat.Guest)).toBe(false);
@@ -748,6 +749,69 @@ describe('Duel', () => {
       while (replay.tick < original.tick) replay.step();
 
       expect(fingerprint(replay)).toBe(fingerprint(original));
+    }
+  });
+
+  const enrich = (world: World) => {
+    world.ether = 40;
+    world.income = 5;
+    world.gleaners = [1];
+    world.gate = { shot: 2, ramparts: 1, cooldown: 5 };
+  };
+
+  it('[RM-11] envoie l\'instantané adverse avec revenu, glaneurs et niveaux de Porte mais l\'éther à 0', () => {
+    const duel = new Duel(config, 0);
+    duel.advance(1000);
+    enrich(duel.worlds[Seat.Guest]);
+
+    const messages = duel.advance(1200);
+    const host = messages.find((m) => m.seat === Seat.Host && m.msg.t === ServerMessageType.Rival)?.msg;
+
+    expect(host && 'snapshot' in host && host.snapshot).toEqual({ ...snapshot(duel.worlds[Seat.Guest]), ether: 0 });
+    expect(host && 'snapshot' in host && host.snapshot.income).not.toBe(0);
+    expect(host && 'snapshot' in host && host.snapshot.gleaners.length).toBeGreaterThan(0);
+    expect(host && 'snapshot' in host && host.snapshot.gate.shot).toBeGreaterThan(0);
+    expect(host && 'snapshot' in host && host.snapshot.gate.ramparts).toBeGreaterThan(0);
+  });
+
+  it('[RM-11] laisse l\'éther du monde serveur intact après l\'envoi de la vue adverse', () => {
+    const duel = new Duel(config, 0);
+    duel.advance(1000);
+    enrich(duel.worlds[Seat.Guest]);
+    enrich(duel.worlds[Seat.Host]);
+
+    const messages = duel.advance(1200);
+    const rivals = messages.filter((m) => m.msg.t === ServerMessageType.Rival);
+
+    expect(rivals).toHaveLength(2);
+    for (const m of rivals) expect(m.msg && 'snapshot' in m.msg && m.msg.snapshot.ether).toBe(0);
+    expect(duel.worlds[Seat.Guest].ether).toBeGreaterThan(0);
+    expect(duel.worlds[Seat.Host].ether).toBeGreaterThan(0);
+  });
+
+  it('[RM-11] masque l\'éther adverse à la reprise et au verdict', () => {
+    const duel = new Duel(config, 0);
+    duel.advance(1000);
+    enrich(duel.worlds[Seat.Guest]);
+    enrich(duel.worlds[Seat.Host]);
+    duel.lose(Seat.Guest, 1000);
+
+    const thawed = duel.back(Seat.Guest, 'tg', 2000) as { seat: Seat; msg: ServerMessage }[];
+
+    for (const m of thawed) {
+      expect(m.msg.t).toBe(ServerMessageType.Thawed);
+      expect(m.msg).toMatchObject({ rival: { ether: 0 } });
+    }
+    expect(duel.worlds[Seat.Host].ether).toBeGreaterThan(0);
+
+    duel.worlds[Seat.Host].lives = 0;
+    duel.worlds[Seat.Host].phase = Phase.Defeat;
+    const over = duel.advance(3000);
+
+    expect(over).toHaveLength(2);
+    for (const m of over) {
+      expect(m.msg.t).toBe(ServerMessageType.DuelOver);
+      expect(m.msg).toMatchObject({ rival: { ether: 0 } });
     }
   });
 });

@@ -134,6 +134,11 @@ function readCommand(cmd: unknown): Command | null {
       return null;
     case CommandType.Gleaner:
       return { c: CommandType.Gleaner };
+    case CommandType.Gate:
+      if (c.upgrade === 'shot' || c.upgrade === 'ramparts') {
+        return { c: CommandType.Gate, upgrade: c.upgrade };
+      }
+      return null;
     default:
       return null;
   }

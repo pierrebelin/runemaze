@@ -3,6 +3,7 @@ import type { Command, Difficulty, MapDef } from '../../domain/model/types';
 import { CommandType } from '../../domain/model/types';
 import { World } from '../../domain/model/World';
 import { snapshot } from '../../domain/model/snapshot';
+import type { WorldSnapshot } from '../../domain/model/snapshot';
 import { fingerprint } from '../../domain/rules/fingerprint';
 import { duelOutcome, DuelOutcome } from '../../domain/rules/duelOutcome';
 import type { DuelSide } from '../../domain/rules/duelOutcome';
@@ -31,6 +32,11 @@ export interface DuelConfig {
 export interface SeatMessage {
   seat: Seat;
   msg: ServerMessage;
+}
+
+/** Copie de la carte vue par l'adversaire : l'éther reste secret (le monde serveur n'est pas touché). */
+function rivalSnapshot(world: World): WorldSnapshot {
+  return { ...snapshot(world), ether: 0 };
 }
 
 /** Duel : fait avancer deux mondes sur une même horloge temps réel, ×1, sans pause, par pas commun. */
@@ -105,8 +111,8 @@ export class Duel {
     if (now - this.lastRivalAt < RIVAL_VIEW_MS) return [];
     this.lastRivalAt = now;
     return [
-      { seat: Seat.Host, msg: { t: ServerMessageType.Rival, nick: this.nicks[Seat.Guest], snapshot: snapshot(this.worlds[Seat.Guest]) } },
-      { seat: Seat.Guest, msg: { t: ServerMessageType.Rival, nick: this.nicks[Seat.Host], snapshot: snapshot(this.worlds[Seat.Host]) } },
+      { seat: Seat.Host, msg: { t: ServerMessageType.Rival, nick: this.nicks[Seat.Guest], snapshot: rivalSnapshot(this.worlds[Seat.Guest]) } },
+      { seat: Seat.Guest, msg: { t: ServerMessageType.Rival, nick: this.nicks[Seat.Host], snapshot: rivalSnapshot(this.worlds[Seat.Host]) } },
     ];
   }
 
@@ -158,7 +164,7 @@ export class Duel {
         t: ServerMessageType.Thawed,
         seat: s,
         snapshot: snapshot(this.worlds[s]),
-        rival: snapshot(this.worlds[s === Seat.Host ? Seat.Guest : Seat.Host]),
+        rival: rivalSnapshot(this.worlds[s === Seat.Host ? Seat.Guest : Seat.Host]),
       },
     }));
   }
@@ -270,7 +276,7 @@ export class Duel {
       t: ServerMessageType.DuelOver,
       verdict: this.verdictFor(seat),
       snapshot: snapshot(this.worlds[seat]),
-      rival: snapshot(this.worlds[rival]),
+      rival: rivalSnapshot(this.worlds[rival]),
     };
   }
 

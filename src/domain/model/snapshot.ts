@@ -22,6 +22,7 @@ export interface WorldSnapshot {
   income: number;
   ether: number;
   gleaners: number[];
+  gate: { shot: number; ramparts: number; cooldown: number };
   sends: string[];
   gold: number;
   lives: number;
@@ -89,6 +90,7 @@ export function snapshot(world: World): WorldSnapshot {
     income: world.income,
     ether: world.ether,
     gleaners: [...world.gleaners],
+    gate: { ...world.gate },
     sends: [...world.sends],
     gold: world.gold,
     lives: world.lives,
@@ -124,6 +126,7 @@ export function restore(snap: WorldSnapshot): World {
   world.income = snap.income;
   world.ether = snap.ether;
   world.gleaners = [...snap.gleaners];
+  world.gate = { ...snap.gate };
   world.sends = [...snap.sends];
   world.gold = snap.gold;
   world.lives = snap.lives;

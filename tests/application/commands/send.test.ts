@@ -29,7 +29,7 @@ describe('send', () => {
     expect(w.income).toBe(43);
   });
 
-  it('[CU-01] journalise l\'envoi accepté', () => {
+  it('[CU-02] journalise l\'envoi accepté', () => {
     const w = newDuelWorld();
     w.ether = 100;
 
@@ -52,7 +52,7 @@ describe('send', () => {
     expect(w.log).toHaveLength(0);
   });
 
-  it('[CU-01] refuse l\'envoi quand la dernière vague est déjà lancée', () => {
+  it('[CU-02] refuse l\'envoi quand la dernière vague est déjà lancée', () => {
     const w = newDuelWorld();
     w.wave = w.campaignLength - 1;
     w.ether = 100;

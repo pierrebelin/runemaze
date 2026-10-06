@@ -24,11 +24,11 @@ import { canLaunchNext } from '../domain/systems/waves';
 import { World, type Stats } from '../domain/model/World';
 import { restore, type WorldSnapshot } from '../domain/model/snapshot';
 import { fingerprint } from '../domain/rules/fingerprint';
-import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, MapDef, Result, TargetMode, Tower } from '../domain/model/types';
+import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, GateUpgrade, MapDef, Result, TargetMode, Tower } from '../domain/model/types';
 import { CommandType, GameEventType, Phase } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
-import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gleanerPanel, nextWaveInfo, sendPanel, TARGET_LABEL, towerInfo } from './describe';
+import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, rivalEconomy, sendPanel, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -450,6 +450,12 @@ export class Game {
     else this.drainNow();
   }
 
+  private upgradeGate(upgrade: GateUpgrade): void {
+    const r = this.order({ c: CommandType.Gate, upgrade });
+    if (!r.ok) this.fail(r.reason);
+    else this.drainNow();
+  }
+
   private callWave(): void {
     this.sfx.unlock();
     if (this.overlay) return;
@@ -603,6 +609,8 @@ export class Game {
       if (b && !this.overlay && !b.matches(':disabled')) this.sendCreep(b.dataset.send!);
       const g = (e.target as HTMLElement).closest<HTMLElement>('[data-gleaner]');
       if (g && !this.overlay && !g.matches(':disabled')) this.buyGleaner();
+      const u = (e.target as HTMLElement).closest<HTMLElement>('[data-gate]');
+      if (u && !this.overlay && !u.matches(':disabled')) this.upgradeGate(u.dataset.gate as GateUpgrade);
       const tab = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]');
       if (tab) this.sendTab = tab.dataset.tab as typeof this.sendTab;
     };
@@ -803,7 +811,7 @@ export class Game {
         .join('');
       const body = this.sendTab === 'sends'
         ? sendPanel(this.world.ether, this.world.income)
-        : this.sendTab === 'gleaners' ? gleanerPanel(this.world.ether, this.world.gleaners.length, canBuyGleaner(this.world)) : '';
+        : this.sendTab === 'gleaners' ? gleanerPanel(this.world.ether, this.world.gleaners.length, canBuyGleaner(this.world)) : gatePanel(this.world.ether, this.world.gate);
       const html = `<div class="tabs">${tabs}</div>${body}`;
       if (html !== this.infoCache) {
         this.infoCache = html;
@@ -966,7 +974,7 @@ export class Game {
     const panel = document.createElement('span');
     panel.id = 'rivalPanel';
     panel.className = 'res';
-    panel.innerHTML = `<small id="rivalNick"></small> <b id="rivalLives">0</b> vies · <b id="rivalGold">0</b> or · revenu <b id="rivalIncome">0</b> <button type="button" class="btn" id="rivalViewBtn">Voir l'adversaire</button>`;
+    panel.innerHTML = `<small id="rivalNick"></small> <b id="rivalLives">0</b> vies · <b id="rivalGold">0</b> or · <span id="rivalEconomy"></span> <button type="button" class="btn" id="rivalViewBtn">Voir l'adversaire</button>`;
     bar.insertBefore(panel, $('pauseBtn'));
     $('rivalViewBtn').addEventListener('click', () => this.toggleRivalView(!this.viewingRival));
   }
@@ -998,7 +1006,7 @@ export class Game {
     set('rivalNick', this.rivalNick);
     set('rivalLives', fmt0(this.rivalWorld.lives));
     set('rivalGold', fmt0(this.rivalWorld.gold));
-    set('rivalIncome', fmt0(this.rivalWorld.income));
+    set('rivalEconomy', rivalEconomy(this.rivalWorld.income, this.rivalWorld.gleaners.length, this.rivalWorld.gate));
   }
 
   /** Bascule entre sa propre carte et la carte adverse (touches `O`/`I`, boutons « Voir l'adversaire »/« Ma carte »). */

@@ -11,7 +11,7 @@ export function canTarget(a: AttackDef, c: Creep): boolean {
   return a.targets === 'air' ? !!c.def.air : !c.def.air;
 }
 
-function score(mode: TargetMode, t: Tower, c: Creep): number {
+function score(mode: TargetMode, t: Pick<Tower, 'cx' | 'cy'>, c: Creep): number {
   switch (mode) {
     case 'first': return c.remaining;
     case 'last': return -c.remaining;
@@ -21,7 +21,7 @@ function score(mode: TargetMode, t: Tower, c: Creep): number {
   }
 }
 
-export function acquireTargets(world: World, t: Tower, a: AttackDef, n: number): Creep[] {
+export function acquireTargets(world: World, t: Pick<Tower, 'cx' | 'cy' | 'targetMode'>, a: AttackDef, n: number): Creep[] {
   const inRange: Creep[] = [];
   for (const c of world.creeps) {
     if (!canTarget(a, c)) continue;

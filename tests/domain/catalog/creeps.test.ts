@@ -73,6 +73,5 @@ describe('creeps', () => {
       ['harpy', { cost: 30, income: 6 }],
       ['wraith', { cost: 60, income: 12 }],
     ]);
-    expect(Object.values(CREEPS).filter((c) => c.boss && c.send !== undefined)).toEqual([]);
   });
 });

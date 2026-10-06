@@ -31,7 +31,7 @@ describe('receive', () => {
     expect(Math.abs(spawns[13].time - spawns[12].time - 0.8)).toBeLessThan(0.05);
   });
 
-  it('[RM-05] donne à l\'envoi les PV, la prime et les vies perdues d\'une créature du même type à la vague qui l\'accueille', () => {
+  it('[RM-07] donne à l\'envoi les PV, la prime et les vies perdues d\'une créature du même type à la vague qui l\'accueille', () => {
     const w = newDuelWorld();
     dispatch(w, receive('wolf'));
     launchWave(w);

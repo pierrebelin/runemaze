@@ -4,6 +4,7 @@ import type { World } from '../domain/model/World';
 import { build } from './commands/build';
 import { callWave } from './commands/callWave';
 import { endless } from './commands/endless';
+import { gate } from './commands/gate';
 import { gleaner } from './commands/gleaner';
 import { receive } from './commands/receive';
 import { sell } from './commands/sell';
@@ -32,5 +33,6 @@ function execute(world: World, cmd: Command): Result {
     case CommandType.Send: return send(world, cmd);
     case CommandType.Receive: return receive(world, cmd);
     case CommandType.Gleaner: return gleaner(world);
+    case CommandType.Gate: return gate(world, cmd);
   }
 }

@@ -43,6 +43,25 @@ describe('readClientMessage', () => {
     });
   });
 
+  it('[RM-12] lit un ordre d\'amélioration de Porte reçu du client et rejette une amélioration inconnue', () => {
+    const order = (cmd: unknown) => JSON.stringify({ t: 'order', tick: 5, cmd, fingerprint: 'abc' });
+
+    expect(readClientMessage(order({ c: 'gate', upgrade: 'shot' }))).toEqual({
+      t: 'order',
+      tick: 5,
+      cmd: { c: 'gate', upgrade: 'shot' },
+      fingerprint: 'abc',
+    });
+    expect(readClientMessage(order({ c: 'gate', upgrade: 'ramparts' }))).toEqual({
+      t: 'order',
+      tick: 5,
+      cmd: { c: 'gate', upgrade: 'ramparts' },
+      fingerprint: 'abc',
+    });
+    expect(readClientMessage(order({ c: 'gate', upgrade: 'moat' }))).toBeNull();
+    expect(readClientMessage(order({ c: 'gate' }))).toBeNull();
+  });
+
   it('[RM-07] rejette un ordre de réception venu d\'un client', () => {
     const order = (cmd: unknown) => JSON.stringify({ t: 'order', tick: 5, cmd, fingerprint: 'abc' });
 

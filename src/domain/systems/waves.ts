@@ -116,6 +116,10 @@ export function updateWaves(world: World, dt: number): void {
     const interest = world.duel ? 0 : Math.min(Math.floor(world.gold * 0.04), 20 + wave * 2);
     const income = world.duel ? world.income : 0;
     world.addGold(bonus + interest + income);
+    // Remparts : vies rendues, jamais au-delà des vies de départ.
+    if (world.gate.ramparts > 0) {
+      world.lives = Math.min(DIFFICULTY[world.difficulty].lives, world.lives + world.gate.ramparts);
+    }
     world.stats.waves[wave].gold = world.gold;
     world.emit({ t: GameEventType.WaveCleared, wave, bonus, interest, income });
   }

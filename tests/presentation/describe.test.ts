@@ -8,7 +8,7 @@ import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   briefingChip, briefingInfo,
   creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gleanerPanel, nextWaveInfo, sendPanel, towerInfo, towerSpecials,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, nextWaveInfo, rivalEconomy, sendPanel, towerInfo, towerSpecials,
 } from '../../src/presentation/describe';
 import { GLEANER } from '../../src/domain/catalog/ether';
 import { Verdict } from '../../src/application/online/protocol';
@@ -276,6 +276,56 @@ describe('panneau des glaneurs', () => {
     expect(refused).toContain('disabled');
     expect(refused).toContain('title="Pas assez d’or."');
     expect(gleanerPanel(0, 0, { ok: true })).not.toContain('disabled');
+  });
+});
+
+describe('panneau de la Porte', () => {
+  const tag = (html: string, kind: string) =>
+    (html.split(`data-gate="${kind}"`)[1] ?? '').split('>')[0];
+
+  it('[CU-03] affiche le niveau de Tir et de Remparts, le prix et le gain de revenu du niveau suivant', () => {
+    const html = gatePanel(100, { shot: 2, ramparts: 0, cooldown: 0 });
+
+    expect(html).toContain('Tir');
+    expect(html).toContain('Niveau 2');
+    expect(html).toContain('20 éther');
+    expect(html).toContain('+5');
+    expect(html).toContain('Remparts');
+    expect(html).toContain('Niveau 0');
+    expect(html).toContain('12 éther');
+    expect(html).toContain('+3');
+    expect(html).toContain('data-gate="shot"');
+    expect(html).toContain('data-gate="ramparts"');
+  });
+
+  it('[CU-03] grise une amélioration quand l’éther manque et affiche « Niveau maximal atteint » au niveau max', () => {
+    const poor = gatePanel(19, { shot: 2, ramparts: 0, cooldown: 0 });
+    expect(tag(poor, 'shot')).toContain('disabled');
+    expect(tag(poor, 'ramparts')).not.toContain('disabled');
+    expect(poor).not.toContain('Niveau maximal atteint');
+
+    const maxed = gatePanel(1000, { shot: 10, ramparts: 5, cooldown: 0 });
+    expect(maxed).toContain('Niveau maximal atteint');
+    expect(tag(maxed, 'shot')).toContain('disabled');
+    expect(tag(maxed, 'ramparts')).toContain('disabled');
+  });
+});
+
+describe('encart de l’économie adverse', () => {
+  it('[CU-04] affiche revenu, nombre de glaneurs, niveaux de Tir et de Remparts de l’adversaire', () => {
+    const text = rivalEconomy(37, 4, { shot: 2, ramparts: 3, cooldown: 0 });
+
+    expect(text).toMatch(/revenu\D*37/i);
+    expect(text).toMatch(/glaneurs?\D*4/i);
+    expect(text).toMatch(/Tir\D*2/);
+    expect(text).toMatch(/Remparts\D*3/);
+  });
+
+  it('[RM-11] ne mentionne jamais l’éther de l’adversaire', () => {
+    const text = rivalEconomy(37, 4, { shot: 2, ramparts: 3, cooldown: 0 });
+
+    expect(text).toContain('37');
+    expect(text.toLowerCase()).not.toContain('éther');
   });
 });
 

@@ -4,6 +4,7 @@ import { FlowField } from '../rules/FlowField';
 import { Grid } from './Grid';
 import { updateAbilities } from '../systems/abilities';
 import { updateGleaners } from '../systems/gleaners';
+import { updateGate } from '../systems/gate';
 import { updateCombat, updateProjectiles } from '../systems/combat';
 import { updateMovement } from '../systems/movement';
 import { updateStatuses } from '../systems/status';
@@ -50,6 +51,7 @@ export class World {
   income = 0;
   ether = 0;
   gleaners: number[] = [];
+  gate = { shot: 0, ramparts: 0, cooldown: 0 };
   tick = 0;
   time = 0;
   phase: Phase = Phase.Prep;
@@ -190,6 +192,7 @@ export class World {
     updateAbilities(this, dt);
     updateMovement(this, dt);
     updateCombat(this, dt);
+    updateGate(this, dt);
     updateProjectiles(this, dt);
     if (this.offspring.length) {
       this.creeps.push(...this.offspring);
