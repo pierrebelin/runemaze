@@ -215,13 +215,6 @@ function handleMessage(ws: WebSocket, msg: NonNullable<ReturnType<typeof readCli
       dispatchAddressed(lobby.leave(key, now));
       break;
     }
-    case ClientMessageType.Ready: {
-      const seated = duelSeats.get(ws);
-      if (!seated) break;
-      const messages = lobby.duel(seated.code)?.ready(seated.seat, now) ?? [];
-      dispatchSeated(seated.code, messages);
-      break;
-    }
     case ClientMessageType.Rejoin: {
       const key = keyBySocket.get(ws)!;
       const addressed = lobby.rejoin({ code: msg.code, token: msg.token, key }, now);

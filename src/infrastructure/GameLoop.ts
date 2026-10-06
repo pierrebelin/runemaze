@@ -2,10 +2,9 @@ import { TICK } from '../domain/model/World';
 
 /**
  * Boucle à pas fixe : la simulation avance toujours de 1/60 s, quelle que
- * soit la fréquence d'affichage ; la vitesse de jeu multiplie les pas.
+ * soit la fréquence d'affichage.
  */
 export class GameLoop {
-  speed = 1;
   paused = false;
   private acc = 0;
   private last = 0;
@@ -24,7 +23,7 @@ export class GameLoop {
       this.last = now;
       this.realTime += dt;
       if (!this.paused) {
-        this.acc += dt * this.speed;
+        this.acc += dt;
         let guard = 0;
         while (this.acc >= TICK && guard++ < 30) {
           this.step();

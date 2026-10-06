@@ -52,11 +52,6 @@ export class Duel {
   private lastRivalAt: number;
   private readonly nicks: [string, string];
   private readonly tokens: [string, string];
-  private readiness: [boolean, boolean] = [false, false];
-  /** Dernière vague connue, pour détecter un franchissement par compte à rebours sur n'importe quel chemin. */
-  private lastWave: number;
-  /** Vrai dès qu'une vague a franchi le compte à rebours sans que `advance` l'ait encore annoncée. */
-  private waveLaunched = false;
   /** Sièges dont la carte a reçu un envoi, à recaler à la prochaine annonce. */
   private receivers = new Set<Seat>();
   /** Instant et siège de la coupure ; tant que `lostAt` est défini, l'horloge commune ne rattrape plus le temps réel. */
@@ -73,7 +68,6 @@ export class Duel {
     this.lastRivalAt = now;
     this.nicks = config.nicks;
     this.tokens = config.tokens;
-    this.lastWave = this.worlds[Seat.Host].wave;
   }
 
   /** Rattrape l'horloge commune ; annonce une seule fois l'issue du duel à chaque siège. */
@@ -85,13 +79,6 @@ export class Duel {
     if (!this.isOver() && this.expired(now)) this.forfeit();
     if (this.outcome === DuelOutcome.Running) {
       const messages = this.rivalMessages(now);
-      if (this.waveLaunched) {
-        this.waveLaunched = false;
-        messages.push(
-          { seat: Seat.Host, msg: { t: ServerMessageType.Readiness, self: this.readiness[Seat.Host], rival: this.readiness[Seat.Guest] } },
-          { seat: Seat.Guest, msg: { t: ServerMessageType.Readiness, self: this.readiness[Seat.Guest], rival: this.readiness[Seat.Host] } },
-        );
-      }
       for (const seat of this.receivers) {
         messages.push({ seat, msg: { t: ServerMessageType.Drift, snapshot: snapshot(this.worlds[seat]) } });
       }
@@ -117,30 +104,6 @@ export class Duel {
       { seat: Seat.Host, msg: { t: ServerMessageType.Rival, nick: this.nicks[Seat.Guest], snapshot: rivalSnapshot(this.worlds[Seat.Guest]) } },
       { seat: Seat.Guest, msg: { t: ServerMessageType.Rival, nick: this.nicks[Seat.Host], snapshot: rivalSnapshot(this.worlds[Seat.Host]) } },
     ];
-  }
-
-  ready(seat: Seat, now: number): SeatMessage[] {
-    if (this.lostAt !== undefined) return [];
-    this.tick(now);
-    if (this.isOver()) return [];
-    this.readiness[seat] = !this.readiness[seat];
-    const rival = seat === Seat.Host ? Seat.Guest : Seat.Host;
-    if (this.readiness[Seat.Host] && this.readiness[Seat.Guest]) {
-      this.readiness = [false, false];
-      dispatch(this.worlds[Seat.Host], { c: CommandType.CallWave });
-      dispatch(this.worlds[Seat.Guest], { c: CommandType.CallWave });
-      this.lastWave = this.worlds[Seat.Host].wave;
-      return [
-        { seat: Seat.Host, msg: { t: ServerMessageType.Drift, snapshot: snapshot(this.worlds[Seat.Host]) } },
-        { seat: Seat.Guest, msg: { t: ServerMessageType.Drift, snapshot: snapshot(this.worlds[Seat.Guest]) } },
-      ];
-    }
-    const messages: SeatMessage[] = [
-      { seat, msg: { t: ServerMessageType.Readiness, self: this.readiness[seat], rival: this.readiness[rival] } },
-      { seat: rival, msg: { t: ServerMessageType.Readiness, self: this.readiness[rival], rival: this.readiness[seat] } },
-    ];
-    this.waveLaunched = false;
-    return messages;
   }
 
   lose(seat: Seat, now: number): SeatMessage[] {
@@ -189,9 +152,6 @@ export class Duel {
     this.tick(now);
     const overLimit = this.stepBounded(seat, msg.tick);
     const world = this.worlds[seat];
-    if (msg.cmd.c === CommandType.CallWave) {
-      return { t: ServerMessageType.Drift, snapshot: snapshot(world) };
-    }
     const r = dispatch(world, msg.cmd);
     if (r.ok && msg.cmd.c === CommandType.Send) {
       const rival = seat === Seat.Host ? Seat.Guest : Seat.Host;
@@ -248,18 +208,8 @@ export class Duel {
         }
       }
       this.updateOutcome();
-      this.checkWaveLaunched();
       if (!stepped) break;
     }
-  }
-
-  /** Efface les demandes de prêt dès qu'une vague part par compte à rebours, quel que soit le chemin qui a avancé les mondes. */
-  private checkWaveLaunched(): void {
-    const wave = this.worlds[Seat.Host].wave;
-    if (wave === this.lastWave) return;
-    this.lastWave = wave;
-    this.readiness = [false, false];
-    this.waveLaunched = true;
   }
 
   private updateOutcome(): void {

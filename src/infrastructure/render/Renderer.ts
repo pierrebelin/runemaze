@@ -2,7 +2,8 @@ import { Rng } from '../../domain/Rng';
 import { TOWERS } from '../../domain/catalog/towers';
 import type { World } from '../../domain/model/World';
 import type { Projectile } from '../../domain/model/types';
-import type { Effects } from './Effects';
+import { fittedView, MAX_ZOOM, type MapPlacement, type WorldView } from './commonWorld';
+import { BANNER_LIFE, type Effects } from './Effects';
 import { FAMILY_COLOR, PAL } from './palette';
 import { drawCreep, drawTower } from './sprites';
 
@@ -18,66 +19,67 @@ export interface ViewState {
 const DISPLAY_FONT = '"Grenze Gotisch", "Palatino Linotype", Palatino, serif';
 const BODY_FONT = '"Alegreya Sans", "Gill Sans", "Trebuchet MS", sans-serif';
 
+/** Une carte de la partie : son monde, sa place dans le monde commun, ses effets et son aperçu. */
+export interface Board { world: World; place: MapPlacement; fx: Effects; view: ViewState; nick: string }
+
+interface Terrain { canvas: HTMLCanvasElement; mapId: string; scale: number; dpr: number }
+interface Facing { x: number; y: number; dx: number; dy: number }
+
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
-  private terrain: HTMLCanvasElement | null = null;
   private dpr = 1;
-  /** Taille d'une case en pixels CSS. */
-  cell = 20;
-  private facing = new Map<number, { x: number; y: number; dx: number; dy: number }>();
+  private cssW = 0;
+  private cssH = 0;
+  /** Caches par rang de carte : le `World` adverse est remplacé à chaque `Rival`, le terrain (clé : id de carte, échelle ajustée, dpr) et les orientations lui survivent. */
+  private terrains: Terrain[] = [];
+  private facings: Map<number, Facing>[] = [];
 
-  constructor(
-    readonly canvas: HTMLCanvasElement,
-    private world: World,
-  ) {
+  constructor(readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D indisponible');
     this.ctx = ctx;
   }
 
-  setWorld(world: World): void {
-    this.world = world;
-    this.terrain = null;
-    this.facing.clear();
+  /** Dimensionne la toile à toute la zone de jeu. */
+  resize(availW: number, availH: number): void {
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    this.cssW = availW;
+    this.cssH = availH;
+    this.canvas.style.width = `${availW}px`;
+    this.canvas.style.height = `${availH}px`;
+    this.canvas.width = Math.round(availW * this.dpr);
+    this.canvas.height = Math.round(availH * this.dpr);
   }
 
-  /** Ajuste la toile à la place disponible en gardant des cases carrées. */
-  fit(availW: number, availH: number): void {
-    const g = this.world.grid;
-    const cell = Math.max(8, Math.floor(Math.min(availW / g.w, availH / g.h) * 4) / 4);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    if (cell === this.cell && dpr === this.dpr && this.terrain) return;
-    this.cell = cell;
-    this.dpr = dpr;
-    this.canvas.style.width = `${cell * g.w}px`;
-    this.canvas.style.height = `${cell * g.h}px`;
-    this.canvas.width = Math.round(cell * g.w * dpr);
-    this.canvas.height = Math.round(cell * g.h * dpr);
-    this.terrain = null;
-  }
-
-  /** Convertit une position écran (clientX/Y) en coordonnées de grille. */
-  toGrid(clientX: number, clientY: number): { x: number; y: number } {
+  /** Convertit une position écran (clientX/Y) en pixels CSS de la toile. */
+  toScreen(clientX: number, clientY: number): { x: number; y: number } {
     const r = this.canvas.getBoundingClientRect();
-    return { x: (clientX - r.left) / this.cell, y: (clientY - r.top) / this.cell };
+    return { x: clientX - r.left, y: clientY - r.top };
   }
 
-  private cellSpace(): void {
-    const s = this.dpr * this.cell;
-    this.ctx.setTransform(s, 0, 0, s, 0, 0);
+  /** Repère en pixels CSS, origine décalée de (ox, oy). */
+  private pixelSpace(ox: number, oy: number): void {
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, ox * this.dpr, oy * this.dpr);
   }
 
-  private pixelSpace(): void {
-    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  /** Terrain construit une fois à la résolution du zoom maximal ; le zoom courant le réduit au dessin. */
+  private terrainOf(index: number, world: World, place: MapPlacement): HTMLCanvasElement {
+    const scale = MAX_ZOOM * fittedView(place, { w: this.cssW, h: this.cssH }).scale;
+    let t = this.terrains[index];
+    if (!t || t.mapId !== world.map.id || t.scale !== scale || t.dpr !== this.dpr) {
+      t = { canvas: this.buildTerrain(world, scale), mapId: world.map.id, scale, dpr: this.dpr };
+      this.terrains[index] = t;
+    }
+    return t.canvas;
   }
 
-  private buildTerrain(): HTMLCanvasElement {
-    const g = this.world.grid;
+  private buildTerrain(world: World, scale: number): HTMLCanvasElement {
+    const g = world.grid;
     const c = document.createElement('canvas');
-    c.width = this.canvas.width;
-    c.height = this.canvas.height;
+    c.width = Math.round(g.w * scale * this.dpr);
+    c.height = Math.round(g.h * scale * this.dpr);
     const ctx = c.getContext('2d')!;
-    const s = this.dpr * this.cell;
+    const s = this.dpr * scale;
     ctx.setTransform(s, 0, 0, s, 0, 0);
     const rng = new Rng(20240611);
 
@@ -158,17 +160,33 @@ export class Renderer {
     return c;
   }
 
-  draw(view: ViewState, fx: Effects, time: number, realTime: number): void {
+  draw(boards: Board[], view: WorldView, own: number, time: number, realTime: number): void {
     const ctx = this.ctx;
-    const w = this.world;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = PAL.cliff;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    boards.forEach((board, i) => this.drawBoard(i, board, view, boards.length > 1, time, realTime));
+    // Bannière et voile de fuite : à l'écran, pour la carte du joueur seulement.
+    this.pixelSpace(0, 0);
+    this.drawAlerts(boards[own].fx, view.scale);
+  }
+
+  private drawBoard(index: number, { world: w, place, fx, view, nick }: Board, wv: WorldView, duel: boolean, time: number, realTime: number): void {
+    const ctx = this.ctx;
     const g = w.grid;
-    if (!this.terrain) this.terrain = this.buildTerrain();
+    const cs = wv.scale;
+    const ox = (place.x - wv.x) * cs;
+    const oy = (place.y - wv.y) * cs;
+    const cellSpace = (): void => {
+      const s = this.dpr * cs;
+      ctx.setTransform(s, 0, 0, s, ox * this.dpr, oy * this.dpr);
+    };
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(this.terrain, 0, 0);
-    this.cellSpace();
+    ctx.drawImage(this.terrainOf(index, w, place), ox * this.dpr, oy * this.dpr, g.w * cs * this.dpr, g.h * cs * this.dpr);
+    cellSpace();
 
-    this.drawLandmarks(realTime);
+    this.drawLandmarks(g, realTime);
 
     if (view.buildDef) {
       ctx.strokeStyle = 'rgba(239, 227, 196, 0.07)';
@@ -185,8 +203,8 @@ export class Renderer {
       ctx.stroke();
     }
 
-    if (view.showRoute || view.buildDef) this.drawRoute(w.groundRoute(), 'rgba(239, 227, 196, 0.32)', realTime, view.previewRoute ? 0.5 : 1);
-    if (view.previewRoute) this.drawRoute(view.previewRoute, 'rgba(233, 185, 73, 0.85)', realTime, 1);
+    if (view.showRoute || view.buildDef) this.drawRoute(g, w.groundRoute(), 'rgba(239, 227, 196, 0.32)', realTime, view.previewRoute ? 0.5 : 1);
+    if (view.previewRoute) this.drawRoute(g, view.previewRoute, 'rgba(233, 185, 73, 0.85)', realTime, 1);
 
     const sel = view.selectedTower !== null ? w.towerById.get(view.selectedTower) : undefined;
     if (sel?.def.attack) this.rangeCircle(sel.cx, sel.cy, sel.def.attack.range, 'rgba(233, 185, 73, 0.9)');
@@ -224,9 +242,9 @@ export class Renderer {
     // Créatures : d'abord au sol, puis les volants au-dessus de tout.
     const ground = w.creeps.filter((c) => c.alive && !c.def.air).sort((a, b) => a.y - b.y);
     const air = w.creeps.filter((c) => c.alive && c.def.air).sort((a, b) => a.y - b.y);
-    for (const c of ground) this.creep(c, time);
+    for (const c of ground) this.creep(index, c, time);
     for (const p of w.projectiles) this.projectile(p, true);
-    for (const c of air) this.creep(c, time);
+    for (const c of air) this.creep(index, c, time);
     for (const p of w.projectiles) this.projectile(p, false);
 
     const selC = view.selectedCreep !== null ? w.creeps.find((c) => c.id === view.selectedCreep && c.alive) : undefined;
@@ -257,8 +275,7 @@ export class Renderer {
     ctx.globalAlpha = 1;
 
     // Textes en pixels pour rester nets.
-    this.pixelSpace();
-    const cs = this.cell;
+    this.pixelSpace(ox, oy);
     for (const f of fx.floaters) {
       ctx.globalAlpha = Math.min(1, f.life * 2);
       ctx.font = `700 ${Math.round(cs * (f.big ? 0.9 : 0.62))}px ${BODY_FONT}`;
@@ -271,8 +288,22 @@ export class Renderer {
     }
     ctx.globalAlpha = 1;
 
-    const W = g.w * cs;
-    const H = g.h * cs;
+    // Pseudo dans la bande de rocher du haut, en duel seulement.
+    if (duel) {
+      ctx.font = `700 ${Math.round(cs * 0.7)}px ${BODY_FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = PAL.parchment;
+      ctx.fillText(nick, (g.w * cs) / 2, cs * 0.5);
+      ctx.textBaseline = 'alphabetic';
+    }
+    this.pruneFacing(index, w);
+  }
+
+  private drawAlerts(fx: Effects, cs: number): void {
+    const ctx = this.ctx;
+    const W = this.cssW;
+    const H = this.cssH;
     if (fx.leakFlash > 0) {
       const a = Math.min(0.5, fx.leakFlash);
       const grad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.7);
@@ -284,24 +315,23 @@ export class Renderer {
 
     if (fx.banner) {
       const b = fx.banner;
-      const k = b.life > 2.2 ? (2.6 - b.life) / 0.4 : b.life < 0.6 ? b.life / 0.6 : 1;
+      const k = b.life > BANNER_LIFE - 0.4 ? (BANNER_LIFE - b.life) / 0.4 : b.life < 0.6 ? b.life / 0.6 : 1;
       ctx.globalAlpha = Math.max(0, Math.min(1, k));
       ctx.fillStyle = 'rgba(20, 16, 10, 0.55)';
-      ctx.fillRect(0, H * 0.38, W, cs * 3.2);
+      ctx.fillRect(0, H * 0.38, W, cs * (2.45 + 0.9 * b.lines.length));
       ctx.textAlign = 'center';
       ctx.font = `${Math.round(cs * 1.9)}px ${DISPLAY_FONT}`;
       ctx.fillStyle = b.boss ? '#f07a5c' : PAL.parchment;
       ctx.fillText(b.title, W / 2, H * 0.38 + cs * 1.85);
       ctx.font = `500 ${Math.round(cs * 0.72)}px ${BODY_FONT}`;
       ctx.fillStyle = PAL.gold;
-      ctx.fillText(b.sub, W / 2, H * 0.38 + cs * 2.75);
+      b.lines.forEach((line, i) => ctx.fillText(line, W / 2, H * 0.38 + cs * (2.75 + 0.9 * i)));
       ctx.globalAlpha = 1;
     }
   }
 
-  private drawLandmarks(t: number): void {
+  private drawLandmarks(g: World['grid'], t: number): void {
     const ctx = this.ctx;
-    const g = this.world.grid;
     // Portail d'apparition : faille violacée tourbillonnante.
     const sp = g.regionCenter(g.spawnCells);
     for (let i = 0; i < 4; i++) {
@@ -384,9 +414,8 @@ export class Renderer {
     ctx.fill();
   }
 
-  private drawRoute(route: number[][], color: string, t: number, alpha: number): void {
+  private drawRoute(g: World['grid'], route: number[][], color: string, t: number, alpha: number): void {
     const ctx = this.ctx;
-    const g = this.world.grid;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = color;
@@ -422,11 +451,12 @@ export class Renderer {
     ctx.setLineDash([]);
   }
 
-  private creep(c: World['creeps'][number], time: number): void {
-    let f = this.facing.get(c.id);
+  private creep(index: number, c: World['creeps'][number], time: number): void {
+    const facing = (this.facings[index] ??= new Map());
+    let f = facing.get(c.id);
     if (!f) {
       f = { x: c.x, y: c.y, dx: 1, dy: 0 };
-      this.facing.set(c.id, f);
+      facing.set(c.id, f);
     }
     const dx = c.x - f.x;
     const dy = c.y - f.y;
@@ -439,9 +469,11 @@ export class Renderer {
     drawCreep(this.ctx, c, f.dx, f.dy, time);
   }
 
-  pruneFacing(): void {
-    const alive = new Set(this.world.creeps.map((c) => c.id));
-    for (const k of this.facing.keys()) if (!alive.has(k)) this.facing.delete(k);
+  private pruneFacing(index: number, w: World): void {
+    const facing = this.facings[index];
+    if (!facing) return;
+    const alive = new Set(w.creeps.map((c) => c.id));
+    for (const k of facing.keys()) if (!alive.has(k)) facing.delete(k);
   }
 
   private projectile(p: Projectile, lowPass: boolean): void {

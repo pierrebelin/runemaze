@@ -223,4 +223,27 @@ describe('waves', () => {
     cleared = w.events.filter((e) => e.t === GameEventType.WaveCleared);
     expect(cleared).toHaveLength(1);
   });
+
+  it('[RM-05] fige au lancement les envois achetés et reçus, puis vide les files', () => {
+    const w = newWorld();
+    w.sent = ['rat', 'wolf'];
+    w.sends = ['wolf', 'slime', 'rat'];
+
+    launchWave(w);
+
+    expect(w.waveSends).toEqual({ sent: ['rat', 'wolf'], received: ['wolf', 'slime', 'rat'] });
+    expect(w.sent).toEqual([]);
+    expect(w.sends).toEqual([]);
+  });
+
+  it('[RM-05] laisse vides les envois de la vague quand le joueur n’a rien envoyé ni reçu', () => {
+    const w = newWorld();
+    w.waveSends = { sent: ['rat'], received: ['wolf'] }; // vague précédente
+
+    launchWave(w);
+
+    expect(w.waveSends).toEqual({ sent: [], received: [] });
+    expect(w.sent).toEqual([]);
+    expect(w.sends).toEqual([]);
+  });
 });

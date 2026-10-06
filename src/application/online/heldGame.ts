@@ -19,7 +19,6 @@ export class HeldGame {
   private clock = 0;
   private lastNow: number;
   private paused = false;
-  private speed = 1;
   /** Défaite déjà annoncée : fin définitive, annoncée une seule fois. */
   private announced = false;
   /** Instant de la coupure ; effacé au retour du joueur. Tant qu'il est défini, l'horloge ne rattrape plus le temps réel. */
@@ -73,14 +72,13 @@ export class HeldGame {
   back(now: number): ServerMessage {
     this.lastNow = now;
     this.lostAt = undefined;
-    return { t: ServerMessageType.Resumed, snapshot: snapshot(this.world), paused: this.paused, speed: this.speed };
+    return { t: ServerMessageType.Resumed, snapshot: snapshot(this.world), paused: this.paused };
   }
 
-  pace(msg: { tick: number; paused: boolean; speed: number }, now: number): void {
+  pace(msg: { tick: number; paused: boolean }, now: number): void {
     this.tick(now);
     this.clock = Math.min(msg.tick, this.limit());
     this.paused = msg.paused;
-    this.speed = msg.speed;
     this.catchUp();
   }
 
@@ -100,7 +98,7 @@ export class HeldGame {
   private tick(now: number): void {
     if (this.lostAt !== undefined) return;
     if (!this.paused) {
-      this.clock += ((now - this.lastNow) * 60) / 1000 * this.speed;
+      this.clock += ((now - this.lastNow) * 60) / 1000;
     }
     this.lastNow = now;
     this.catchUp();

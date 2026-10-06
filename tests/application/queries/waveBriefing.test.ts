@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
-import { waveBriefing } from '../../../src/application/queries/waveBriefing';
-import { WAVES } from '../../../src/domain/catalog/creeps';
+import { groupSends, waveBriefing } from '../../../src/application/queries/waveBriefing';
+import { CREEPS, WAVES } from '../../../src/domain/catalog/creeps';
 import type { WaveDef } from '../../../src/domain/model/types';
-import { creepHp } from '../../../src/domain/systems/waves';
+import { launchWave, creepHp } from '../../../src/domain/systems/waves';
 import { newDuelWorld, newWorld } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
@@ -48,7 +48,7 @@ describe('waveBriefing', () => {
     expect(b.groups[1].count).toBe(2);
     expect(b.groups[1].hp).toBe(creepHp(w, b.groups[1].creep, 0));
 
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     w.step();
     expect(w.creeps[0].maxHp).toBe(b.groups[0].hp);
   });
@@ -62,14 +62,15 @@ describe('waveBriefing', () => {
     expect(b.groups[1].creep.id).toBe('wolf');
   });
 
-  it('[RM-06] compte les envois en approche dans l\'aperçu de la prochaine vague', () => {
+  it('[RM-04] annonce les mêmes groupes avec ou sans envois reçus', () => {
     const w = newDuelWorld();
-    expect(waveBriefing(w).incoming).toBe(0);
+    const without = waveBriefing(w);
 
     dispatch(w, { c: CommandType.Receive, creep: 'wolf' });
     dispatch(w, { c: CommandType.Receive, creep: 'rat' });
 
-    expect(waveBriefing(w).incoming).toBe(2);
+    expect(w.sends).toHaveLength(2);
+    expect(waveBriefing(w)).toEqual(without);
   });
 
   it('[RM-01] annonce la vague 31 quand la vague 30 est lancée', () => {
@@ -79,5 +80,29 @@ describe('waveBriefing', () => {
     const b = waveBriefing(w);
 
     expect(b.wave).toBe(30);
+  });
+
+  it('[RM-07] décrit la vague demandée quand un numéro de vague est donné', () => {
+    const w = newWorld();
+    const ref = newWorld();
+    ref.wave = 4;
+    const expected = waveBriefing(ref);
+
+    const b = waveBriefing(w, 5);
+
+    expect(b.wave).toBe(5);
+    expect(b).toEqual(expected);
+    expect(b).not.toEqual(waveBriefing(w));
+  });
+
+  it('[RM-05] regroupe les envois par créature dans l\'ordre du premier achat', () => {
+    // Ordre du premier achat ≠ ordre alphabétique ≠ ordre du catalogue.
+    const groups = groupSends(['wolf', 'rat', 'wolf', 'harpy', 'rat', 'wolf']);
+
+    expect(groups).toEqual([
+      { creep: CREEPS.wolf, count: 3 },
+      { creep: CREEPS.rat, count: 2 },
+      { creep: CREEPS.harpy, count: 1 },
+    ]);
   });
 });

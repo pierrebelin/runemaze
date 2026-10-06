@@ -11,5 +11,6 @@ export function send(world: World, cmd: Extract<Command, { c: CommandType.Send }
   if (world.ether < offer.cost) return fail('Pas assez d\'éther.');
   world.ether -= offer.cost;
   world.income += offer.income;
+  world.sent.push(cmd.creep);
   return { ok: true };
 }

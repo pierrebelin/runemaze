@@ -83,11 +83,11 @@ describe('readClientMessage', () => {
   it('rejette un message de type inconnu ou aux champs manquants', () => {
     expect(readClientMessage(JSON.stringify({ t: 'inconnu' }))).toBeNull();
     expect(
-      readClientMessage(JSON.stringify({ t: 'order', tick: 1, cmd: { c: 'callWave' } })),
+      readClientMessage(JSON.stringify({ t: 'order', tick: 1, cmd: { c: 'build', def: 'wall', x: 1, y: 1 } })),
     ).toBeNull();
     expect(
       readClientMessage(
-        JSON.stringify({ t: 'order', tick: '1', cmd: { c: 'callWave' }, fingerprint: 'abc' }),
+        JSON.stringify({ t: 'order', tick: '1', cmd: { c: 'build', def: 'wall', x: 1, y: 1 }, fingerprint: 'abc' }),
       ),
     ).toBeNull();
     expect(
@@ -104,15 +104,11 @@ describe('readClientMessage', () => {
     expect(readClientMessage('null')).toBeNull();
   });
 
-  it('[RM-10] rejette un message de rythme dont la vitesse n\'est pas 1, 2 ou 3', () => {
-    expect(readClientMessage(JSON.stringify({ t: 'pace', tick: 1, paused: false, speed: 4 }))).toBeNull();
-    expect(readClientMessage(JSON.stringify({ t: 'pace', tick: 1, paused: false, speed: 0 }))).toBeNull();
-    expect(readClientMessage(JSON.stringify({ t: 'pace', tick: 1, paused: false, speed: 1.5 }))).toBeNull();
-    expect(readClientMessage(JSON.stringify({ t: 'pace', tick: 1, paused: false, speed: 2 }))).toEqual({
+  it('[RM-10] lit un message de rythme sans vitesse de jeu', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'pace', tick: 1, paused: false }))).toEqual({
       t: 'pace',
       tick: 1,
       paused: false,
-      speed: 2,
     });
   });
 
@@ -295,8 +291,11 @@ describe('readClientMessage — salon', () => {
     expect(readClientMessage(JSON.stringify({ t: 'start' }))).toEqual({ t: 'start' });
   });
 
-  it('[RM-08] lit la demande d\'appel à deux', () => {
-    expect(readClientMessage(JSON.stringify({ t: 'ready' }))).toEqual({ t: 'ready' });
+  it('rejette l\'appel de vague, retiré du jeu, en solo comme à deux', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'ready' }))).toBeNull();
+    expect(
+      readClientMessage(JSON.stringify({ t: 'order', tick: 1, cmd: { c: 'callWave' }, fingerprint: 'abc' })),
+    ).toBeNull();
   });
 
   it('[CU-07] lit la demande de reprise avec code et jeton', () => {

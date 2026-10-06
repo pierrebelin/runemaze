@@ -4,8 +4,9 @@ import { CREEPS, DIFFICULTY, waveAt } from '../domain/catalog/creeps';
 import { MAPS } from '../domain/catalog/map';
 import { BUILDERS } from '../domain/catalog/builders';
 import { TOWERS } from '../domain/catalog/towers';
+import { fittedView, isDrag, zoomView, layOutMaps, panView, mapAt, toWorldPoint, isMapVisible, type CommonWorld, type WorldView } from '../infrastructure/render/commonWorld';
 import { Effects } from '../infrastructure/render/Effects';
-import { Renderer, type ViewState } from '../infrastructure/render/Renderer';
+import { Renderer, type Board, type ViewState } from '../infrastructure/render/Renderer';
 import { PAL } from '../infrastructure/render/palette';
 import { drawCreep, drawMapThumbnail, drawTower } from '../infrastructure/render/sprites';
 import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage';
@@ -14,7 +15,7 @@ import { canBuild } from '../application/queries/canBuild';
 import { canBuyGleaner } from '../application/queries/canBuyGleaner';
 import { builderTowers, buildMenu, upgradeOptions } from '../domain/rules/builder';
 import { previewRoute } from '../application/queries/previewRoute';
-import { waveBriefing } from '../application/queries/waveBriefing';
+import { groupSends, waveBriefing } from '../application/queries/waveBriefing';
 import { realign } from '../application/online/realign';
 import { Seat } from '../application/online/duel';
 import { LOST_LIMIT_MS } from '../application/online/heldGame';
@@ -28,7 +29,7 @@ import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, Gate
 import { CommandType, GameEventType } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
-import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, rivalEconomy, sendPanel, TARGET_LABEL, towerInfo } from './describe';
+import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, placedTowerInfo, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -68,7 +69,7 @@ enum Overlay {
   Lobby = 'lobby',
 }
 
-type Selection = { kind: 'tower'; id: number } | { kind: 'creep'; id: number } | null;
+type Selection = { kind: 'tower' | 'creep'; id: number; rival: boolean } | null;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -76,8 +77,8 @@ export class Game {
   private world: World;
   private readonly renderer: Renderer;
   private readonly fx = new Effects();
-  /** Passée au rendu à la place de `fx` en vue adverse : les effets de sa propre carte ne s'y dessinent pas. */
-  private readonly noFx = new Effects();
+  /** Effets de la carte adverse, sans son. */
+  private readonly rivalFx = new Effects(false);
   private readonly sfx = new Sfx();
   private readonly loop: GameLoop;
   private difficulty: Difficulty = 'normal';
@@ -116,12 +117,17 @@ export class Game {
   /** Carte adverse : restaurée à chaque `Rival`, avancée localement entre deux envois (D3). */
   private rivalWorld: World | null = null;
   private rivalNick = '';
-  private viewingRival = false;
+  /** Dernière vague dont le lancement a été annoncé. Pas recalée par `realign` : un lancement reçu du serveur doit s'annoncer. */
+  private announcedWave = 0;
+  /** Coin haut-gauche de l'écran dans le monde commun (en cases) et taille d'une case en pixels. */
+  private worldView: WorldView = { x: 0, y: 0, scale: 8 };
+  private zone = { w: 0, h: 0 };
   private rivalHud: Record<string, string> = {};
   private sendOpen = false;
   private sendTab: 'sends' | 'gleaners' | 'gate' = 'sends';
 
   private selected: Selection = null;
+  private rivalView: ViewState = { buildDef: null, ghost: null, previewRoute: null, selectedTower: null, selectedCreep: null, showRoute: false };
   private buildDef: string | null = null;
   private anchor: { x: number; y: number } | null = null;
   private ghostReason = '';
@@ -151,7 +157,7 @@ export class Game {
 
   constructor() {
     this.world = this.createWorld(MAPS[0], 'normal');
-    this.renderer = new Renderer(this.canvas, this.world);
+    this.renderer = new Renderer(this.canvas);
     this.loop = new GameLoop(() => this.stepSim(), (dt) => this.frame(dt));
     this.bindInput();
     new ResizeObserver(() => this.resize()).observe(this.stage);
@@ -161,7 +167,9 @@ export class Game {
   }
 
   private createWorld(map: MapDef, d: Difficulty): World {
-    return new World({ map, difficulty: d, seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0, builder: this.builderId });
+    const world = new World({ map, difficulty: d, seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0, builder: this.builderId });
+    this.announcedWave = world.wave;
+    return world;
   }
 
   private async newGame(d: Difficulty): Promise<void> {
@@ -194,7 +202,7 @@ export class Game {
     this.gameId = opened.id;
     this.gameToken = opened.token;
     this.world = restore(opened.snapshot);
-    this.renderer.setWorld(this.world);
+    this.announcedWave = this.world.wave;
     this.fx.clear();
     this.selected = null;
     this.buildDef = null;
@@ -229,12 +237,10 @@ export class Game {
     switch (msg.t) {
       case ServerMessageType.Drift:
         this.world = realign(msg.snapshot, this.world.log, this.world.tick);
-        this.renderer.setWorld(this.world);
         break;
       case ServerMessageType.Over:
         this.clearSeat(PENDING_KEY);
         this.world = restore(msg.snapshot);
-        this.renderer.setWorld(this.world);
         this.saveBest();
         this.showEnd();
         break;
@@ -285,14 +291,38 @@ export class Game {
   }
 
   private sendPace(): void {
-    this.link?.send({ t: ClientMessageType.Pace, tick: this.world.tick, paused: this.loop.paused, speed: this.loop.speed });
+    this.link?.send({ t: ClientMessageType.Pace, tick: this.world.tick, paused: this.loop.paused });
   }
 
   private resize(): void {
-    const cs = getComputedStyle(this.stage);
-    const w = this.stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
-    const h = this.stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 2;
-    if (w > 0 && h > 0) this.renderer.fit(w, h);
+    const w = this.stage.clientWidth;
+    const h = this.stage.clientHeight;
+    if (w <= 0 || h <= 0) return;
+    this.zone = { w, h };
+    this.renderer.resize(w, h);
+    this.recenter();
+  }
+
+  /** Cartes de la partie de gauche à droite : l'hôte d'abord, l'invité ensuite (RM-09), et leur monde commun. */
+  private layout(): { boards: Board[]; common: CommonWorld } {
+    const duel = this.duelRole !== null;
+    const ownNick = !duel ? '' : (this.duelRole === 'host' ? this.duelHostNick : this.duelGuestNick) ?? '';
+    const own = { world: this.world, fx: this.fx, view: this.view, nick: ownNick };
+    const rival = this.rivalWorld && { world: this.rivalWorld, fx: this.rivalFx, view: this.rivalView, nick: this.rivalNick };
+    const ordered = !rival ? [own] : this.duelRole === 'guest' ? [rival, own] : [own, rival];
+    const sizes = ordered.map((b) => ({ w: b.world.grid.w, h: b.world.grid.h }));
+    const common = layOutMaps(sizes);
+    return { boards: ordered.map((b, i) => ({ ...b, place: common.maps[i] })), common };
+  }
+
+  private ownIndex(): number {
+    return this.rivalWorld && this.duelRole === 'guest' ? 1 : 0;
+  }
+
+  /** Ramène la vue ajustée sur sa carte. */
+  private recenter(): void {
+    const { boards } = this.layout();
+    this.worldView = fittedView(boards[this.ownIndex()].place, this.zone);
   }
 
   // ─── Simulation ──────────────────────────────────────────────────────────
@@ -300,10 +330,15 @@ export class Game {
   private stepSim(): void {
     // Duel gelé : ni notre carte ni la carte adverse n'avancent, `Thawed` recale sur l'horloge du serveur.
     if (this.frozenMs !== null) return;
+    // Partie terminée (bilan affiché) : plus rien n'avance, ni vagues ni créatures, des deux côtés.
+    if (this.overlay === Overlay.End) return;
     this.world.step();
-    // Carte adverse avancée localement entre deux `Rival`, sans effet visuel ni sonore (pas la nôtre).
-    this.rivalWorld?.step();
-    this.rivalWorld?.drainEvents();
+    // Carte adverse avancée localement entre deux `Rival` : effets visuels, aucun son (pas la nôtre).
+    // Un monde restauré repart sans événement : rien n'est rejoué en double.
+    if (this.rivalWorld) {
+      this.rivalWorld.step();
+      this.rivalFx.consume(this.rivalWorld.drainEvents());
+    }
     const events = this.world.drainEvents();
     if (events.length === 0) return;
     this.fx.consume(events);
@@ -318,15 +353,20 @@ export class Game {
         this.toast(`Vague ${e.wave + 1} repoussée : +${e.bonus} or${e.income > 0 ? `, +${e.income} de revenu` : e.interest ? `, +${e.interest} d'intérêts` : ''}.`);
         break;
       case GameEventType.Leak:
+        // Carte hors champ : l'effet d'écran n'est pas vu, les vies tressautent à la place.
+        if (!isMapVisible(this.worldView, this.zone, this.layout().boards[this.ownIndex()].place)) this.flashLives();
         if (w.time - this.leakToastAt > 3) {
           this.leakToastAt = w.time;
           this.toast(e.boss ? `Le chef a franchi la porte : −${e.lives} vies.` : 'Une créature a franchi la porte.', true);
         }
-        if (this.viewingRival) this.flashLives();
         break;
       default:
         break;
     }
+  }
+
+  private flashLives(): void {
+    $('lives').animate([{ transform: 'scale(1.6)' }, { transform: 'scale(1)' }], 300);
   }
 
   private frame(dt: number): void {
@@ -335,22 +375,28 @@ export class Game {
       else if (!this.duelLost) this.updateLost(dt);
     }
     const w = this.world;
-    this.fx.update(this.loop.paused ? 0 : dt * this.loop.speed);
+    this.fx.update(this.loop.paused ? 0 : dt);
+    this.rivalFx.update(this.loop.paused ? 0 : dt);
 
-    if (this.selected?.kind === 'creep' && !w.creeps.some((c) => c.id === this.selected!.id && c.alive)) this.selected = null;
-    if (this.selected?.kind === 'tower' && !w.towerById.has(this.selected.id)) this.selected = null;
+    const sw = this.selectedWorld();
+    if (this.selected?.kind === 'creep' && !sw?.creeps.some((c) => c.id === this.selected!.id && c.alive)) this.selected = null;
+    if (this.selected?.kind === 'tower' && !sw?.towerById.has(this.selected.id)) this.selected = null;
 
     // Revalide l'emplacement fantôme : les créatures bougent.
     this.ghostCheck -= dt;
     if (this.buildDef && this.anchor && this.ghostCheck <= 0) this.updateGhost();
 
     this.view.buildDef = this.buildDef;
-    this.view.selectedTower = this.selected?.kind === 'tower' ? this.selected.id : null;
-    this.view.selectedCreep = this.selected?.kind === 'creep' ? this.selected.id : null;
+    const own = this.selected && !this.selected.rival ? this.selected : null;
+    const rival = this.selected?.rival ? this.selected : null;
+    this.view.selectedTower = own?.kind === 'tower' ? own.id : null;
+    this.view.selectedCreep = own?.kind === 'creep' ? own.id : null;
+    this.rivalView.selectedTower = rival?.kind === 'tower' ? rival.id : null;
+    this.rivalView.selectedCreep = rival?.kind === 'creep' ? rival.id : null;
     this.canvas.classList.toggle('building', !!this.buildDef);
 
-    this.renderer.draw(this.view, this.viewingRival ? this.noFx : this.fx, w.time, this.loop.realTime);
-    this.renderer.pruneFacing();
+    this.announceWave();
+    this.renderer.draw(this.layout().boards, this.worldView, this.ownIndex(), w.time, this.loop.realTime);
     this.updateHud();
     this.updateCard();
     this.updateInfo();
@@ -463,31 +509,6 @@ export class Game {
     else this.drainNow();
   }
 
-  private callWave(): void {
-    this.sfx.unlock();
-    if (this.overlay) return;
-    if (this.duelRole) {
-      // En duel, l'appel de vague est une demande à deux (D5) : pas de commande, pas de dispatch local.
-      this.link?.send({ t: ClientMessageType.Ready });
-      return;
-    }
-    const r = this.order({ c: CommandType.CallWave });
-    if (!r.ok) this.fail(r.reason);
-    else this.drainNow();
-  }
-
-  /** Fixe la vitesse de la boucle et surligne le bouton `[data-speed]` correspondant. */
-  private showSpeed(s: number): void {
-    this.loop.speed = s;
-    document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === s)));
-  }
-
-  private setSpeed(s: number): void {
-    if (this.duelRole) return;
-    this.showSpeed(s);
-    this.sendPace();
-  }
-
   private setPaused(p: boolean): void {
     this.loop.paused = p;
     $('pauseBtn').setAttribute('aria-pressed', String(p));
@@ -531,7 +552,39 @@ export class Game {
   private bindInput(): void {
     const c = this.canvas;
     c.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Appui gauche en cours : point d'appui, dernier point, et glisser reconnu (au-delà du seuil).
+    let press: { start: { x: number; y: number }; last: { x: number; y: number }; drag: boolean; touch: boolean } | null = null;
+    // Pointeurs actifs : à deux, le pincement zoome autour de leur milieu, sans glisser ni pose.
+    const pointers = new Map<number, { x: number; y: number }>();
+    const spread = (): number => {
+      const [a, b] = [...pointers.values()];
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    };
+    c.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (this.overlay) return;
+      this.zoomAt(Math.exp(-e.deltaY * 0.002), e.clientX, e.clientY);
+    }, { passive: false });
     c.addEventListener('pointermove', (e) => {
+      const p = { x: e.clientX, y: e.clientY };
+      if (pointers.has(e.pointerId)) {
+        const before = pointers.size === 2 ? spread() : 0;
+        pointers.set(e.pointerId, p);
+        if (pointers.size === 2) {
+          const [a, b] = [...pointers.values()];
+          const after = spread();
+          if (before > 0 && after > 0) this.zoomAt(after / before, (a.x + b.x) / 2, (a.y + b.y) / 2);
+          return;
+        }
+      }
+      if (press) {
+        if (!press.drag && isDrag(press.start, p)) press.drag = true;
+        if (press.drag) {
+          this.worldView = panView(this.worldView, p.x - press.last.x, p.y - press.last.y, this.layout().common, this.zone);
+          press.last = p;
+          return;
+        }
+      }
       if (e.pointerType === 'touch') return;
       this.pointerTo(e.clientX, e.clientY);
     });
@@ -542,16 +595,46 @@ export class Game {
       this.view.previewRoute = null;
     });
     c.addEventListener('pointerdown', (e) => {
-      if (this.overlay || this.viewingRival) return;
+      if (this.overlay) return;
       this.sfx.unlock();
       if (e.button === 2) {
         this.escape();
         return;
       }
-      const g = this.renderer.toGrid(e.clientX, e.clientY);
+      const p = { x: e.clientX, y: e.clientY };
+      pointers.set(e.pointerId, p);
+      // Capture : le relâchement au-dessus d'un panneau posé sur la toile arrive quand même ici.
+      c.setPointerCapture(e.pointerId);
+      press = pointers.size >= 2 ? null : { start: p, last: p, drag: false, touch: e.pointerType === 'touch' };
+    });
+    // Fin de pincement : le doigt resté posé fait glisser la vue depuis sa position, sans clic ni pose.
+    const release = (id: number): boolean => {
+      const pinched = pointers.size === 2;
+      pointers.delete(id);
+      const rest = pinched ? [...pointers.values()][0] : undefined;
+      press = rest ? { start: rest, last: rest, drag: true, touch: true } : null;
+      return pinched;
+    };
+    c.addEventListener('pointercancel', (e) => {
+      release(e.pointerId);
+    });
+    c.addEventListener('pointerup', (e) => {
+      const done = press;
+      if (release(e.pointerId)) return;
+      press = null;
+      if (!done || done.drag || this.overlay) return;
+      // Clic sur la carte adverse : fiche en lecture seule, sauf tour en main (rien n'est posé).
+      const hit = mapAt(this.layout().common, toWorldPoint(this.worldView, this.renderer.toScreen(e.clientX, e.clientY)));
+      if (hit && hit.index !== this.ownIndex() && this.rivalWorld && !this.buildDef) {
+        this.pick(this.rivalWorld, hit.x, hit.y, true);
+        return;
+      }
+      const g = this.ownCell(e.clientX, e.clientY);
+      // Clic hors de sa carte (adverse, écart, hors monde) : rien n'est posé, la tour reste en main.
+      if (!g) return;
       if (this.buildDef) {
         const a = this.anchorFor(g.x, g.y);
-        if (e.pointerType === 'touch') {
+        if (done.touch) {
           // Au doigt : premier appui = aperçu, second appui au même endroit = construction.
           if (this.touchPending && this.touchPending.x === a.x && this.touchPending.y === a.y) {
             this.build();
@@ -567,7 +650,7 @@ export class Game {
         this.build();
         return;
       }
-      this.pick(g.x, g.y);
+      this.pick(this.world, g.x, g.y, false);
     });
 
     const card = $('card');
@@ -606,7 +689,6 @@ export class Game {
       }
     });
 
-    $('callBtn').addEventListener('click', () => this.callWave());
     $('pauseBtn').addEventListener('click', () => this.togglePause());
     $('sendBtn').addEventListener('click', () => this.toggleSendPanel());
     // Souris sur `pointerdown` : `#sendPanel` est reconstruit quand l'or franchit un seuil, un `click` serait perdu.
@@ -629,9 +711,6 @@ export class Game {
     });
     $('muteBtn').addEventListener('click', () => this.toggleMute());
     $('helpBtn').addEventListener('click', () => (this.overlay === Overlay.Help ? this.escape() : this.showHelp()));
-    document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) =>
-      b.addEventListener('click', () => this.setSpeed(Number(b.dataset.speed))),
-    );
 
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -648,15 +727,13 @@ export class Game {
       else if (k === 'h' || k === '?') this.overlay === Overlay.Help ? this.escape() : this.showHelp();
       else if (k === 'p') this.togglePause();
       else if (this.overlay) return;
-      else if (k === ' ') {
-        e.preventDefault();
-        if (!e.repeat) this.callWave();
-      } else if (k === 'm') this.toggleMute();
-      else if (k === '1' || k === '2' || k === '3') this.setSpeed(Number(k));
+      else if (k === 'm') this.toggleMute();
       else if (k === 't') this.toggleSendPanel();
       else if (k === 'l') this.view.showRoute = !this.view.showRoute;
-      else if (k === 'o' && this.rivalWorld) this.toggleRivalView(true);
-      else if (k === 'i' && this.rivalWorld) this.toggleRivalView(false);
+      else if (k === ' ') {
+        e.preventDefault();
+        this.recenter();
+      }
       else if (KEYS.includes(k) && !e.repeat) {
         const i = KEYS.indexOf(k);
         if (this.slots[i]) {
@@ -667,13 +744,32 @@ export class Game {
     });
   }
 
+  private zoomAt(factor: number, clientX: number, clientY: number): void {
+    const { boards, common } = this.layout();
+    const fitted = fittedView(boards[this.ownIndex()].place, this.zone);
+    this.worldView = zoomView(this.worldView, factor, this.renderer.toScreen(clientX, clientY), common, fitted, this.zone);
+  }
+
+  /** Position écran → coordonnées de la grille de sa carte (cases, fractionnaires), null hors de sa carte. */
+  private ownCell(clientX: number, clientY: number): { x: number; y: number } | null {
+    const p = toWorldPoint(this.worldView, this.renderer.toScreen(clientX, clientY));
+    const hit = mapAt(this.layout().common, p);
+    return hit && hit.index === this.ownIndex() ? hit : null;
+  }
+
   private anchorFor(gx: number, gy: number): { x: number; y: number } {
     return { x: Math.round(gx - 1), y: Math.round(gy - 1) };
   }
 
   private pointerTo(cx: number, cy: number): void {
     if (!this.buildDef) return;
-    const g = this.renderer.toGrid(cx, cy);
+    const g = this.ownCell(cx, cy);
+    if (!g) {
+      this.anchor = null;
+      this.view.ghost = null;
+      this.view.previewRoute = null;
+      return;
+    }
     const a = this.anchorFor(g.x, g.y);
     if (!this.anchor || a.x !== this.anchor.x || a.y !== this.anchor.y) {
       this.anchor = a;
@@ -681,14 +777,13 @@ export class Game {
     }
   }
 
-  private pick(gx: number, gy: number): void {
-    const w = this.world;
+  private pick(w: World, gx: number, gy: number, rival: boolean): void {
     const cx = Math.floor(gx);
     const cy = Math.floor(gy);
     if (w.grid.inBounds(cx, cy)) {
       const id = w.grid.tower[w.grid.idx(cx, cy)];
       if (id) {
-        this.selected = { kind: 'tower', id };
+        this.selected = { kind: 'tower', id, rival };
         this.sfx.click();
         return;
       }
@@ -702,12 +797,12 @@ export class Game {
         bestD = d;
       }
     }
-    this.selected = best ? { kind: 'creep', id: best.id } : null;
+    this.selected = best ? { kind: 'creep', id: best.id, rival } : null;
   }
 
   private runSlot(i: number): void {
     const s = this.slots[i];
-    if (!s || this.overlay || this.viewingRival) return;
+    if (!s || this.overlay) return;
     s.run();
     this.cardKey = '';
   }
@@ -729,8 +824,13 @@ export class Game {
     return `<img src="${url}" alt="">`;
   }
 
+  private selectedWorld(): World | null {
+    return this.selected?.rival ? this.rivalWorld : this.world;
+  }
+
+  /** Tour sélectionnée sur sa carte : celles de l'adversaire ne se commandent pas. */
   private selectedTower(): Tower | undefined {
-    return this.selected?.kind === 'tower' ? this.world.towerById.get(this.selected.id) : undefined;
+    return this.selected?.kind === 'tower' && !this.selected.rival ? this.world.towerById.get(this.selected.id) : undefined;
   }
 
   private computeSlots(): (Slot | null)[] {
@@ -768,7 +868,7 @@ export class Game {
       };
       return slots;
     }
-    if (this.selected?.kind === 'creep') {
+    if (this.selected?.kind === 'creep' && !this.selected.rival) {
       slots[11] = { label: 'Retour', icon: ICON_BACK, run: () => (this.selected = null), info: () => '<h3>Retour</h3><p>Revient au menu de construction (Échap).</p>' };
       return slots;
     }
@@ -825,22 +925,10 @@ export class Game {
 
   private updateInfo(): void {
     this.updateSendPanel();
-    if (this.viewingRival) {
-      // Aucune fiche d'info en vue adverse (H1).
-      if (this.infoCache !== '') {
-        this.infoCache = '';
-        $('info').innerHTML = '';
-      }
-      if (this.unitCache !== '') {
-        this.unitCache = '';
-        $('unitText').innerHTML = '';
-      }
-      return;
-    }
     const w = this.world;
     let html: string;
     const hover = this.hoverSlot !== null ? this.slots[this.hoverSlot] : null;
-    const t = this.selectedTower();
+    const shown = this.selected?.kind === 'tower' ? this.selectedWorld()?.towerById.get(this.selected.id) : undefined;
     if (hover) html = hover.info();
     else if (this.buildDef) {
       const def = TOWERS[this.buildDef];
@@ -853,13 +941,9 @@ export class Game {
           : `<p>Trajet inchangé : ${fmt0(now)} cases.</p>`;
       }
       html = towerInfo(def, def.cost) + status;
-    } else if (t) {
-      const extra = t.def.attack
-        ? `<p>${fmt0(t.kills)} éliminations · ${fmt0(t.damage)} dégâts infligés · ciblage ${TARGET_LABEL[t.targetMode].toLowerCase()} · revente ${refundValue(t)} or</p>`
-        : `<p>Revente ${refundValue(t)} or. Sélectionnez une tour à transformer.</p>`;
-      html = towerInfo(t.def, null) + extra;
-    } else if (this.selected?.kind === 'creep') {
-      const c = w.creeps.find((k) => k.id === this.selected!.id);
+    } else if (shown) html = placedTowerInfo(shown, !this.selected!.rival);
+    else if (this.selected?.kind === 'creep') {
+      const c = this.selectedWorld()?.creeps.find((k) => k.id === this.selected!.id);
       html = c ? creepInfo(c) : nextWaveInfo(waveBriefing(w));
     } else html = nextWaveInfo(waveBriefing(w));
     if (html !== this.infoCache) {
@@ -873,10 +957,10 @@ export class Game {
       const def = TOWERS[this.buildDef];
       const touch = matchMedia('(pointer: coarse)').matches;
       unit = `<h2>${def.name}</h2><div class="sub">Construction · ${def.cost} or</div><div class="facts">${touch ? 'Touchez pour prévisualiser, touchez à nouveau pour bâtir.' : 'Clic pour bâtir · Échap pour annuler'}</div>`;
-    } else if (t) {
-      const family = t.def.elements ? `${elementsLabel(t.def)} · hybride` : FAMILY_LABEL[t.def.family];
-      unit = `<h2>${t.def.name}</h2><div class="sub">${family}${t.def.tier ? ` · niveau ${t.def.tier}` : ''}</div><div class="facts">${t.def.attack ? `${ATTACK_LABEL[t.def.attack.type]} · ${fmt0(t.kills)} éliminations` : 'Bloc de labyrinthe'}</div>`;
-    } else if (this.selected?.kind === 'creep') {
+    } else if (shown && !this.selected!.rival) {
+      const family = shown.def.elements ? `${elementsLabel(shown.def)} · hybride` : FAMILY_LABEL[shown.def.family];
+      unit = `<h2>${shown.def.name}</h2><div class="sub">${family}${shown.def.tier ? ` · niveau ${shown.def.tier}` : ''}</div><div class="facts">${shown.def.attack ? `${ATTACK_LABEL[shown.def.attack.type]} · ${fmt0(shown.kills)} éliminations` : 'Bloc de labyrinthe'}</div>`;
+    } else if (this.selected?.kind === 'creep' && !this.selected.rival) {
       const c = w.creeps.find((k) => k.id === this.selected!.id);
       unit = c
         ? `<h2>${c.def.name}</h2><div class="sub">Armure ${ARMOR_LABEL[c.def.armorType].toLowerCase()} · vague ${c.wave + 1}</div><div class="hpbar"><i style="width:${Math.max(0, (c.hp / c.maxHp) * 100).toFixed(1)}%"></i></div><div class="facts">${fmt0(c.hp)} / ${fmt0(c.maxHp)} PV</div>`
@@ -922,7 +1006,7 @@ export class Game {
       return;
     }
     let creep: Creep | undefined;
-    if (this.selected?.kind === 'creep') creep = w.creeps.find((k) => k.id === this.selected!.id);
+    if (this.selected?.kind === 'creep' && !this.selected.rival) creep = w.creeps.find((k) => k.id === this.selected!.id);
     const def = creep ? creep.def : CREEPS[waveAt(w.wave + 1).groups[0].creep];
     const span = Math.max(1.4, def.radius * 4.2);
     const s = c.width / span;
@@ -931,6 +1015,15 @@ export class Game {
       def, x: span / 2, y: span / 2 + (def.air ? 0.3 : 0.05), hp: 1, maxHp: 1,
       slowPct: creep?.slowPct ?? 0, poisons: creep?.poisons ?? [], shred: 0, hitFlash: 0, bob: 0,
     }, 1, 0.6, time, false);
+  }
+
+  /** À chaque nouvelle vague : récapitulatif sous la bannière, et en duel annonce de ce qui part chez le rival. */
+  private announceWave(): void {
+    const w = this.world;
+    if (w.wave === this.announcedWave) return;
+    this.announcedWave = w.wave;
+    if (this.fx.banner) this.fx.banner.lines = waveRecap(waveBriefing(w, w.wave), groupSends(w.waveSends.received), this.rivalNick);
+    if (this.duelRole && w.waveSends.sent.length) this.toast(sentMessage(groupSends(w.waveSends.sent), this.rivalNick));
   }
 
   private updateHud(): void {
@@ -946,7 +1039,6 @@ export class Game {
     set('lives', fmt0(w.lives));
     $('lives').style.color = w.lives <= 5 ? PAL.danger : '';
     set('wave', String(Math.max(0, w.wave + 1)));
-    set('maze', fmt0(w.mazeLength()));
     const sendHidden = String(!this.duelRole);
     if (this.hud.sendHidden !== sendHidden) {
       this.hud.sendHidden = sendHidden;
@@ -956,15 +1048,6 @@ export class Game {
     const secs = Math.ceil(Math.max(0, w.nextWaveIn));
     set('timerLabel', can ? 'Vague suivante : ' : '');
     set('timer', can ? `${secs} s` : '');
-    const bonus = can ? Math.floor(Math.max(0, w.nextWaveIn) * 0.5) : 0;
-    const label = can ? (bonus > 0 ? `Appeler +${bonus}` : 'Appeler') : 'Appeler';
-    if (this.hud.call !== label + can) {
-      this.hud.call = label + can;
-      const b = $<HTMLButtonElement>('callBtn');
-      b.innerHTML = `${label}<kbd>Espace</kbd>`;
-      b.disabled = !can;
-      b.style.opacity = can ? '' : '0.45';
-    }
   }
 
   // ─── Carte adverse (duel) ────────────────────────────────────────────────
@@ -972,14 +1055,14 @@ export class Game {
   /** Crée l'encart adverse permanent et son bouton de bascule de vue, une fois par duel. */
   private ensureRivalPanel(): void {
     if (document.getElementById('rivalPanel')) return;
-    const bar = document.querySelector('header.bar');
-    if (!bar) return;
-    const panel = document.createElement('span');
+    const side = document.getElementById('stageSide');
+    if (!side) return;
+    const panel = document.createElement('details');
     panel.id = 'rivalPanel';
-    panel.className = 'res';
-    panel.innerHTML = `<small id="rivalNick"></small> <small id="rivalBuilder"></small> <b id="rivalLives">0</b> vies · <b id="rivalGold">0</b> or · <span id="rivalEconomy"></span> <button type="button" class="btn" id="rivalViewBtn">Voir l'adversaire</button>`;
-    bar.insertBefore(panel, $('pauseBtn'));
-    $('rivalViewBtn').addEventListener('click', () => this.toggleRivalView(!this.viewingRival));
+    panel.className = 'rival-panel';
+    panel.innerHTML = `<summary id="rivalHeadline"></summary><div id="rivalDetail"></div><button type="button" class="btn" id="rivalViewBtn">Ma carte</button>`;
+    side.prepend(panel);
+    $('rivalViewBtn').addEventListener('click', () => this.recenter());
   }
 
   private removeRivalPanel(): void {
@@ -993,9 +1076,10 @@ export class Game {
 
   private applyRivalSnapshot(snapshot: WorldSnapshot, nick = this.rivalNick): void {
     this.ensureRivalPanel();
+    const first = !this.rivalWorld;
     this.rivalWorld = restore(snapshot);
     this.rivalNick = nick;
-    if (this.viewingRival) this.renderer.setWorld(this.rivalWorld);
+    if (first) this.recenter();
     this.updateRivalPanel();
   }
 
@@ -1004,39 +1088,10 @@ export class Game {
     const set = (id: string, v: string) => {
       if (this.rivalHud[id] === v) return;
       this.rivalHud[id] = v;
-      $(id).textContent = v;
+      $(id).innerHTML = v;
     };
-    set('rivalNick', this.rivalNick);
-    set('rivalBuilder', this.rivalWorld.builder.name);
-    set('rivalLives', fmt0(this.rivalWorld.lives));
-    set('rivalGold', fmt0(this.rivalWorld.gold));
-    set('rivalEconomy', rivalEconomy(this.rivalWorld.income, this.rivalWorld.gleaners.length, this.rivalWorld.gate));
-  }
-
-  /** Bascule entre sa propre carte et la carte adverse (touches `O`/`I`, boutons « Voir l'adversaire »/« Ma carte »). */
-  private toggleRivalView(rival: boolean): void {
-    if (rival === this.viewingRival || !this.rivalWorld) return;
-    this.viewingRival = rival;
-    this.renderer.setWorld(rival ? this.rivalWorld : this.world);
-    if (rival) {
-      // Sélection et aperçu de pose n'ont plus de sens sur la carte adverse (lecture seule).
-      this.selected = null;
-      this.setBuild(null);
-    }
-    const btn = document.getElementById('rivalViewBtn');
-    if (btn) btn.textContent = rival ? 'Ma carte' : "Voir l'adversaire";
-    this.resize();
-  }
-
-  /** Réagit à une fuite sur sa propre carte même en vue adverse : l'encart de vies tressaute un instant. */
-  private flashLives(): void {
-    const el = $('lives');
-    el.style.transition = 'none';
-    el.style.transform = 'scale(1.4)';
-    requestAnimationFrame(() => {
-      el.style.transition = 'transform 0.3s';
-      el.style.transform = 'scale(1)';
-    });
+    set('rivalHeadline', rivalHeadline(this.rivalNick, this.rivalWorld.lives));
+    set('rivalDetail', rivalDetail(this.rivalWorld));
   }
 
   private toast(msg: string, bad = false): void {
@@ -1236,11 +1291,10 @@ export class Game {
     this.link = link;
     this.attachLink(link);
     this.world = restore(msg.snapshot);
+    this.announcedWave = this.world.wave;
     this.mapId = this.world.map.id;
     this.difficulty = this.world.difficulty;
-    this.renderer.setWorld(this.world);
     this.resize();
-    this.showSpeed(msg.speed);
     this.setPaused(msg.paused);
     this.savePending();
     if (msg.paused) this.showPause();
@@ -1255,7 +1309,6 @@ export class Game {
     this.world = restore(msg.snapshot);
     this.mapId = this.world.map.id;
     this.difficulty = this.world.difficulty;
-    this.renderer.setWorld(this.world);
     this.resize();
     this.saveBest();
     this.toast('La partie est terminée.', true);
@@ -1306,7 +1359,7 @@ export class Game {
     this.link = null;
     this.setPaused(true);
     this.openOverlay(Overlay.Start, `
-      <div class="sheet">
+      <div class="sheet wide">
         <h1>Tower Defense</h1>
         <p class="lede">Bâtissez le labyrinthe, tenez la porte. Trente vagues, trois chefs, et un seul chemin que vous dessinez vous-même.</p>
         <div class="mode-tabs" role="tablist" aria-label="Mode de jeu">
@@ -1529,7 +1582,7 @@ export class Game {
     const link = this.duelLink;
     if (!link) return;
     this.world = restore(snapshot);
-    this.renderer.setWorld(this.world);
+    this.announcedWave = this.world.wave;
     this.fx.clear();
     this.selected = null;
     this.buildDef = null;
@@ -1539,12 +1592,10 @@ export class Game {
     this.hud = {};
     this.rivalWorld = null;
     this.rivalNick = '';
-    this.viewingRival = false;
     this.rivalHud = {};
     this.resetLostState();
     this.resize();
     this.closeOverlay();
-    this.showSpeed(1);
     this.setPaused(false);
     this.gameId = null;
     this.gameToken = null;
@@ -1561,7 +1612,6 @@ export class Game {
     switch (msg.t) {
       case ServerMessageType.Drift:
         this.world = realign(msg.snapshot, this.world.log, this.world.tick);
-        if (!this.viewingRival) this.renderer.setWorld(this.world);
         break;
       case ServerMessageType.Rival:
         this.applyRival(msg);
@@ -1572,16 +1622,12 @@ export class Game {
         this.resetLostState();
         this.showDuelEnd(msg);
         break;
-      case ServerMessageType.Readiness:
-        this.applyReadiness(msg);
-        break;
       case ServerMessageType.Frozen:
         this.frozenMs = msg.remainingMs;
         this.showFrozen();
         break;
       case ServerMessageType.Thawed:
         this.world = realign(msg.snapshot, this.world.log, this.world.tick);
-        if (!this.viewingRival) this.renderer.setWorld(this.world);
         this.applyRivalSnapshot(msg.rival);
         this.frozenMs = null;
         this.closeOverlay();
@@ -1589,12 +1635,6 @@ export class Game {
       default:
         break;
     }
-  }
-
-  /** Affiche l'état de la demande d'appel à deux (RM-08) ; rien tant que personne n'est prêt. */
-  private applyReadiness(msg: Extract<ServerMessage, { t: ServerMessageType.Readiness }>): void {
-    if (msg.self && !msg.rival) this.toast('Prêt — en attente de l\'adversaire.');
-    else if (!msg.self && msg.rival) this.toast('Adversaire prêt.');
   }
 
   /** Bilan d'une partie (tours, familles, vagues, briseurs), factorisé entre l'écran solo et l'écran de duel. */
@@ -1631,7 +1671,6 @@ export class Game {
     const rival = restore(msg.rival);
     const rivalNick = escapeHtml((this.duelRole === 'host' ? this.duelGuestNick : this.duelHostNick) ?? 'Adversaire');
     this.world = own;
-    this.renderer.setWorld(this.world);
     this.openOverlay(Overlay.End, `
       <div class="sheet">
         <h2>${escapeHtml(duelVerdictLabel(msg.verdict))}</h2>
@@ -1679,7 +1718,7 @@ export class Game {
     const status = `<p>${host} : ${picked(this.duelPicked.host)} · ${guest} : ${picked(this.duelPicked.guest)}</p>`;
     const startBtn = this.duelRole === 'host' ? '<button type="button" class="btn primary" id="startDuel">Lancer la partie</button>' : '';
     return `
-      <div class="sheet" style="width:min(360px,100%);text-align:center">
+      <div class="sheet wide" style="text-align:center">
         <h2>Partie à deux</h2>
         ${code}
         <p>${host} contre ${guest}</p>
@@ -1719,14 +1758,12 @@ export class Game {
     this.duelInRoom = false;
     this.setDuelControlsHidden(false);
     this.rivalWorld = null;
-    this.viewingRival = false;
     this.removeRivalPanel();
   }
 
-  /** Masque pause et vitesse pendant un duel : le rythme y est fixé, commun aux deux joueurs. */
+  /** Masque la pause pendant un duel : le rythme y est fixé, commun aux deux joueurs. */
   private setDuelControlsHidden(hidden: boolean): void {
     $('pauseBtn').hidden = hidden;
-    document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((b) => (b.hidden = hidden));
   }
 
   /** Bouton « Reprendre la partie » : ouvre une liaison neuve à chaque clic, la clé locale n'est jamais effacée sur échec réseau. */
@@ -1785,8 +1822,7 @@ export class Game {
         <div class="keys">
           <kbd>Q W E R A S</kbd><span>Choisir une construction (le panneau suit la disposition de Warcraft III)</span>
           <kbd>Clic</kbd><span>Bâtir ou sélectionner · clic droit ou Échap pour annuler</span>
-          <kbd>Espace</kbd><span>Appeler la vague suivante en avance, contre de l'or</span>
-          <kbd>1 2 3</kbd><span>Vitesse de jeu</span>
+          <kbd>Glisser</kbd><span>Déplacer la vue · <kbd>Molette</kbd> ou pincement pour zoomer · <kbd>Espace</kbd> revenir sur sa carte</span>
           <kbd>P</kbd><span>Pause · <kbd>M</kbd> son · <kbd>L</kbd> afficher le trajet</span>
           <kbd>Z · V</kbd><span>Sur une tour : changer le ciblage, vendre</span>
         </div>

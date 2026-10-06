@@ -84,23 +84,40 @@
   .btn.primary { background: #3a2c14; border-color: var(--bronze); color: var(--gold); }
   .btn.primary:hover { background: #4a3818; }
   .btn[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
-  .seg { display: flex; }
-  .seg .btn { border-radius: 0; margin-left: -1px; padding: 5px 9px; }
-  .seg .btn:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
-  .seg .btn:last-child { border-radius: 0 4px 4px 0; }
   .icon-btn { padding: 5px 8px; display: inline-flex; align-items: center; }
   .icon-btn svg { width: 16px; height: 16px; }
   kbd { font: 500 11px var(--caps); color: var(--text-faint); border: 1px solid var(--line-soft); border-radius: 3px; padding: 0 4px; margin-left: 4px; }
 
   /* Scène */
-  .stage { position: relative; display: grid; place-items: center; min-height: 0; overflow: hidden; padding: 10px 16px; }
-  #game { display: block; border: 1px solid var(--line); box-shadow: 0 0 0 1px #000, 0 12px 30px rgba(0,0,0,0.5); touch-action: none; cursor: default; }
+  .stage { position: relative; display: grid; place-items: center; min-height: 0; overflow: hidden; padding: 0; }
+  #game { display: block; touch-action: none; cursor: default; }
   #game.building { cursor: crosshair; }
-  .send-panel {
+  /* Colonne droite : l'encart adverse (duel) au-dessus du panneau d'envois, jamais l'un sur l'autre. */
+  .stage-side {
     position: absolute; top: 10px; right: 16px; z-index: 2; width: min(300px, calc(100% - 32px));
-    max-height: calc(100% - 20px); overflow: auto; padding: 10px 12px;
+    max-height: calc(100% - 20px); display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  }
+  .stage-side > * { pointer-events: auto; }
+  .send-panel, .rival-panel {
+    overflow: auto; padding: 10px 12px;
     background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px #0009;
   }
+  .rival-panel summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font: 700 15px var(--caps); letter-spacing: 0.04em; }
+  .rival-panel summary::marker { color: var(--text-dim); }
+  .rival-panel .rv-nick { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rival-panel .rv-lives { display: inline-flex; align-items: center; gap: 4px; }
+  .rival-panel svg { width: 18px; height: 18px; flex: none; }
+  .rival-panel #rivalDetail { margin: 8px 0; color: var(--text-dim); }
+  .rv-builder { margin: 0 0 8px; color: var(--text); }
+  .rv-builder span { font: 500 12px var(--caps); color: var(--text-dim); letter-spacing: 0.03em; margin-right: 4px; }
+  .rv-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .rv-stat {
+    display: grid; grid-template-columns: auto 1fr; grid-template-areas: "icon label" "icon value"; column-gap: 8px; align-items: center;
+    padding: 6px 8px; background: var(--slot); border: 1px solid var(--line); border-radius: 4px;
+  }
+  .rv-stat svg { grid-area: icon; width: 22px; height: 22px; }
+  .rv-stat span { grid-area: label; font: 500 11px var(--caps); letter-spacing: 0.03em; color: var(--text-dim); }
+  .rv-stat strong { grid-area: value; font-weight: 600; color: var(--text); }
   .send-panel h3 { margin: 0 0 6px; font: 700 15px var(--caps); letter-spacing: 0.04em; }
   .send-panel p { margin: 0 0 4px; color: var(--text-dim); }
   .send-panel .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
@@ -122,7 +139,7 @@
   .sends button:disabled .cost { color: var(--bad); }
   .sends button:disabled .gain { color: var(--text-faint); }
   .toast {
-    position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
+    position: absolute; z-index: 6; left: 50%; bottom: 20px; transform: translateX(-50%);
     background: rgba(20, 16, 11, 0.92); border: 1px solid var(--line); border-radius: 4px;
     padding: 6px 14px; font-size: 15px; pointer-events: none; opacity: 0; transition: opacity 0.2s;
     max-width: calc(100% - 32px); text-align: center;
@@ -179,6 +196,8 @@
     box-sizing: border-box; width: min(640px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
     box-shadow: 0 0 0 1px #000, 0 24px 60px rgba(0,0,0,0.6); padding: 24px 26px; margin: auto;
   }
+  .sheet.wide { width: min(1100px, 100%); }
+  .sheet.wide ol { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); column-gap: 32px; }
   .sheet h1 { margin: 0; font: 700 64px/0.95 var(--display); color: var(--gold); letter-spacing: 0.01em; }
   .sheet h2 { margin: 0 0 6px; font: 700 34px/1 var(--display); color: var(--text); }
   .sheet .lede { margin: 6px 0 18px; color: var(--text-dim); font-size: 17px; }
@@ -305,7 +324,6 @@
       <b id="lives">0</b>
     </span>
     <span class="res"><small>Vague</small> <b id="wave">0</b></span>
-    <span class="res hide-sm" title="Longueur du trajet terrestre, en cases"><small>Labyrinthe</small> <b id="maze">0</b></span>
     <span class="spacer"></span>
     <span class="next">
       <span class="briefing" id="briefing" tabindex="0" hidden>
@@ -313,12 +331,6 @@
         <span class="detail" id="briefingDetail"></span>
       </span>
       <span class="timer"><span class="hide-sm" id="timerLabel"></span><span id="timer"></span></span>
-      <button class="btn primary" id="callBtn" type="button">Appeler<kbd>Espace</kbd></button>
-    </span>
-    <span class="seg" role="group" aria-label="Vitesse de jeu">
-      <button class="btn" type="button" data-speed="1" aria-pressed="true">x1</button>
-      <button class="btn" type="button" data-speed="2" aria-pressed="false">x2</button>
-      <button class="btn" type="button" data-speed="3" aria-pressed="false">x3</button>
     </span>
     <button class="btn" id="sendBtn" type="button" title="Envois (T)" hidden>Envois<kbd>T</kbd></button>
     <button class="btn icon-btn" id="pauseBtn" type="button" aria-label="Pause" title="Pause (P)">
@@ -332,7 +344,9 @@
 
   <main class="stage" id="stage">
     <canvas id="game" aria-label="Carte du jeu"></canvas>
-    <aside class="send-panel" id="sendPanel" aria-label="Envois" hidden></aside>
+    <div class="stage-side" id="stageSide">
+      <aside class="send-panel" id="sendPanel" aria-label="Envois" hidden></aside>
+    </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="overlay" id="overlay" hidden></div>
   </main>

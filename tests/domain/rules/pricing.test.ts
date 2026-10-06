@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { gateLevelCost, gateLevelIncome, refundValue } from '../../../src/domain/rules/pricing';
 import { newWorld } from '../../support/helpers';
+import { launchWave } from '../../../src/domain/systems/waves';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('pricing', () => {
@@ -17,7 +18,7 @@ describe('pricing', () => {
     const w = newWorld();
     const r = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 });
     const t = w.towerById.get((r as { id: number }).id)!;
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     expect(refundValue(t)).toBe(5);
   });
 

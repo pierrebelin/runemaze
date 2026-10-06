@@ -4,18 +4,22 @@ import { applyOnHit } from '../../src/domain/systems/status';
 import { spawnCreep } from '../../src/domain/systems/waves';
 import type { TowerDef } from '../../src/domain/model/types';
 import type { WaveBriefing } from '../../src/application/queries/waveBriefing';
+import { groupSends } from '../../src/application/queries/waveBriefing';
 import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   briefingChip, briefingInfo, builderCard,
   creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, nextWaveInfo, rivalEconomy, sendPanel, towerSpecials,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, nextWaveInfo, placedTowerInfo, rivalDetail, rivalHeadline, sendPanel, sentMessage, towerSpecials, waveRecap,
 } from '../../src/presentation/describe';
 import { GLEANER } from '../../src/domain/catalog/ether';
 import { Verdict } from '../../src/application/online/protocol';
 import { TOWERS, tower } from '../../src/domain/catalog/towers';
 import { builder } from '../../src/domain/catalog/builders';
 import { familyDamage, towerRanking, towerYield } from '../../src/domain/rules/debrief';
-import { newWorld } from '../support/helpers';
+import { dispatch } from '../../src/application/dispatch';
+import { waveBriefing } from '../../src/application/queries/waveBriefing';
+import { CommandType } from '../../src/domain/model/types';
+import { newDuelWorld, newWorld } from '../support/helpers';
 
 const attack = (extra: Partial<AttackDef>): AttackDef => ({
   type: 'normal', dmg: [1, 1], cooldown: 1, range: 4, projectileSpeed: 10, targets: 'both', ...extra,
@@ -176,7 +180,6 @@ describe('aperçu de la prochaine vague', () => {
       { creep: CREEPS.wolf, count: 3, hp: 437, bounty: 23 },
       { creep: CREEPS.rat, count: 2, hp: 128, bounty: 9 },
     ],
-    incoming: 0,
   };
 
   it('[RM-03] résume chaque groupe dans la barre du haut quand la vague est mixte', () => {
@@ -206,26 +209,27 @@ describe('aperçu de la prochaine vague', () => {
     expect(html).toContain('9 or');
   });
 
-  const ratOnly = (incoming: number): WaveBriefing => ({
-    wave: 4,
-    groups: [{ creep: CREEPS.rat, count: 2, hp: 128, bounty: 9 }],
-    incoming,
+  const withAndWithoutSends = () => {
+    const without = newDuelWorld();
+    const received = newDuelWorld();
+    dispatch(received, { c: CommandType.Receive, creep: 'wolf' });
+    dispatch(received, { c: CommandType.Receive, creep: 'wolf' });
+    expect(received.sends.length).toBe(2);
+    return { without: waveBriefing(without), received: waveBriefing(received) };
+  };
+
+  it('[RM-04] ne mentionne aucun envoi dans la fiche de la prochaine vague quand des envois sont reçus', () => {
+    const { without, received } = withAndWithoutSends();
+
+    expect(nextWaveInfo(received)).not.toContain('envoi');
+    expect(nextWaveInfo(received)).toBe(nextWaveInfo(without));
   });
 
-  it('[RM-06] affiche « 2 envois en approche » sans nommer leur créature', () => {
-    // Les envois sont des loups : le briefing ne porte que des rats.
-    for (const html of [nextWaveInfo(ratOnly(2)), briefingChip(ratOnly(2))]) {
-      expect(html).toContain('2 envois en approche');
-      expect(html).not.toContain(CREEPS.wolf.name);
-      expect(html).not.toContain(CREEPS.wolf.plural);
-    }
-  });
+  it('[RM-04] ne mentionne aucun envoi dans le résumé du haut quand des envois sont reçus', () => {
+    const { without, received } = withAndWithoutSends();
 
-  it('[RM-06] n\'affiche rien des envois quand aucun n\'est en approche', () => {
-    for (const show of [nextWaveInfo, briefingChip]) {
-      expect(show(ratOnly(2))).toContain('envoi');
-      expect(show(ratOnly(0))).not.toContain('envoi');
-    }
+    expect(briefingChip(received)).not.toContain('envoi');
+    expect(briefingChip(received)).toBe(briefingChip(without));
   });
 });
 
@@ -312,20 +316,60 @@ describe('panneau de la Porte', () => {
 });
 
 describe('encart de l’économie adverse', () => {
-  it('[CU-04] affiche revenu, nombre de glaneurs, niveaux de Tir et de Remparts de l’adversaire', () => {
-    const text = rivalEconomy(37, 4, { shot: 2, ramparts: 3, cooldown: 0 });
+  it('[RM-04] détaille bâtisseur, or, revenu, glaneurs, Tir et Remparts quand l’encart est déroulé', () => {
+    const w = newDuelWorld();
+    w.gold = 568;
+    w.income = 37;
+    w.gleaners = [0, 0, 0, 0];
+    w.gate.shot = 2;
+    w.gate.ramparts = 3;
 
+    const text = rivalDetail(w);
+
+    expect(text).toContain(w.builder.name);
+    expect(text).toContain('568');
     expect(text).toMatch(/revenu\D*37/i);
     expect(text).toMatch(/glaneurs?\D*4/i);
     expect(text).toMatch(/Tir\D*2/);
     expect(text).toMatch(/Remparts\D*3/);
   });
 
-  it('[RM-11] ne mentionne jamais l’éther de l’adversaire', () => {
-    const text = rivalEconomy(37, 4, { shot: 2, ramparts: 3, cooldown: 0 });
+  it('[RM-04] ne mentionne jamais l’éther de l’adversaire quand l’encart est déroulé', () => {
+    const w = newDuelWorld();
+    w.gold = 568;
+    w.ether = 777;
 
-    expect(text).toContain('37');
+    const text = rivalDetail(w);
+
+    expect(text).toContain('568');
     expect(text.toLowerCase()).not.toContain('éther');
+    expect(text).not.toContain('777');
+  });
+});
+
+describe('encart adverse replié', () => {
+  it('[RM-03] montre le pseudo et les vies de l’adversaire quand l’encart est replié', () => {
+    const text = rivalHeadline('Paul', 17);
+
+    expect(text).toContain('Paul');
+    expect(text).toContain('17');
+  });
+
+  it('[RM-03] ne montre ni or, ni revenu, ni bâtisseur quand l’encart est replié', () => {
+    const text = rivalHeadline('Paul', 17);
+
+    expect(text).toContain('Paul');
+    expect(text).not.toMatch(/\bor\b/i);
+    expect(text).not.toMatch(/revenu/i);
+    expect(text).not.toMatch(/bâtisseur/i);
+    expect(text).not.toMatch(/glaneur/i);
+  });
+
+  it('[RM-03] échappe le pseudo quand il contient du HTML', () => {
+    const text = rivalHeadline('<b>x</b>', 3);
+
+    expect(text).not.toContain('<b>');
+    expect(text).toContain('&lt;b&gt;');
   });
 });
 
@@ -380,11 +424,88 @@ describe('effets des tours signature', () => {
   });
 });
 
+describe('placedTowerInfo', () => {
+  it('[RM-07] montre éliminations, dégâts, ciblage et revente quand la tour est adverse', () => {
+    const t = towerFixture({ def: TOWERS.archer, kills: 12, damage: 3456, targetMode: 'strong', spent: 100 });
+
+    const html = placedTowerInfo(t, false);
+
+    expect(html).toContain(`${fmt0(12)} éliminations`);
+    expect(html).toContain(`${fmt0(3456)} dégâts infligés`);
+    expect(html).toContain('ciblage plus robuste');
+    expect(html).toMatch(/revente \d+ or/);
+  });
+
+  it('[RM-07] omet l’invitation à transformer quand le mur est adverse', () => {
+    const t = towerFixture({ def: TOWERS.wall, spent: 10 });
+
+    const html = placedTowerInfo(t, false);
+
+    expect(html).toMatch(/Revente \d+ or/);
+    expect(html).not.toContain('transformer');
+  });
+
+  it('[RM-07] invite à transformer quand le mur est à soi', () => {
+    const t = towerFixture({ def: TOWERS.wall, spent: 10 });
+
+    expect(placedTowerInfo(t, true)).toContain('Sélectionnez une tour à transformer');
+  });
+});
+
 describe('verdict de duel', () => {
   it('[RM-14] nomme « Victoire », « Défaite », « Égalité » et « Victoire par forfait » selon le verdict', () => {
     expect(duelVerdictLabel(Verdict.Victory)).toBe('Victoire');
     expect(duelVerdictLabel(Verdict.Defeat)).toBe('Défaite');
     expect(duelVerdictLabel(Verdict.Draw)).toBe('Égalité');
     expect(duelVerdictLabel(Verdict.Forfeit)).toBe('Victoire par forfait');
+  });
+});
+
+describe('message d’envoi', () => {
+  it('[RM-05] annonce « Vos 3 Harpies et 2 Loups gris attaquent Paul » quand deux créatures sont envoyées', () => {
+    const groups = groupSends(['harpy', 'harpy', 'harpy', 'wolf', 'wolf']);
+
+    expect(sentMessage(groups, 'Paul')).toBe('Vos 3 Harpies et 2 Loups gris attaquent Paul');
+  });
+
+  it('[RM-05] annonce « Votre Harpie attaque Paul » quand un seul envoi part', () => {
+    expect(sentMessage(groupSends(['harpy']), 'Paul')).toBe('Votre Harpie attaque Paul');
+  });
+});
+
+describe('récapitulatif de vague', () => {
+  it('[RM-07] liste « 12 Vouivres · air » et « 12 Maraudeurs · sol » pour la vague 12, sans répéter le titre de la bannière', () => {
+    const lines = waveRecap(waveBriefing(newWorld(), 11), [], 'Paul');
+
+    expect(lines).toContain('12 Vouivres · air');
+    expect(lines).toContain('12 Maraudeurs · sol');
+    expect(lines.join(' ')).not.toContain('Vague');
+  });
+
+  it('[RM-07] place le chef en premier avec la mention « chef »', () => {
+    const lines = waveRecap(waveBriefing(newWorld(), 9), [], 'Paul');
+
+    expect(lines[0]).toBe('1 Ogre chef de guerre · sol · chef');
+    expect(lines.findIndex((l) => l.includes('Maraudeurs'))).toBeGreaterThan(0);
+  });
+
+  it('[RM-07] accorde au singulier un groupe d’une seule créature', () => {
+    const single: WaveBriefing = { wave: 4, groups: [{ creep: CREEPS.wolf, count: 1, hp: 437, bounty: 23 }] };
+
+    expect(waveRecap(single, [], 'Paul')).toEqual(['1 Loup gris · sol']);
+  });
+
+  it('[RM-08] liste « Envoyés par Paul » avec chaque créature reçue, son nombre et sol ou air', () => {
+    const lines = waveRecap(waveBriefing(newWorld(), 11), groupSends(['harpy', 'harpy', 'harpy', 'wolf']), 'Paul');
+
+    const sent = lines.slice(lines.indexOf('Envoyés par Paul'));
+    expect(sent).toEqual(['Envoyés par Paul', '3 Harpies · air', '1 Loup gris · sol']);
+  });
+
+  it('[RM-08] omet la partie des envois quand aucun envoi n’est reçu', () => {
+    const lines = waveRecap(waveBriefing(newWorld(), 11), [], 'Paul');
+
+    expect(lines).toContain('12 Vouivres · air');
+    expect(lines.join(' ')).not.toContain('Envoyés par');
   });
 });

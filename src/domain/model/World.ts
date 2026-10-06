@@ -65,6 +65,9 @@ export class World {
   nextWaveIn = FIRST_WAVE_DELAY;
   spawners: Spawner[] = [];
   sends: string[] = [];
+  sent: string[] = [];
+  /** Envois figés au lancement de la vague en cours : achetés et reçus. */
+  waveSends: { sent: string[]; received: string[] } = { sent: [], received: [] };
   /** Créatures restantes (vivantes ou pas encore apparues) par vague. */
   pending = new Map<number, number>();
 

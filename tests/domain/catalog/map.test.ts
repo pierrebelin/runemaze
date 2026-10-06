@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { dispatch } from '../../../src/application/dispatch';
 import { MAPS } from '../../../src/domain/catalog/map';
 import { World } from '../../../src/domain/model/World';
 import type { Difficulty } from '../../../src/domain/model/types';
-import { CommandType } from '../../../src/domain/model/types';
+import { launchWave } from '../../../src/domain/systems/waves';
 
 describe('MAPS', () => {
   describe.each(MAPS)('$name', (map) => {
@@ -54,7 +53,7 @@ describe('MAPS', () => {
   it('[CU-02] fait sortir une créature des Deux Sceaux après la pierre 1 puis la pierre 2', () => {
     const seals = MAPS.find((m) => m.id === 'seals')!;
     const w = new World({ map: seals, difficulty: 'normal', seed: 42, builder: 'bastion' });
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     const legs: number[] = [];
     for (let i = 0; i < 60 * 60 && w.stats.leaked === 0; i++) {
       w.step();
@@ -82,7 +81,7 @@ describe('MAPS', () => {
   it('[RM-08] lance la même première vague sur chaque carte', () => {
     const worlds = MAPS.map((map) => new World({ map, difficulty: 'normal', seed: 7, builder: 'bastion' }));
     const compositions = worlds.map((w) => {
-      dispatch(w, { c: CommandType.CallWave });
+      launchWave(w);
       for (let i = 0; i < 60 * 60 && w.spawners.length > 0; i++) w.step();
       return w.creeps
         .map((c) => ({ def: c.def.id, maxHp: c.maxHp }))

@@ -22,7 +22,7 @@ describe('snapshot', () => {
     const w = newWorld('normal', 42);
     dispatch(w, { c: CommandType.Build, def: 'archer', x: 8, y: 3 });
     dispatch(w, { c: CommandType.Build, def: 'cannon', x: 12, y: 5 });
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     run(w, 10);
 
     const snap = snapshot(w);
@@ -37,7 +37,7 @@ describe('snapshot', () => {
   it('[RM-06] reste identique après un passage par JSON', () => {
     const w = newWorld('normal', 42);
     dispatch(w, { c: CommandType.Build, def: 'archer', x: 8, y: 3 });
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     run(w, 10);
 
     const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
@@ -75,7 +75,7 @@ describe('snapshot', () => {
   it('[RM-04] accepte les ordres suivants comme la partie d’origine quand la partie est restaurée', () => {
     const w = newWorld('normal', 42);
     const archer = dispatch(w, { c: CommandType.Build, def: 'archer', x: 8, y: 3 }) as { ok: true; id: number };
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     run(w, 5);
 
     const restored = restore(snapshot(w));
@@ -100,7 +100,7 @@ describe('snapshot', () => {
   it('[RM-06] restaure l’état de l’instantané quand la partie d’origine a continué avec des créatures empoisonnées', () => {
     const w = newWorld('normal', 42);
     dispatch(w, { c: CommandType.Build, def: 'venom', x: 8, y: 3 });
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     run(w, 5);
 
     const beforeRun = JSON.parse(JSON.stringify(snapshot(w)));
@@ -113,7 +113,7 @@ describe('snapshot', () => {
 
   it('[RM-06] restaure l’état de l’instantané quand la partie d’origine a continué avec un Sapeur gobelin', () => {
     const w = newWorld('normal', 7);
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     run(w, 1);
     spawnCreep(w, 'sapper', w.wave);
     run(w, 4);
@@ -129,7 +129,7 @@ describe('snapshot', () => {
   it('[RM-04] continue à l’identique après un passage par JSON quand un rejeton vient de naître', () => {
     const w = newWorld('normal', 42);
     dispatch(w, { c: CommandType.Build, def: 'archer', x: 8, y: 3 });
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     spawnCreep(w, 'slime', w.wave);
 
     let found = false;
@@ -151,7 +151,7 @@ describe('snapshot', () => {
     const w = newWorld('normal', 42);
     w.lives = 1e6;
     while (w.wave < 30) launchWave(w);
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     run(w, 3);
     expect(Number.isFinite(w.nextWaveIn)).toBe(true);
 
@@ -166,7 +166,7 @@ describe('snapshot', () => {
   it('[RM-06] donne deux parties identiques quand le même instantané est restauré deux fois', () => {
     const w = newWorld('normal', 7);
     dispatch(w, { c: CommandType.Build, def: 'venom', x: 8, y: 3 });
-    dispatch(w, { c: CommandType.CallWave });
+    launchWave(w);
     run(w, 1);
     spawnCreep(w, 'sapper', w.wave);
     run(w, 4);
@@ -258,6 +258,25 @@ describe('snapshot', () => {
     expect(restored.gate.shot).toBe(2);
     expect(restored.gate.ramparts).toBe(1);
     expect(restored.gate.cooldown).toBe(1.5);
+  });
+
+  it('[RM-05] conserve les envois achetés et ceux de la vague à travers un instantané', () => {
+    const w = newDuelWorld('normal', 42);
+    w.sent = ['wolf', 'rat'];
+    w.waveSends = { sent: ['wolf'], received: ['rat', 'rat'] };
+
+    const snap = snapshot(w);
+    const restored = restore(JSON.parse(JSON.stringify(snap)));
+    const restoredDirect = restore(snap);
+
+    w.sent.push('bat');
+    w.waveSends.sent.push('bat');
+    w.waveSends.received.push('bat');
+
+    expect(restored.sent).toEqual(['wolf', 'rat']);
+    expect(restored.waveSends).toEqual({ sent: ['wolf'], received: ['rat', 'rat'] });
+    expect(restoredDirect.sent).toEqual(['wolf', 'rat']);
+    expect(restoredDirect.waveSends).toEqual({ sent: ['wolf'], received: ['rat', 'rat'] });
   });
 
   it('garde le cap retenu d’une créature, sans partager l’objet', () => {

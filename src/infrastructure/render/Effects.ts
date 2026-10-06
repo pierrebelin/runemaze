@@ -8,15 +8,22 @@ interface Floater { x: number; y: number; text: string; color: string; life: num
 interface Bolt { points: { x: number; y: number }[]; life: number; seed: number }
 interface Ring { x: number; y: number; r: number; life: number; max: number; color: string }
 
+/** Durée d'affichage de la bannière de vague, en secondes. */
+export const BANNER_LIFE = 4;
+
 /** Effets visuels éphémères, alimentés par les événements de la simulation. */
 export class Effects {
+  /** Faux pour la carte adverse : ni bannière de vague ni voile de fuite (ils sont à l'écran du joueur). */
+  constructor(readonly own = true) {}
+
   particles: Particle[] = [];
   floaters: Floater[] = [];
   bolts: Bolt[] = [];
   rings: Ring[] = [];
   recoil = new Map<number, number>();
   leakFlash = 0;
-  banner: { title: string; sub: string; life: number; boss: boolean } | null = null;
+  /** `lines` : détail sous le titre, remplaçable par l'écran (récapitulatif de vague). */
+  banner: { title: string; lines: string[]; life: number; boss: boolean } | null = null;
 
   consume(events: GameEvent[]): void {
     for (const e of events) {
@@ -39,7 +46,7 @@ export class Effects {
           this.recoil.set(e.towerId, 0.12);
           break;
         case GameEventType.Leak:
-          this.leakFlash = 0.6;
+          if (this.own) this.leakFlash = 0.6;
           break;
         case GameEventType.Built:
         case GameEventType.Upgraded:
@@ -52,14 +59,15 @@ export class Effects {
           this.burst(e.x, e.y, 10, PAL.stone, 1.5);
           break;
         case GameEventType.WaveStart: {
+          if (!this.own) break;
           const def = CREEPS[e.creep];
           const flags = [def.air ? 'volants' : '', def.magicImmune ? 'immunisés à la magie' : '', def.regen && !def.boss ? 'régénération' : '']
             .filter(Boolean)
             .join(' · ');
           this.banner = {
             title: e.boss ? `Vague ${e.wave + 1} · Chef` : `Vague ${e.wave + 1}`,
-            sub: e.boss ? def.name : `${def.plural}${flags ? ' · ' + flags : ''}`,
-            life: 2.6,
+            lines: [e.boss ? def.name : `${def.plural}${flags ? ' · ' + flags : ''}`],
+            life: BANNER_LIFE,
             boss: e.boss,
           };
           break;

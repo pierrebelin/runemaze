@@ -1,5 +1,6 @@
 import { baseHp, bountyFor, CAMPAIGN_LENGTH, clearBonus, CREEPS, DIFFICULTY, waveAt } from '../catalog/creeps';
 import type { World } from '../model/World';
+import { SEND_GAP, sendDelay } from '../rules/sendTiming';
 import type { Creep, CreepDef } from '../model/types';
 import { BreakerPhase, GameEventType, Phase } from '../model/types';
 
@@ -29,11 +30,14 @@ export function launchWave(world: World): void {
     world.spawners.push({ wave: index, creep: g.creep, left: g.count, interval: g.interval, timer: g.delay });
     pending += g.count;
   }
-  // Les envois reçus sortent après la dernière créature de la vague, dans l'ordre d'achat.
+  // Les envois reçus sortent répartis sur la durée de la vague, dans l'ordre d'achat.
   world.sends.forEach((creep, k) => {
-    world.spawners.push({ wave: index, creep, left: 1, interval: 0.8, timer: waveDuration(index) + 0.8 * (k + 1) });
+    const timer = sendDelay(k, world.sends.length, waveDuration(index));
+    world.spawners.push({ wave: index, creep, left: 1, interval: SEND_GAP, timer });
   });
   pending += world.sends.length;
+  world.waveSends = { sent: world.sent, received: world.sends };
+  world.sent = [];
   world.sends = [];
   world.pending.set(index, pending);
   world.stats.waves[index] = { livesLost: 0, gold: null };

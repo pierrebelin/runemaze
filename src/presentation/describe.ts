@@ -1,5 +1,5 @@
 import type { World } from '../domain/model/World';
-import type { WaveBriefing, WaveBriefingGroup } from '../application/queries/waveBriefing';
+import type { SendGroup, WaveBriefing, WaveBriefingGroup } from '../application/queries/waveBriefing';
 import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage';
 import type { AuraKind, BuilderDef, ArmorType, AttackType, Creep, CreepDef, Result, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
 import type { breakerLosses, familyDamage, waveCurve } from '../domain/rules/debrief';
@@ -7,7 +7,7 @@ import { towerYield } from '../domain/rules/debrief';
 import { CREEPS } from '../domain/catalog/creeps';
 import { tower } from '../domain/catalog/towers';
 import { GATE, GLEANER } from '../domain/catalog/ether';
-import { gateLevelCost, gateLevelIncome } from '../domain/rules/pricing';
+import { gateLevelCost, gateLevelIncome, refundValue } from '../domain/rules/pricing';
 import { creepSpeed } from '../domain/rules/speed';
 import { Verdict } from '../application/online/protocol';
 
@@ -109,6 +109,14 @@ export function towerInfo(def: TowerDef, cost: number | null, heading = def.name
     <div>${matchupTags(a.type)}</div>`;
 }
 
+/** Fiche d'une tour posée ; l'invitation à transformer n'a de sens que pour ses propres murs. */
+export function placedTowerInfo(t: Tower, own: boolean): string {
+  const extra = t.def.attack
+    ? `<p>${fmt0(t.kills)} éliminations · ${fmt0(t.damage)} dégâts infligés · ciblage ${TARGET_LABEL[t.targetMode].toLowerCase()} · revente ${refundValue(t)} or</p>`
+    : `<p>Revente ${refundValue(t)} or.${own ? ' Sélectionnez une tour à transformer.' : ''}</p>`;
+  return towerInfo(t.def, null) + extra;
+}
+
 export function creepTags(def: CreepDef): string {
   const tags = [`<span class="tag">Armure ${ARMOR_LABEL[def.armorType].toLowerCase()} ${def.armor}</span>`];
   if (def.air) tags.push('<span class="tag air">Volant</span>');
@@ -145,12 +153,9 @@ function nextWaveGroup(g: WaveBriefingGroup): string {
       <div>${creepTags(g.creep)}</div>`;
 }
 
-const incomingLabel = (n: number) => `${n} envoi${n > 1 ? 's' : ''} en approche`;
-
 export function nextWaveInfo(b: WaveBriefing): string {
   return `<h3>Prochaine vague ${b.wave + 1}</h3>
       ${b.groups.map(nextWaveGroup).join('')}
-      ${b.incoming > 0 ? `<div>${incomingLabel(b.incoming)}</div>` : ''}
       <p>${esc(waveHint(b.groups[0].creep))}</p>`;
 }
 
@@ -162,9 +167,7 @@ function briefingEntry(g: WaveBriefingGroup): string {
 
 /** Résumé d'une ligne dans la barre du haut : « 12 Harpies · volants ». Un groupe par entrée. */
 export function briefingChip(b: WaveBriefing): string {
-  const entries = b.groups.map(briefingEntry);
-  if (b.incoming > 0) entries.push(incomingLabel(b.incoming));
-  return entries.join(' · ');
+  return b.groups.map(briefingEntry).join(' · ');
 }
 
 function briefingGroupInfo(g: WaveBriefingGroup): string {
@@ -259,8 +262,31 @@ export function gatePanel(ether: number, gate: World['gate']): string {
   return `<h3>Porte</h3><div class="sends">${rows.join('')}</div>`;
 }
 
-export function rivalEconomy(income: number, gleaners: number, gate: World['gate']): string {
-  return `revenu ${fmt0(income)} · glaneurs ${gleaners} · Tir ${gate.shot} · Remparts ${gate.ramparts}`;
+const svg = (body: string) => `<svg viewBox="0 0 20 20" aria-hidden="true">${body}</svg>`;
+
+/** Icônes de l'encart adverse ; l'or et les vies reprennent celles de la barre du haut. */
+const RIVAL_ICON = {
+  lives: svg('<path d="M10 17s-7-4.3-7-9.2A3.8 3.8 0 0110 5.6a3.8 3.8 0 017 2.2C17 12.7 10 17 10 17z" fill="#d8553f" stroke="#6e2419" stroke-width="1.2"/>'),
+  gold: svg('<circle cx="10" cy="10" r="8" fill="#e9b949" stroke="#8a6320" stroke-width="1.5"/><path d="M10 5.5v9M7.5 7.5h4a1.6 1.6 0 010 3.2h-3a1.6 1.6 0 000 3.2h4" fill="none" stroke="#8a6320" stroke-width="1.4"/>'),
+  income: svg('<path d="M10 3l6.5 7H12.5v7h-5v-7H3.5z" fill="#7cc47f" stroke="#2f6131" stroke-width="1.3" stroke-linejoin="round"/>'),
+  gleaners: svg('<path d="M4 17.5l6.5-7.5" stroke="#9a6b3a" stroke-width="2.2" stroke-linecap="round"/><path d="M9.5 11C8 5.5 12.5 2 17.5 3.5 13 4.5 11.5 7.5 12 11.5z" fill="#cfd6dc" stroke="#55606b" stroke-width="1.2" stroke-linejoin="round"/>'),
+  shot: svg('<circle cx="10" cy="10" r="6.5" fill="none" stroke="#e58a4e" stroke-width="1.8"/><circle cx="10" cy="10" r="2" fill="#e58a4e"/><path d="M10 1.5v4M10 14.5v4M1.5 10h4M14.5 10h4" stroke="#e58a4e" stroke-width="1.8" stroke-linecap="round"/>'),
+  ramparts: svg('<path d="M10 2l7 3v5c0 4-3 6.5-7 8-4-1.5-7-4-7-8V5z" fill="#6f8fb8" stroke="#2c3e57" stroke-width="1.3" stroke-linejoin="round"/>'),
+};
+
+const rivalStat = (icon: string, label: string, value: string) =>
+  `<div class="rv-stat">${icon}<span>${label}</span><strong>${value}</strong></div>`;
+
+/** Détail de l'encart adverse déroulé. Jamais l'éther : il reste caché. */
+export function rivalDetail(rival: World): string {
+  return `<p class="rv-builder"><span>Bâtisseur</span> ${esc(rival.builder.name)}</p>
+    <div class="rv-stats">
+      ${rivalStat(RIVAL_ICON.gold, 'Or', fmt0(rival.gold))}
+      ${rivalStat(RIVAL_ICON.income, 'Revenu', `+${fmt0(rival.income)}`)}
+      ${rivalStat(RIVAL_ICON.gleaners, 'Glaneurs', fmt0(rival.gleaners.length))}
+      ${rivalStat(RIVAL_ICON.shot, 'Tir', `niv. ${rival.gate.shot}`)}
+      ${rivalStat(RIVAL_ICON.ramparts, 'Remparts', `niv. ${rival.gate.ramparts}`)}
+    </div>`;
 }
 
 export function creepInfo(c: Creep): string {
@@ -272,10 +298,31 @@ export function creepInfo(c: Creep): string {
     <p>${esc(`Le plus efficace : ${counters(c.def)}.`)}</p>`;
 }
 
+/** Annonce à l'envoyeur : « Vos 3 Harpies et 2 Loups gris attaquent Paul ». */
+export function sentMessage(groups: SendGroup[], nick: string): string {
+  const total = groups.reduce((n, g) => n + g.count, 0);
+  const names = groups.map((g) => `${g.count} ${g.count > 1 ? g.creep.plural : g.creep.name}`);
+  const who = total === 1 ? groups[0].creep.name : `${names.slice(0, -1).join(', ')}${names.length > 1 ? ' et ' : ''}${names[names.length - 1]}`;
+  return total === 1 ? `Votre ${who} attaque ${nick}` : `Vos ${who} attaquent ${nick}`;
+}
+
 export function builderCard(b: BuilderDef): string {
   const roots = b.roots.map((id) => esc(tower(id).name)).join(' · ');
   return `<h3>${esc(b.name)}</h3>
     <p>${esc(b.style)}</p>
     <p class="weakness"><em>Faiblesse</em> ${esc(b.weakness)}</p>
     <p class="roots"><em>Tours de base</em> ${roots}</p>`;
+}
+
+const recapLine = (g: SendGroup, extra = '') =>
+  `${g.count} ${g.count > 1 ? g.creep.plural : g.creep.name} · ${g.creep.air ? 'air' : 'sol'}${extra}`;
+
+/** Lignes affichées sous la bannière de vague : ses groupes, puis les envois reçus de l'adversaire (texte brut, dessiné sur le canvas). */
+export function waveRecap(b: WaveBriefing, received: SendGroup[], nick: string): string[] {
+  const sent = received.length ? [`Envoyés par ${nick}`, ...received.map((g) => recapLine(g))] : [];
+  return [...b.groups.map((g) => recapLine(g, g.creep.boss ? ' · chef' : '')), ...sent];
+}
+
+export function rivalHeadline(nick: string, lives: number): string {
+  return `<span class="rv-nick">${esc(nick)}</span><span class="rv-lives" title="${lives > 1 ? 'Vies' : 'Vie'}">${RIVAL_ICON.lives}<strong>${fmt0(lives)}</strong></span>`;
 }

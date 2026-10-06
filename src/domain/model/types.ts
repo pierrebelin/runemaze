@@ -237,7 +237,6 @@ export enum CommandType {
   Upgrade = 'upgrade',
   Sell = 'sell',
   Target = 'target',
-  CallWave = 'callWave',
   Send = 'send',
   Receive = 'receive',
   Gleaner = 'gleaner',
@@ -249,7 +248,6 @@ export type Command =
   | { c: CommandType.Upgrade; tower: number; def: string }
   | { c: CommandType.Sell; tower: number }
   | { c: CommandType.Target; tower: number; mode: TargetMode }
-  | { c: CommandType.CallWave }
   | { c: CommandType.Send; creep: string }
   | { c: CommandType.Receive; creep: string }
   | { c: CommandType.Gleaner }

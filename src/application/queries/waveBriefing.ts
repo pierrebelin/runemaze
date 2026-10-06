@@ -14,13 +14,22 @@ export interface WaveBriefingGroup {
 export interface WaveBriefing {
   wave: number;
   groups: WaveBriefingGroup[];
-  /** Envois reçus de l'adversaire, en approche. */
-  incoming: number;
+}
+
+export interface SendGroup {
+  creep: CreepDef;
+  count: number;
+}
+
+export function groupSends(creeps: string[]): SendGroup[] {
+  // Map garde l'ordre d'insertion : premier achat en premier.
+  const counts = new Map<string, number>();
+  for (const id of creeps) counts.set(id, (counts.get(id) ?? 0) + 1);
+  return [...counts].map(([id, count]) => ({ creep: CREEPS[id], count }));
 }
 
 /** Ce qui attend le joueur à la prochaine vague. */
-export function waveBriefing(world: World): WaveBriefing {
-  const wave = world.wave + 1;
+export function waveBriefing(world: World, wave = world.wave + 1): WaveBriefing {
   const groups = waveAt(wave).groups
     .map((g) => {
       const creep = CREEPS[g.creep];
@@ -28,5 +37,5 @@ export function waveBriefing(world: World): WaveBriefing {
     })
     // Chef en premier ; tri stable, les autres groupes gardent leur ordre.
     .sort((a, b) => Number(!!b.creep.boss) - Number(!!a.creep.boss));
-  return { wave, groups, incoming: world.sends.length };
+  return { wave, groups };
 }

@@ -15,7 +15,6 @@ export enum ClientMessageType {
   Join = 'join',
   Leave = 'leave',
   Start = 'start',
-  Ready = 'ready',
   Rejoin = 'rejoin',
   ChooseBuilder = 'chooseBuilder',
 }
@@ -34,7 +33,6 @@ export enum ServerMessageType {
   DuelStarted = 'duelStarted',
   DuelOver = 'duelOver',
   Rival = 'rival',
-  Readiness = 'readiness',
   Frozen = 'frozen',
   Thawed = 'thawed',
 }
@@ -51,14 +49,13 @@ export type ClientMessage =
   | { t: ClientMessageType.Open; map: MapDef; difficulty: Difficulty; builder: string; previous?: { id: string; token: string } }
   | { t: ClientMessageType.Order; tick: number; cmd: Command; fingerprint: string }
   | { t: ClientMessageType.Check; tick: number; fingerprint: string }
-  | { t: ClientMessageType.Pace; tick: number; paused: boolean; speed: number }
+  | { t: ClientMessageType.Pace; tick: number; paused: boolean }
   | { t: ClientMessageType.Resumable; id: string; token: string }
   | { t: ClientMessageType.Resume; id: string; token: string }
   | { t: ClientMessageType.Host; nick: string; map: MapDef; difficulty: Difficulty }
   | { t: ClientMessageType.Join; nick: string; code: string }
   | { t: ClientMessageType.Leave }
   | { t: ClientMessageType.Start }
-  | { t: ClientMessageType.Ready }
   | { t: ClientMessageType.Rejoin; code: string; token: string }
   | { t: ClientMessageType.ChooseBuilder; builder: string };
 
@@ -130,8 +127,6 @@ function readCommand(cmd: unknown): Command | null {
         return { c: CommandType.Target, tower: c.tower, mode: c.mode as TargetMode };
       }
       return null;
-    case CommandType.CallWave:
-      return { c: CommandType.CallWave };
     case CommandType.Send:
       if (isString(c.creep)) {
         return { c: CommandType.Send, creep: c.creep };
@@ -189,13 +184,8 @@ export function readClientMessage(raw: string): ClientMessage | null {
       }
       return null;
     case ClientMessageType.Pace:
-      if (
-        isNumber(m.tick) &&
-        isBoolean(m.paused) &&
-        isNumber(m.speed) &&
-        (m.speed === 1 || m.speed === 2 || m.speed === 3)
-      ) {
-        return { t: ClientMessageType.Pace, tick: m.tick, paused: m.paused, speed: m.speed };
+      if (isNumber(m.tick) && isBoolean(m.paused)) {
+        return { t: ClientMessageType.Pace, tick: m.tick, paused: m.paused };
       }
       return null;
     case ClientMessageType.Resumable:
@@ -227,8 +217,6 @@ export function readClientMessage(raw: string): ClientMessage | null {
       return { t: ClientMessageType.Leave };
     case ClientMessageType.Start:
       return { t: ClientMessageType.Start };
-    case ClientMessageType.Ready:
-      return { t: ClientMessageType.Ready };
     case ClientMessageType.Rejoin:
       if (isString(m.code) && CODE_PATTERN.test(m.code) && isString(m.token) && m.token !== '') {
         return { t: ClientMessageType.Rejoin, code: m.code, token: m.token };
@@ -248,7 +236,7 @@ export type ServerMessage =
   | { t: ServerMessageType.Opened; id: string; token: string; snapshot: WorldSnapshot }
   | { t: ServerMessageType.Drift; snapshot: WorldSnapshot }
   | { t: ServerMessageType.Over; verdict: Verdict; snapshot: WorldSnapshot }
-  | { t: ServerMessageType.Resumed; snapshot: WorldSnapshot; paused: boolean; speed: number }
+  | { t: ServerMessageType.Resumed; snapshot: WorldSnapshot; paused: boolean }
   | { t: ServerMessageType.Resumable; ok: boolean }
   | { t: ServerMessageType.Ended }
   | { t: ServerMessageType.Hosted; code: string; host: string; map: MapDef; difficulty: Difficulty }
@@ -265,6 +253,5 @@ export type ServerMessage =
     }
   | { t: ServerMessageType.DuelOver; verdict: Verdict; snapshot: WorldSnapshot; rival: WorldSnapshot }
   | { t: ServerMessageType.Rival; nick: string; snapshot: WorldSnapshot }
-  | { t: ServerMessageType.Readiness; self: boolean; rival: boolean }
   | { t: ServerMessageType.Frozen; remainingMs: number }
   | { t: ServerMessageType.Thawed; seat: Seat; snapshot: WorldSnapshot; rival: WorldSnapshot };

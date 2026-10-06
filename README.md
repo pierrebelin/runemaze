@@ -32,11 +32,11 @@ En développement, deux serveurs en parallèle : `npm run server` (arbitre + Web
 - Volants (ignorent le labyrinthe), immunisés à la magie, régénération, trois chefs.
 - Remboursement à 50 % de l'or investi, à tout moment : vendre coûte la moitié de la
   mise, le *juggling* (vendre et reconstruire pour détourner le flot) ne paie plus.
-- Prime de fin de vague, intérêts de 4 % plafonnés, bonus pour appeler une vague en avance.
+- Prime de fin de vague, intérêts de 4 % plafonnés.
 - Vagues sans fin.
 
 Commandes : `Q W E R A S` construire, clic pour poser (clic droit / `Échap` pour annuler),
-`Espace` appeler la vague, `1 2 3` vitesse, `P` pause, `M` son, `L` trajet, `H` aide.
+`P` pause, `M` son, `L` trajet, `H` aide.
 Sur une tour : `Q W…` améliorer, `Z` ciblage, `V` vendre. Au doigt : premier appui pour
 prévisualiser, second appui au même endroit pour bâtir.
 
@@ -56,7 +56,7 @@ src/
     Rng.ts         mulberry32, graine
   application/     ← ordres du joueur, dépend de domain
     dispatch.ts    seule porte d'entrée des commandes, journal de rejeu
-    commands/      build, upgrade, sell, target, callWave
+    commands/      build, upgrade, sell, target
     queries/       canBuild (validation anti-blocage), previewRoute
   infrastructure/  ← adaptateurs techniques, dépend de domain
     render/        Renderer (Canvas 2D), sprites procéduraux, Effects (particules, textes)

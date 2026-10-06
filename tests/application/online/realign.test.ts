@@ -77,7 +77,7 @@ describe('realign', () => {
 
   it('[RM-06] rend un monde recalé sans les événements des ticks rejoués', () => {
     const server = newWorld();
-    const cmd = { c: CommandType.CallWave } as const;
+    const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     const ownLog = [{ tick: server.tick, cmd }];
     const snap = snapshot(server);
     const s = snap.tick;

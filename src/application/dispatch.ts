@@ -2,7 +2,6 @@ import type { Command, Result } from '../domain/model/types';
 import { CommandType, Phase } from '../domain/model/types';
 import type { World } from '../domain/model/World';
 import { build } from './commands/build';
-import { callWave } from './commands/callWave';
 import { gate } from './commands/gate';
 import { gleaner } from './commands/gleaner';
 import { receive } from './commands/receive';
@@ -26,7 +25,6 @@ function execute(world: World, cmd: Command): Result {
     case CommandType.Upgrade: return upgrade(world, cmd);
     case CommandType.Sell: return sell(world, cmd);
     case CommandType.Target: return target(world, cmd);
-    case CommandType.CallWave: return callWave(world);
     case CommandType.Send: return send(world, cmd);
     case CommandType.Receive: return receive(world, cmd);
     case CommandType.Gleaner: return gleaner(world);

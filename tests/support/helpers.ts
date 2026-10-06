@@ -18,6 +18,22 @@ export function run(world: World, seconds: number): void {
   for (let i = 0; i < ticks; i++) world.step();
 }
 
+/** Instants (w.time) de première apparition de chaque créature sur `seconds` secondes. */
+export function observeSpawns(w: World, seconds: number): { id: string; time: number }[] {
+  const seen = new Set<number>();
+  const spawns: { id: string; time: number }[] = [];
+  for (let i = 0; i < seconds * 60; i++) {
+    w.step();
+    for (const c of w.creeps) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        spawns.push({ id: c.def.id, time: w.time });
+      }
+    }
+  }
+  return spawns;
+}
+
 /** Tue instantanément toutes les créatures en vie, via le moyen existant du moteur (`creepGone`). */
 export function killAllCreeps(world: World): void {
   for (const c of world.creeps) {

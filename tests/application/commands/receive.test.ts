@@ -3,32 +3,40 @@ import { dispatch } from '../../../src/application/dispatch';
 import { bountyFor, clearBonus, CREEPS } from '../../../src/domain/catalog/creeps';
 import { creepHp, launchWave, WAVE_GAP, waveDuration } from '../../../src/domain/systems/waves';
 import { CommandType } from '../../../src/domain/model/types';
-import { killAllCreeps, newDuelWorld, run } from '../../support/helpers';
+import { killAllCreeps, newDuelWorld, observeSpawns, run } from '../../support/helpers';
 
 const receive = (creep: string) => ({ c: CommandType.Receive, creep }) as const;
 
 describe('receive', () => {
-  it('[RM-04] fait sortir les envois après la dernière créature de la vague, dans l\'ordre d\'achat, à 0,8 s d\'intervalle', () => {
+  it('[RM-01] fait sortir le premier envoi avec la première créature et les suivants répartis sur la vague, dans l\'ordre d\'achat', () => {
     const w = newDuelWorld();
     expect(dispatch(w, receive('wolf'))).toEqual({ ok: true });
-    expect(dispatch(w, receive('rat'))).toEqual({ ok: true });
+    expect(dispatch(w, receive('raider'))).toEqual({ ok: true });
     launchWave(w);
 
-    const seen = new Set<number>();
-    const spawns: { id: string; time: number }[] = [];
-    for (let i = 0; i < 12 * 60; i++) {
-      w.step();
-      for (const c of w.creeps) {
-        if (!seen.has(c.id)) {
-          seen.add(c.id);
-          spawns.push({ id: c.def.id, time: w.time });
-        }
-      }
-    }
+    const spawns = observeSpawns(w, 10);
+    const sent = spawns.filter((s) => s.id !== 'rat');
 
-    expect(spawns.map((s) => s.id)).toEqual([...Array(12).fill('rat'), 'wolf', 'rat']);
-    expect(Math.abs(spawns[12].time - spawns[11].time - 0.8)).toBeLessThan(0.05);
-    expect(Math.abs(spawns[13].time - spawns[12].time - 0.8)).toBeLessThan(0.05);
+    // Vague 0 : durée 8,8 s, 2 envois → écart 4,4 s.
+    expect(sent.map((s) => s.id)).toEqual(['wolf', 'raider']);
+    expect(Math.abs(sent[0].time - spawns[0].time)).toBeLessThan(0.05);
+    expect(Math.abs(sent[1].time - spawns[0].time - 4.4)).toBeLessThan(0.05);
+  });
+
+  it('[RM-02] fait sortir les envois toutes les 0,8 s à partir du chef quand la vague 20 n\'a que l\'Hydre', () => {
+    const w = newDuelWorld();
+    w.wave = 18;
+    dispatch(w, receive('rat'));
+    dispatch(w, receive('wolf'));
+    dispatch(w, receive('raider'));
+    launchWave(w);
+
+    const spawns = observeSpawns(w, 4);
+
+    expect(spawns.map((s) => s.id)).toEqual(['hydra', 'rat', 'wolf', 'raider']);
+    expect(Math.abs(spawns[1].time - spawns[0].time)).toBeLessThan(0.05);
+    expect(Math.abs(spawns[2].time - spawns[0].time - 0.8)).toBeLessThan(0.05);
+    expect(Math.abs(spawns[3].time - spawns[0].time - 1.6)).toBeLessThan(0.05);
   });
 
   it('[RM-07] donne à l\'envoi les PV, la prime et les vies perdues d\'une créature du même type à la vague qui l\'accueille', () => {
@@ -47,23 +55,26 @@ describe('receive', () => {
     expect(sent!.def.leak).toBe(CREEPS.wolf.leak);
   });
 
-  it('[RM-04] ne termine la vague et ne verse sa prime qu\'une fois ses envois tués ou sortis', () => {
+  it('[RM-03] ne termine la vague qu\'une fois ses envois répartis tués ou sortis', () => {
     const w = newDuelWorld();
+    w.wave = 18;
+    dispatch(w, receive('rat'));
+    dispatch(w, receive('rat'));
     dispatch(w, receive('rat'));
     launchWave(w);
-    run(w, 9);
+    run(w, 1);
     killAllCreeps(w);
     const gold = w.gold;
 
     run(w, 0.3);
     expect(w.gold).toBe(gold);
-    expect(w.pending.has(0)).toBe(true);
+    expect(w.pending.has(19)).toBe(true);
 
-    run(w, 1);
+    run(w, 0.5);
     killAllCreeps(w);
     run(w, 0.05);
-    expect(w.gold - gold).toBe(clearBonus(0));
-    expect(w.pending.has(0)).toBe(false);
+    expect(w.gold - gold).toBe(clearBonus(19));
+    expect(w.pending.has(19)).toBe(false);
   });
 
   it('[RM-04] garde le compte à rebours de la vague suivante quand des envois l\'accompagnent', () => {

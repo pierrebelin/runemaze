@@ -81,11 +81,11 @@ describe('Referee', () => {
     expect(msg.snapshot).toEqual(snapshot(referee.game('d')!.world));
   });
 
-  it('[CU-04] rend la pause et la vitesse d\'avant la coupure quand le joueur reprend', () => {
+  it('[CU-04] rend la pause d\'avant la coupure quand le joueur reprend', () => {
     const referee = new Referee();
     referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'e', token: 'tok-e', builder: 'bastion' }, 0);
     referee.game('e')!.advance(1000);
-    referee.game('e')!.pace({ tick: 45, paused: true, speed: 2 }, 1000);
+    referee.game('e')!.pace({ tick: 45, paused: true }, 1000);
     referee.lose('e', 1000);
 
     const msg = referee.resume('e', 'tok-e', 15_000);
@@ -93,7 +93,6 @@ describe('Referee', () => {
     expect(msg.t).toBe(ServerMessageType.Resumed);
     if (msg.t !== ServerMessageType.Resumed) throw new Error('message inattendu');
     expect(msg.paused).toBe(true);
-    expect(msg.speed).toBe(2);
   });
 
   it('[RM-07] reprend l\'horloge au tick du gel quand le joueur revient', () => {

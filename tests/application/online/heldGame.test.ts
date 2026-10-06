@@ -19,23 +19,14 @@ describe('HeldGame', () => {
     expect(held.world.tick).toBe(105);
   });
 
-  it('[RM-10] avance deux fois plus vite quand la vitesse passe à 2', () => {
-    const held = new HeldGame(newWorld(), 'tok', 0);
-
-    held.pace({ tick: 0, paused: false, speed: 2 }, 0);
-    held.advance(1000);
-
-    expect(held.world.tick).toBe(105);
-  });
-
   it('[RM-10] n\'avance plus quand le joueur met en pause, quelle que soit la durée', () => {
     const held = new HeldGame(newWorld(), 'tok', 0);
 
-    held.pace({ tick: 0, paused: true, speed: 1 }, 0);
+    held.pace({ tick: 0, paused: true }, 0);
     held.advance(3_600_000);
     expect(held.world.tick).toBe(0);
 
-    held.pace({ tick: 0, paused: false, speed: 1 }, 3_600_000);
+    held.pace({ tick: 0, paused: false }, 3_600_000);
     held.advance(3_601_000);
     expect(held.world.tick).toBe(45);
   });
@@ -45,10 +36,10 @@ describe('HeldGame', () => {
     held.advance(1000);
     expect(held.world.tick).toBe(45);
 
-    held.pace({ tick: 70, paused: false, speed: 1 }, 1000);
+    held.pace({ tick: 70, paused: false }, 1000);
     expect(held.world.tick).toBe(55);
 
-    held.pace({ tick: 10, paused: false, speed: 1 }, 1000);
+    held.pace({ tick: 10, paused: false }, 1000);
     expect(held.world.tick).toBe(55);
   });
 
@@ -57,7 +48,7 @@ describe('HeldGame', () => {
     held.advance(1000);
     expect(held.world.tick).toBe(45);
 
-    held.pace({ tick: 1_000_000, paused: false, speed: 1 }, 1000);
+    held.pace({ tick: 1_000_000, paused: false }, 1000);
 
     expect(held.world.tick).toBe(60);
   });
@@ -81,7 +72,7 @@ describe('HeldGame', () => {
 
   it('[RM-04] applique sans écart l\'ordre d\'un joueur qui suit le temps réel après un changement de rythme', () => {
     const held = new HeldGame(newWorld(), 'tok', 0);
-    held.pace({ tick: 0, paused: false, speed: 1 }, 0);
+    held.pace({ tick: 0, paused: false }, 0);
 
     const player = newWorld();
     run(player, 88 / 60);

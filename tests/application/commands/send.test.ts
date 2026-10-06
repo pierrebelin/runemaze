@@ -87,4 +87,27 @@ describe('send', () => {
     expect(w.income).toBe(0);
     expect(w.log).toHaveLength(0);
   });
+
+  it('[RM-05] retient chaque envoi acheté dans l\'ordre d\'achat', () => {
+    const w = newDuelWorld();
+    w.wave = 29;
+    w.ether = 1000;
+
+    dispatch(w, { c: CommandType.Send, creep: 'rat' });
+    dispatch(w, { c: CommandType.Send, creep: 'golem' });
+    dispatch(w, { c: CommandType.Send, creep: 'rat' });
+
+    expect(w.sent).toEqual(['rat', 'golem', 'rat']);
+  });
+
+  it('[RM-05] ne retient rien quand l\'envoi est refusé faute d\'éther', () => {
+    const w = newDuelWorld();
+    w.ether = 10;
+
+    dispatch(w, { c: CommandType.Send, creep: 'rat' });
+    const r = dispatch(w, { c: CommandType.Send, creep: 'rat' });
+
+    expect(r.ok).toBe(false);
+    expect(w.sent).toEqual(['rat']);
+  });
 });
