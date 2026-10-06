@@ -84,6 +84,8 @@ export class Game {
   private difficulty: Difficulty = 'normal';
   private mapId: string = MAPS[0].id;
   private builderId = 'bastion';
+  /** Onglet de l'écran titre, gardé d'un retour au titre à l'autre. */
+  private startTab: 'solo' | 'duel' = 'solo';
   /** Bâtisseur envoyé dans le salon ; vide tant que le joueur n'a pas cliqué. */
   private lobbyBuilderId: string | null = null;
   /** Qui a choisi son bâtisseur dans le salon (sans l'id adverse). */
@@ -635,7 +637,7 @@ export class Game {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (this.overlay === Overlay.Start) {
-        if (k === 'enter') {
+        if (k === 'enter' && this.startTab === 'solo') {
           e.preventDefault();
           ($('startBtn') as HTMLButtonElement | null)?.click();
         }
@@ -1266,8 +1268,9 @@ export class Game {
     this.resetLostState();
   }
 
-  private diffsHtml(mapId: string): string {
-    const best = this.loadBest()[mapId] ?? {};
+  /** `records` : affiche le record solo de chaque difficulté (sans objet en partie à deux). */
+  private diffsHtml(mapId: string, records = true): string {
+    const best = records ? (this.loadBest()[mapId] ?? {}) : {};
     return (Object.keys(DIFFICULTY) as Difficulty[])
       .map((d) => {
         const D = DIFFICULTY[d];
@@ -1299,68 +1302,90 @@ export class Game {
     this.link?.close();
     this.link = null;
     this.setPaused(true);
-    const maps = MAPS.map(
-      (m) => `<button type="button" class="map" role="radio" data-map="${m.id}" aria-checked="${m.id === this.mapId}">
-        <canvas class="map-thumb" data-thumb="${m.id}" width="64" height="64"></canvas><span>${m.name}</span></button>`,
-    ).join('');
     this.openOverlay(Overlay.Start, `
       <div class="sheet">
         <h1>Tower Defense</h1>
         <p class="lede">Bâtissez le labyrinthe, tenez la porte. Trente vagues, trois chefs, et un seul chemin que vous dessinez vous-même.</p>
-        <ol>
-          <li><b>Les créatures passent par les pierres runiques, dans l'ordre</b> avant de rejoindre la porte : votre champ est traversé à chaque tronçon.</li>
-          <li><b>Murs à 3 pièces d'or</b> pour allonger leur trajet, transformables ensuite en tours. Le passage ne peut jamais être fermé.</li>
-          <li><b>Chaque attaque a ses proies</b> : perçant contre léger, siège contre fortifié, magie contre lourd. Les volants ignorent le labyrinthe.</li>
-          <li><b>Remboursement intégral</b> de ce que vous bâtissez avant le lancement de la vague suivante.</li>
-        </ol>
-        <p class="label">Carte</p>
-        <div class="maps" role="radiogroup" aria-label="Carte">${maps}</div>
-        <p class="label">Bâtisseur</p>
-        <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.builderId)}</div>
-        <p class="label">Difficulté</p>
-        <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
-        <div class="row"><button type="button" class="btn primary" id="startBtn">Commencer</button><button type="button" class="btn" id="startHelp">Commandes et armures</button></div>
-        <section class="duel">
-          <p class="label">Partie à deux</p>
+        <div class="mode-tabs" role="tablist" aria-label="Mode de jeu">
+          <button type="button" class="mode-tab" role="tab" data-mode="solo">Solo</button>
+          <button type="button" class="mode-tab" role="tab" data-mode="duel">Partie à deux</button>
+        </div>
+        <section data-panel="solo" role="tabpanel">
+          <ol>
+            <li><b>Les créatures passent par les pierres runiques, dans l'ordre</b> avant de rejoindre la porte : votre champ est traversé à chaque tronçon.</li>
+            <li><b>Murs à 3 pièces d'or</b> pour allonger leur trajet, transformables ensuite en tours. Le passage ne peut jamais être fermé.</li>
+            <li><b>Chaque attaque a ses proies</b> : perçant contre léger, siège contre fortifié, magie contre lourd. Les volants ignorent le labyrinthe.</li>
+            <li><b>Remboursement intégral</b> de ce que vous bâtissez avant le lancement de la vague suivante.</li>
+          </ol>
+          <p class="label">Carte</p>
+          <div class="maps" role="radiogroup" aria-label="Carte"></div>
+          <p class="label">Bâtisseur</p>
+          <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.builderId)}</div>
+          <p class="label">Difficulté</p>
+          <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
+          <div class="row"><button type="button" class="btn primary" id="startBtn">Commencer</button><button type="button" class="btn" id="startHelp">Commandes et armures</button></div>
+        </section>
+        <section data-panel="duel" role="tabpanel">
           <label class="field"><span>Votre pseudo</span><input type="text" id="duelNick" maxlength="12" placeholder="Anonyme" autocomplete="nickname" spellcheck="false"></label>
-          <div class="duel-ways">
-            <div class="duel-way">
-              <h3>Héberger</h3>
-              <p>Sur la carte et la difficulté choisies. Un code à transmettre vous sera donné.</p>
-              <button type="button" class="btn" id="hostDuelBtn">Créer une partie</button>
-            </div>
-            <div class="duel-way">
-              <h3>Rejoindre</h3>
-              <p>Saisissez le code reçu de votre adversaire.</p>
-              <div class="code-join"><input type="text" id="duelCode" maxlength="6" placeholder="······" aria-label="Code de la partie" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="btn" id="joinDuelBtn">Rejoindre</button></div>
-            </div>
+          <div class="duel-way">
+            <h3>Héberger</h3>
+            <p>Choisissez la carte et la difficulté, un code à transmettre vous sera donné. Chacun choisit son bâtisseur dans le salon.</p>
+            <p class="label">Carte</p>
+            <div class="maps" role="radiogroup" aria-label="Carte"></div>
+            <p class="label">Difficulté</p>
+            <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
+            <button type="button" class="btn primary" id="hostDuelBtn">Créer une partie</button>
+          </div>
+          <div class="duel-way">
+            <h3>Rejoindre</h3>
+            <p>Saisissez le code reçu de votre adversaire.</p>
+            <div class="code-join"><input type="text" id="duelCode" maxlength="6" placeholder="······" aria-label="Code de la partie" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="btn" id="joinDuelBtn">Rejoindre</button></div>
           </div>
         </section>
       </div>`);
     const el = $('overlay');
-    el.querySelectorAll<HTMLCanvasElement>('[data-thumb]').forEach((c) => {
-      const map = MAPS.find((m) => m.id === c.dataset.thumb)!;
-      drawMapThumbnail(c.getContext('2d')!, map, c.width);
-    });
-    const bindDiffs = (): void => {
-      const diffsEl = el.querySelector<HTMLElement>('.diffs')!;
-      diffsEl.innerHTML = this.diffsHtml(this.mapId);
-      diffsEl.querySelectorAll<HTMLButtonElement>('[data-diff]').forEach((b) =>
+    // Carte et difficulté existent dans les deux onglets : rendues à chaque affichage d'onglet pour refléter le dernier choix.
+    const bindSettings = (panel: HTMLElement, records: boolean): void => {
+      const mapsEl = panel.querySelector<HTMLElement>('.maps')!;
+      const diffsEl = panel.querySelector<HTMLElement>('.diffs')!;
+      const bindDiffs = (): void => {
+        diffsEl.innerHTML = this.diffsHtml(this.mapId, records);
+        diffsEl.querySelectorAll<HTMLButtonElement>('[data-diff]').forEach((b) =>
+          b.addEventListener('click', () => {
+            this.difficulty = b.dataset.diff as Difficulty;
+            diffsEl.querySelectorAll('[data-diff]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+          }),
+        );
+      };
+      mapsEl.innerHTML = MAPS.map(
+        (m) => `<button type="button" class="map" role="radio" data-map="${m.id}" aria-checked="${m.id === this.mapId}">
+          <canvas class="map-thumb" data-thumb="${m.id}" width="64" height="64"></canvas><span>${m.name}</span></button>`,
+      ).join('');
+      mapsEl.querySelectorAll<HTMLCanvasElement>('[data-thumb]').forEach((c) => {
+        const map = MAPS.find((m) => m.id === c.dataset.thumb)!;
+        drawMapThumbnail(c.getContext('2d')!, map, c.width);
+      });
+      mapsEl.querySelectorAll<HTMLButtonElement>('[data-map]').forEach((b) =>
         b.addEventListener('click', () => {
-          this.difficulty = b.dataset.diff as Difficulty;
-          diffsEl.querySelectorAll('[data-diff]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+          this.mapId = b.dataset.map!;
+          mapsEl.querySelectorAll('[data-map]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+          bindDiffs();
         }),
       );
+      bindDiffs();
     };
-    bindDiffs();
-    this.bindBuilders(el);
-    el.querySelectorAll<HTMLButtonElement>('[data-map]').forEach((b) =>
-      b.addEventListener('click', () => {
-        this.mapId = b.dataset.map!;
-        el.querySelectorAll('[data-map]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
-        bindDiffs();
-      }),
+    const showTab = (mode: 'solo' | 'duel'): void => {
+      this.startTab = mode;
+      el.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.mode === mode)));
+      el.querySelectorAll<HTMLElement>('[data-panel]').forEach((p) => (p.hidden = p.dataset.panel !== mode));
+      const panel = el.querySelector<HTMLElement>(`[data-panel="${mode}"]`)!;
+      bindSettings(panel, mode === 'solo');
+      (mode === 'solo' ? $('startBtn') : $('duelNick')).focus();
+    };
+    el.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((t) =>
+      t.addEventListener('click', () => showTab(t.dataset.mode as 'solo' | 'duel')),
     );
+    this.bindBuilders(el.querySelector<HTMLElement>('[data-panel="solo"]')!);
     $('startBtn').addEventListener('click', () => {
       this.sfx.unlock();
       this.newGame(this.difficulty);
@@ -1368,7 +1393,10 @@ export class Game {
     $('startHelp').addEventListener('click', () => this.showHelp(true));
     $('hostDuelBtn').addEventListener('click', () => this.hostDuel());
     $('joinDuelBtn').addEventListener('click', () => this.joinDuel());
-    ($('startBtn') as HTMLButtonElement).focus();
+    $('duelCode').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.joinDuel();
+    });
+    showTab(this.startTab);
     this.offerResume();
   }
 
@@ -1700,7 +1728,7 @@ export class Game {
 
   /** Bouton « Reprendre la partie » : ouvre une liaison neuve à chaque clic, la clé locale n'est jamais effacée sur échec réseau. */
   private addResumeButton(pending: { id: string; token: string }): void {
-    const row = document.querySelector<HTMLElement>('#overlay .sheet .row');
+    const row = document.querySelector<HTMLElement>('#overlay [data-panel="solo"] .row');
     if (!row) return;
     const btn = document.createElement('button');
     btn.type = 'button';
