@@ -4,11 +4,13 @@ import { CommandType } from '../../domain/model/types';
 import { World } from '../../domain/model/World';
 import { snapshot } from '../../domain/model/snapshot';
 import type { WorldSnapshot } from '../../domain/model/snapshot';
+import { DIFFICULTY } from '../../domain/catalog/creeps';
 import { fingerprint } from '../../domain/rules/fingerprint';
 import { duelOutcome, DuelOutcome } from '../../domain/rules/duelOutcome';
 import type { DuelSide } from '../../domain/rules/duelOutcome';
+import { sharedReserve } from '../../domain/rules/sharedReserve';
 import { LAG_TICKS, LOST_LIMIT_MS } from './heldGame';
-import { ServerMessageType, Verdict } from './protocol';
+import { Mode, ServerMessageType, Verdict } from './protocol';
 import type { ServerMessage } from './protocol';
 
 export const RIVAL_VIEW_MS = 200;
@@ -27,6 +29,7 @@ export interface DuelConfig {
   nicks: [string, string];
   tokens: [string, string];
   builders: [string, string];
+  mode?: Mode;
 }
 
 export interface SeatMessage {
@@ -50,6 +53,7 @@ export class Duel {
   /** Issue obtenue par abandon du siège coupé plutôt que par les cartes. */
   private forfeited = false;
   private lastRivalAt: number;
+  private readonly coop: boolean;
   private readonly nicks: [string, string];
   private readonly tokens: [string, string];
   /** Sièges dont la carte a reçu un envoi, à recaler à la prochaine annonce. */
@@ -59,7 +63,15 @@ export class Duel {
   lostSeat?: Seat;
 
   constructor(config: DuelConfig, now: number) {
-    const options = { map: config.map, difficulty: config.difficulty, seed: config.seed, duel: true };
+    const coop = config.mode === Mode.Coop;
+    this.coop = coop;
+    const options = {
+      map: config.map,
+      difficulty: config.difficulty,
+      seed: config.seed,
+      duel: !coop,
+      ...(coop && { lives: sharedReserve(DIFFICULTY[config.difficulty].lives) }),
+    };
     this.worlds = [
       new World({ ...options, builder: config.builders[Seat.Host] }),
       new World({ ...options, builder: config.builders[Seat.Guest] }),
@@ -201,14 +213,29 @@ export class Duel {
   private advanceTo(target: number): void {
     while (!this.isOver()) {
       let stepped = false;
+      const before = [this.worlds[0].lives, this.worlds[1].lives];
       for (const world of this.worlds) {
         if (world.tick < target && !world.isOver()) {
           world.step();
           stepped = true;
         }
       }
+      if (this.coop) this.shareLeaks(before);
       this.updateOutcome();
       if (!stepped) break;
+    }
+  }
+
+  /** Réserve commune : la perte d'une carte pendant le pas est répercutée sur l'autre, via dispatch (journal). */
+  private shareLeaks(before: number[]): void {
+    // pertes relevées avant tout envoi, pour ne pas recopier une perte reçue
+    const losses = [before[0] - this.worlds[0].lives, before[1] - this.worlds[1].lives];
+    for (const seat of [Seat.Host, Seat.Guest]) {
+      const loss = losses[seat];
+      if (loss <= 0) continue;
+      const other = seat === Seat.Host ? Seat.Guest : Seat.Host;
+      dispatch(this.worlds[other], { c: CommandType.ReserveLoss, lives: loss });
+      this.receivers.add(other);
     }
   }
 
@@ -232,6 +259,7 @@ export class Duel {
   }
 
   private verdictFor(seat: Seat): Verdict {
+    if (this.coop) return Verdict.Defeat;
     if (this.forfeited) return Verdict.Forfeit;
     if (this.outcome === DuelOutcome.Draw) return Verdict.Draw;
     const winner = this.outcome === DuelOutcome.HostWins ? Seat.Host : Seat.Guest;

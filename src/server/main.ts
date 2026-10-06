@@ -196,7 +196,7 @@ function handleMessage(ws: WebSocket, msg: NonNullable<ReturnType<typeof readCli
     case ClientMessageType.Host: {
       const key = keyBySocket.get(ws)!;
       const code = drawCode();
-      dispatchAddressed(lobby.host({ code, nick: msg.nick, map: msg.map, difficulty: msg.difficulty, key }));
+      dispatchAddressed(lobby.host({ code, nick: msg.nick, map: msg.map, difficulty: msg.difficulty, mode: msg.mode, key }));
       break;
     }
     case ClientMessageType.Join: {

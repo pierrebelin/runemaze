@@ -6,10 +6,13 @@ import { fingerprint } from '../../../src/domain/rules/fingerprint';
 import { snapshot } from '../../../src/domain/model/snapshot';
 import { MAP_SPIRAL } from '../../../src/domain/catalog/map';
 import { CommandType, Phase } from '../../../src/domain/model/types';
+import type { Command } from '../../../src/domain/model/types';
 import { ServerMessageType, Verdict } from '../../../src/application/online/protocol';
 import type { ServerMessage } from '../../../src/application/online/protocol';
 import { LOST_LIMIT_MS } from '../../../src/application/online/heldGame';
-import { run } from '../../support/helpers';
+import { Mode } from '../../../src/application/online/protocol';
+import { clearBonus } from '../../../src/domain/catalog/creeps';
+import { killAllCreeps, run } from '../../support/helpers';
 
 describe('Duel', () => {
   it('[RM-01] crée les deux mondes avec la même empreinte au lancement', () => {
@@ -517,5 +520,244 @@ describe('Duel', () => {
       expect(m.msg.t).toBe(ServerMessageType.DuelOver);
       expect(m.msg).toMatchObject({ rival: { ether: 0 } });
     }
+  });
+
+  const coop = { ...config, mode: Mode.Coop };
+
+  it('[RM-04] donne prime et intérêts sans revenu à chaque carte quand une vague est vidée en coopération', () => {
+    const duel = new Duel(coop, 0);
+    duel.advance(37_000);
+    for (const world of duel.worlds) {
+      world.gold = 500;
+      world.income = 5;
+      world.pending.set(0, 0);
+    }
+
+    duel.advance(37_100);
+
+    // intérêts : min(4 % de 500, 20 + 0 × 2) = 20
+    for (const world of duel.worlds) expect(world.gold).toBe(500 + clearBonus(0) + 20);
+  });
+
+  it('[RM-06] démarre les deux cartes avec la réserve commune en coopération', () => {
+    const duel = new Duel({ ...coop, difficulty: 'normal' }, 0);
+
+    expect(duel.worlds.map((w) => w.lives)).toEqual([42, 42]);
+    expect(duel.worlds.map((w) => w.duel)).toEqual([false, false]);
+  });
+
+  it('[RM-03] lance chaque vague au même tick sur les deux cartes en coopération', () => {
+    const duel = new Duel(coop, 0);
+
+    duel.advance(36_000);
+
+    expect(duel.worlds.map((w) => w.duel)).toEqual([false, false]);
+    expect(duel.worlds.map((w) => w.wave)).toEqual([0, 0]);
+    expect(duel.worlds[Seat.Host].tick).toBe(duel.worlds[Seat.Guest].tick);
+  });
+
+  const refusedInCoop = (cmd: Command) => {
+    const duel = new Duel(coop, 0);
+    duel.advance(1000);
+    duel.worlds[Seat.Host].ether = 100;
+    duel.worlds[Seat.Host].gold = 500;
+    const host = duel.worlds[Seat.Host];
+    const guest = duel.worlds[Seat.Guest];
+    const before = { ether: host.ether, gold: host.gold, income: host.income, hostLog: host.log.length, guestLog: guest.log.length };
+
+    const res = duel.order(Seat.Host, { tick: 45, cmd, fingerprint: fingerprint(host) }, 1000);
+    const expected = { t: ServerMessageType.Drift, snapshot: snapshot(host) };
+    const messages = duel.advance(1200);
+
+    expect(res).toEqual(expected);
+    expect(host.ether).toBe(before.ether);
+    expect(host.gold).toBe(before.gold);
+    expect(host.income).toBe(before.income);
+    expect(host.log).toHaveLength(before.hostLog);
+    expect(guest.log).toHaveLength(before.guestLog);
+    expect(guest.sends).toEqual([]);
+    expect(messages.some((m) => m.seat === Seat.Guest && m.msg.t === ServerMessageType.Drift)).toBe(false);
+    return { host, guest };
+  };
+
+  it('[RM-05] recale sans rien envoyer quand un joueur envoie une créature en coopération', () => {
+    const { host } = refusedInCoop(sendWolf);
+
+    expect(host.sent).toEqual([]);
+  });
+
+  it('[RM-05] recale sans glaneur quand un joueur en achète un en coopération', () => {
+    const { host, guest } = refusedInCoop({ c: CommandType.Gleaner });
+
+    expect(host.gleaners).toEqual([]);
+    expect(guest.gleaners).toEqual([]);
+  });
+
+  it('[RM-05] recale sans amélioration quand un joueur améliore la Porte en coopération', () => {
+    const { host } = refusedInCoop({ c: CommandType.Gate, upgrade: 'shot' });
+
+    expect(host.gate.shot).toBe(0);
+  });
+
+  const startLives = 42;
+
+  /** Avance par pas de 100 ms jusqu'à `until` ; `spare` retire les créatures de la carte invitée pour qu'elle ne fuie pas. */
+  const advanceUntilLeak = (duel: Duel, spare: boolean, extraMs = 0) => {
+    const messages: { seat: Seat; msg: ServerMessage }[] = [];
+    let now = 0;
+    let leakedAt: number | undefined;
+    while (now < 300_000 && (leakedAt === undefined || now < leakedAt + extraMs)) {
+      now += 100;
+      messages.push(...duel.advance(now));
+      if (spare) killAllCreeps(duel.worlds[Seat.Guest]);
+      if (leakedAt === undefined && duel.worlds.some((w) => w.stats.leaked > 0)) leakedAt = now;
+    }
+    expect(leakedAt).toBeDefined();
+    return messages;
+  };
+
+  it('[RM-06] montre la même réserve sur les deux cartes, baissée des fuites des deux joueurs, en coopération', () => {
+    const duel = new Duel(coop, 0);
+
+    advanceUntilLeak(duel, false, 20_000);
+
+    const [host, guest] = duel.worlds;
+    expect(host.lives).toBe(guest.lives);
+    expect(host.lives).toBeLessThan(startLives);
+    // chaque fuite coûte au moins 1 vie, sur la carte qui fuit comme sur l'autre
+    expect(host.lives).toBeLessThanOrEqual(startLives - (host.stats.leaked + guest.stats.leaked));
+  });
+
+  it('[RM-06] recale la carte du partenaire quand une fuite baisse la réserve', () => {
+    const duel = new Duel(coop, 0);
+
+    const messages = advanceUntilLeak(duel, true);
+
+    const host = duel.worlds[Seat.Host];
+    const guest = duel.worlds[Seat.Guest];
+    expect(guest.stats.leaked).toBe(0);
+    expect(host.stats.leaked).toBeGreaterThan(0);
+    expect(guest.lives).toBe(host.lives);
+    const drifts = messages.filter((m) => m.seat === Seat.Guest && m.msg.t === ServerMessageType.Drift);
+    expect(drifts.length).toBeGreaterThan(0);
+    const last = drifts[drifts.length - 1].msg;
+    expect(last.t === ServerMessageType.Drift && last.snapshot.lives).toBe(host.lives);
+    expect(host.lives).toBeLessThan(startLives);
+  });
+
+  it('[RM-03] rejoue une carte coopérative à l\'identique depuis sa graine et son journal', () => {
+    const duel = new Duel(coop, 0);
+    advanceUntilLeak(duel, false, 1000);
+
+    for (const seat of [Seat.Host, Seat.Guest]) {
+      const original = duel.worlds[seat];
+      expect(original.log.some((e) => e.cmd.c === CommandType.ReserveLoss)).toBe(true);
+      const replay = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, builder: 'bastion', lives: startLives });
+      for (const entry of original.log) {
+        while (replay.tick < entry.tick) replay.step();
+        expect(dispatch(replay, entry.cmd).ok).toBe(true);
+      }
+      while (replay.tick < original.tick) replay.step();
+
+      expect(replay.lives).toBe(original.lives);
+      expect(fingerprint(replay)).toBe(fingerprint(original));
+    }
+  });
+
+  it('[RM-02] laisse chaque carte perdre ses seules vies quand le mode est Duel', () => {
+    const duel = new Duel(config, 0);
+
+    advanceUntilLeak(duel, true, 1000);
+
+    const [host, guest] = duel.worlds;
+    expect(host.lives).toBeLessThan(guest.lives);
+    expect(guest.log.some((e) => e.cmd.c === CommandType.ReserveLoss)).toBe(false);
+  });
+
+  /** Réserve ramenée à 1 vie sur les deux cartes, puis avance jusqu'à la fin de la partie (fuites sans tours). */
+  const drainReserve = (duel: Duel) => {
+    duel.advance(1000);
+    for (const world of duel.worlds) world.lives = 1;
+    const messages: { seat: Seat; msg: ServerMessage }[] = [];
+    let now = 1000;
+    while (now < 300_000 && !duel.isOver()) {
+      now += 100;
+      messages.push(...duel.advance(now));
+    }
+    expect(duel.isOver()).toBe(true);
+    return { messages, now };
+  };
+
+  it('[RM-07] arrête les deux cartes au même tick quand la réserve tombe à 0', () => {
+    const duel = new Duel(coop, 0);
+
+    const { now } = drainReserve(duel);
+
+    const [host, guest] = duel.worlds;
+    expect(host.phase).toBe(Phase.Defeat);
+    expect(guest.phase).toBe(Phase.Defeat);
+    expect(host.lives).toBe(0);
+    expect(guest.lives).toBe(0);
+    expect(host.tick).toBe(guest.tick);
+
+    const tick = host.tick;
+    duel.advance(now + 5000);
+
+    expect(host.tick).toBe(tick);
+    expect(guest.tick).toBe(tick);
+  });
+
+  it('[RM-07] annonce une défaite à chaque joueur, sans vainqueur, en coopération', () => {
+    const duel = new Duel(coop, 0);
+
+    const { messages } = drainReserve(duel);
+
+    const over = messages.filter((m) => m.msg.t === ServerMessageType.DuelOver);
+    expect(over.map((m) => m.seat).sort()).toEqual([Seat.Host, Seat.Guest]);
+    for (const m of over) expect(m.msg).toMatchObject({ verdict: Verdict.Defeat });
+  });
+
+  it('[RM-08] gèle les deux cartes et prévient le partenaire resté quand un joueur se coupe en coopération', () => {
+    const duel = new Duel(coop, 0);
+    duel.advance(1000);
+
+    const messages = duel.lose(Seat.Guest, 1000);
+
+    expect(messages).toEqual([{ seat: Seat.Host, msg: { t: ServerMessageType.Frozen, remainingMs: LOST_LIMIT_MS } }]);
+    const ticks = duel.worlds.map((w) => w.tick);
+
+    duel.advance(11_000);
+
+    expect(duel.worlds.map((w) => w.tick)).toEqual(ticks);
+  });
+
+  it('[RM-08] reprend la partie quand le joueur revient dans les 30 s en coopération', () => {
+    const duel = new Duel(coop, 0);
+    duel.advance(1000);
+    duel.lose(Seat.Guest, 1000);
+    const ticks = duel.worlds.map((w) => w.tick);
+
+    const thawed = duel.back(Seat.Guest, 'tg', 11_000) as { seat: Seat; msg: ServerMessage }[];
+
+    expect(thawed.map((m) => m.seat)).toEqual([Seat.Host, Seat.Guest]);
+    for (const m of thawed) expect(m.msg.t).toBe(ServerMessageType.Thawed);
+    expect(duel.worlds.map((w) => w.tick)).toEqual(ticks);
+
+    duel.advance(12_000);
+
+    expect(duel.worlds.map((w) => w.tick)).toEqual(ticks.map((t) => t + 60));
+  });
+
+  it('[RM-08] annonce une défaite au partenaire resté, pas un forfait, quand la coupure dépasse 30 s en coopération', () => {
+    const duel = new Duel(coop, 0);
+    duel.advance(1000);
+    duel.lose(Seat.Guest, 1000);
+
+    const messages = duel.advance(1000 + LOST_LIMIT_MS + 1);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].seat).toBe(Seat.Host);
+    expect(messages[0].msg).toMatchObject({ t: ServerMessageType.DuelOver, verdict: Verdict.Defeat });
+    expect(duel.isOver()).toBe(true);
   });
 });

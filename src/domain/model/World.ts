@@ -10,7 +10,7 @@ import { updateCombat, updateProjectiles } from '../systems/combat';
 import { updateMovement } from '../systems/movement';
 import { updateStatuses } from '../systems/status';
 import { updateWaves, type Spawner } from '../systems/waves';
-import { Phase } from './types';
+import { GameEventType, Phase } from './types';
 import type { BuilderDef, Command, Creep, Difficulty, GameEvent, MapDef, Projectile, Tower, WaveTally } from './types';
 
 export const TICK = 1 / 60;
@@ -21,6 +21,7 @@ export interface WorldOptions {
   difficulty: Difficulty;
   seed: number;
   duel?: boolean;
+  lives?: number;
   builder: string;
 }
 
@@ -96,7 +97,7 @@ export class World {
     this.map = opts.map;
     const d = DIFFICULTY[opts.difficulty];
     this.gold = d.gold;
-    this.lives = d.lives;
+    this.lives = opts.lives ?? d.lives;
     this.fields = [
       ...this.grid.checkpoints.map((cells) => new FlowField(this.grid, cells)),
       new FlowField(this.grid, this.grid.exitCells),
@@ -176,6 +177,16 @@ export class World {
   addGold(n: number): void {
     this.gold += n;
     this.stats.goldEarned += n;
+  }
+
+  /** Retire des vies à la réserve ; à 0 la partie est perdue (une seule fois). */
+  loseLives(n: number): void {
+    this.lives -= n;
+    if (this.lives <= 0 && this.phase !== Phase.Defeat) {
+      this.lives = 0;
+      this.phase = Phase.Defeat;
+      this.emit({ t: GameEventType.Defeat });
+    }
   }
 
   /** Vrai quand la partie est perdue : `step()` n'avance plus. */

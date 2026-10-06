@@ -9,7 +9,20 @@ import { tower } from '../domain/catalog/towers';
 import { GATE, GLEANER } from '../domain/catalog/ether';
 import { gateLevelCost, gateLevelIncome, refundValue } from '../domain/rules/pricing';
 import { creepSpeed } from '../domain/rules/speed';
-import { Verdict } from '../application/online/protocol';
+import { Mode, Verdict } from '../application/online/protocol';
+
+const MODE_LABEL: Record<Mode, string> = {
+  [Mode.Duel]: 'Duel',
+  [Mode.Coop]: 'Coopération',
+};
+
+export function modeLabel(mode: Mode): string {
+  return MODE_LABEL[mode];
+}
+
+export function pairingWord(mode: Mode): string {
+  return mode === Mode.Coop ? 'et' : 'contre';
+}
 
 const DUEL_VERDICT_LABEL: Record<Verdict, string> = {
   [Verdict.Victory]: 'Victoire',
@@ -277,15 +290,26 @@ const RIVAL_ICON = {
 const rivalStat = (icon: string, label: string, value: string) =>
   `<div class="rv-stat">${icon}<span>${label}</span><strong>${value}</strong></div>`;
 
+export function reachedTitle(wave: number): string {
+  return `Vague ${wave + 1} atteinte`;
+}
+
+export function partnerLabel(coop: boolean): string {
+  return coop ? 'Partenaire' : 'Adversaire';
+}
+
 /** Détail de l'encart adverse déroulé. Jamais l'éther : il reste caché. */
 export function rivalDetail(rival: World): string {
+  const duelStats = rival.duel
+    ? `${rivalStat(RIVAL_ICON.income, 'Revenu', `+${fmt0(rival.income)}`)}
+      ${rivalStat(RIVAL_ICON.gleaners, 'Glaneurs', fmt0(rival.gleaners.length))}
+      ${rivalStat(RIVAL_ICON.shot, 'Tir', `niv. ${rival.gate.shot}`)}
+      ${rivalStat(RIVAL_ICON.ramparts, 'Remparts', `niv. ${rival.gate.ramparts}`)}`
+    : '';
   return `<p class="rv-builder"><span>Bâtisseur</span> ${esc(rival.builder.name)}</p>
     <div class="rv-stats">
       ${rivalStat(RIVAL_ICON.gold, 'Or', fmt0(rival.gold))}
-      ${rivalStat(RIVAL_ICON.income, 'Revenu', `+${fmt0(rival.income)}`)}
-      ${rivalStat(RIVAL_ICON.gleaners, 'Glaneurs', fmt0(rival.gleaners.length))}
-      ${rivalStat(RIVAL_ICON.shot, 'Tir', `niv. ${rival.gate.shot}`)}
-      ${rivalStat(RIVAL_ICON.ramparts, 'Remparts', `niv. ${rival.gate.ramparts}`)}
+      ${duelStats}
     </div>`;
 }
 

@@ -19,7 +19,7 @@ import { groupSends, waveBriefing } from '../application/queries/waveBriefing';
 import { realign } from '../application/online/realign';
 import { Seat } from '../application/online/duel';
 import { LOST_LIMIT_MS } from '../application/online/heldGame';
-import { ClientMessageType, ServerMessageType } from '../application/online/protocol';
+import { ClientMessageType, Mode, ServerMessageType } from '../application/online/protocol';
 import type { ServerMessage } from '../application/online/protocol';
 import { refundValue, upgradeCost } from '../domain/rules/pricing';
 import { World, type Stats } from '../domain/model/World';
@@ -29,7 +29,7 @@ import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, Gate
 import { CommandType, GameEventType } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
-import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, placedTowerInfo, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
+import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeLabel, pairingWord, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -112,6 +112,8 @@ export class Game {
   private duelMap: MapDef | null = null;
   private duelDifficulty: Difficulty | null = null;
   private duelInRoom = false;
+  /** Mode choisi par l'hôte avant la création, puis mode de la salle reçu du serveur. */
+  private duelMode = Mode.Duel;
   /** Vrai tant qu'une reprise de siège est en attente de réponse. */
   private duelRejoining = false;
   /** Carte adverse : restaurée à chaque `Rival`, avancée localement entre deux envois (D3). */
@@ -488,7 +490,7 @@ export class Game {
   }
 
   private toggleSendPanel(): void {
-    if (this.duelRole) this.sendOpen = !this.sendOpen;
+    if (this.world.duel) this.sendOpen = !this.sendOpen;
   }
 
   private sendCreep(id: string): void {
@@ -1035,14 +1037,14 @@ export class Game {
     };
     set('gold', fmt0(w.gold));
     set('ether', fmt0(w.ether));
-    $('etherRes').hidden = !this.duelRole;
+    $('etherRes').hidden = !w.duel;
     set('lives', fmt0(w.lives));
     $('lives').style.color = w.lives <= 5 ? PAL.danger : '';
     set('wave', String(Math.max(0, w.wave + 1)));
-    const sendHidden = String(!this.duelRole);
+    const sendHidden = String(!w.duel);
     if (this.hud.sendHidden !== sendHidden) {
       this.hud.sendHidden = sendHidden;
-      $('sendBtn').hidden = !this.duelRole;
+      $('sendBtn').hidden = !w.duel;
     }
     const can = !w.isOver();
     const secs = Math.ceil(Math.max(0, w.nextWaveIn));
@@ -1201,7 +1203,7 @@ export class Game {
   private showFrozen(): void {
     this.openOverlay(Overlay.Lost, `
       <div class="sheet" style="width:min(360px,100%);text-align:center">
-        <h2>Adversaire déconnecté — ${Math.ceil(this.frozenMs! / 1000)} s</h2>
+        <h2>${partnerLabel(!this.world.duel)} déconnecté — ${Math.ceil(this.frozenMs! / 1000)} s</h2>
         <div class="row" style="justify-content:center"><button type="button" class="btn" id="quitFrozen">Quitter la partie</button></div>
       </div>`);
     $('quitFrozen').addEventListener('click', () => {
@@ -1390,6 +1392,8 @@ export class Game {
             <div class="maps" role="radiogroup" aria-label="Carte"></div>
             <p class="label">Difficulté</p>
             <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
+            <p class="label">Mode</p>
+            <div class="modes" role="radiogroup" aria-label="Mode">${Object.values(Mode).map((m) => `<button type="button" class="diff" role="radio" data-room-mode="${m}" aria-checked="${m === this.duelMode}"><strong>${modeLabel(m)}</strong></button>`).join('')}</div>
             <button type="button" class="btn primary" id="hostDuelBtn">Créer une partie</button>
           </div>
           <div class="duel-way">
@@ -1447,6 +1451,12 @@ export class Game {
       this.newGame(this.difficulty);
     });
     $('startHelp').addEventListener('click', () => this.showHelp(true));
+    el.querySelectorAll<HTMLButtonElement>('[data-room-mode]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.duelMode = b.dataset.roomMode as Mode;
+        el.querySelectorAll('[data-room-mode]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+      }),
+    );
     $('hostDuelBtn').addEventListener('click', () => this.hostDuel());
     $('joinDuelBtn').addEventListener('click', () => this.joinDuel());
     $('duelCode').addEventListener('keydown', (e) => {
@@ -1503,7 +1513,7 @@ export class Game {
     this.lobbyBuilderId = null;
     this.setDuelControlsHidden(true);
     link.onMessage((msg) => this.onLobbyMessage(msg));
-    link.send({ t: ClientMessageType.Host, nick, map, difficulty: this.difficulty });
+    link.send({ t: ClientMessageType.Host, nick, map, difficulty: this.difficulty, mode: this.duelMode });
   }
 
   private async joinDuel(): Promise<void> {
@@ -1546,6 +1556,7 @@ export class Game {
         this.duelGuestNick = null;
         this.duelMap = msg.map;
         this.duelDifficulty = msg.difficulty;
+        this.duelMode = msg.mode;
         this.duelInRoom = true;
         this.duelPicked = { host: false, guest: false };
         this.showLobby();
@@ -1556,6 +1567,7 @@ export class Game {
         this.duelGuestNick = msg.guest;
         this.duelMap = msg.map;
         this.duelDifficulty = msg.difficulty;
+        this.duelMode = msg.mode;
         this.duelInRoom = true;
         this.showLobby();
         break;
@@ -1669,16 +1681,20 @@ export class Game {
   private showDuelEnd(msg: Extract<ServerMessage, { t: ServerMessageType.DuelOver }>): void {
     const own = restore(msg.snapshot);
     const rival = restore(msg.rival);
-    const rivalNick = escapeHtml((this.duelRole === 'host' ? this.duelGuestNick : this.duelHostNick) ?? 'Adversaire');
+    const coop = !own.duel;
+    const rivalNick = escapeHtml((this.duelRole === 'host' ? this.duelGuestNick : this.duelHostNick) ?? partnerLabel(coop));
+    const title = coop ? reachedTitle(own.wave) : duelVerdictLabel(msg.verdict);
+    // Réserve commune en coop : une seule fois, pas par joueur.
+    const rivalLives = coop ? '' : `<div><b>${fmt0(rival.lives)}</b><span>Vies — ${rivalNick}</span></div>`;
     this.world = own;
     this.openOverlay(Overlay.End, `
       <div class="sheet">
-        <h2>${escapeHtml(duelVerdictLabel(msg.verdict))}</h2>
+        <h2>${escapeHtml(title)}</h2>
         <div class="endstats">
           <div><b>${fmt0(own.wave + 1)}</b><span>Vague</span></div>
           <div><b>${fmt0(own.lives)}</b><span>Vies</span></div>
           <div><b>${fmt0(rival.wave + 1)}</b><span>Vague — ${rivalNick}</span></div>
-          <div><b>${fmt0(rival.lives)}</b><span>Vies — ${rivalNick}</span></div>
+          ${rivalLives}
         </div>
         <div class="duel-tabs" role="tablist">
           <button type="button" class="duel-tab active" data-player="own">Vous</button>
@@ -1721,8 +1737,8 @@ export class Game {
       <div class="sheet wide" style="text-align:center">
         <h2>Partie à deux</h2>
         ${code}
-        <p>${host} contre ${guest}</p>
-        <p>${map} · ${diff}</p>
+        <p>${host} ${pairingWord(this.duelMode)} ${guest}</p>
+        <p>${modeLabel(this.duelMode)} · ${map} · ${diff}</p>
         <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.lobbyBuilderId)}</div>
         ${status}
         <div class="row" style="justify-content:center">${startBtn}<button type="button" class="btn" id="leaveLobby">Quitter</button></div>
@@ -1756,6 +1772,7 @@ export class Game {
     this.sendOpen = false;
     this.duelCode = null;
     this.duelInRoom = false;
+    this.duelMode = Mode.Duel;
     this.setDuelControlsHidden(false);
     this.rivalWorld = null;
     this.removeRivalPanel();

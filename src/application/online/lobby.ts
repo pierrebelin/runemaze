@@ -1,6 +1,6 @@
 import type { Difficulty, MapDef } from '../../domain/model/types';
 import { snapshot } from '../../domain/model/snapshot';
-import { DUEL_CODE_ALPHABET, ServerMessage, ServerMessageType } from './protocol';
+import { DUEL_CODE_ALPHABET, Mode, ServerMessage, ServerMessageType } from './protocol';
 import { CODE_TAKEN_MSG, Duel, GAME_OVER_MSG, Seat } from './duel';
 
 export { DUEL_CODE_ALPHABET };
@@ -19,6 +19,7 @@ interface Room {
   guest?: { nick: string; key: string; builder?: string };
   map: MapDef;
   difficulty: Difficulty;
+  mode: Mode;
 }
 
 export interface Addressed {
@@ -34,6 +35,7 @@ function roomMessage(room: Room): ServerMessage {
     guest: room.guest?.nick ?? null,
     map: room.map,
     difficulty: room.difficulty,
+    mode: room.mode,
     picked: { host: room.host.builder !== undefined, guest: room.guest?.builder !== undefined },
   };
 }
@@ -48,17 +50,19 @@ export class Lobby {
     return this.rooms.has(code) || this.duels.has(code);
   }
 
-  host(req: { code: string; nick: string; map: MapDef; difficulty: Difficulty; key: string }): Addressed[] {
+  host(req: { code: string; nick: string; map: MapDef; difficulty: Difficulty; key: string; mode?: Mode }): Addressed[] {
     const freed = this.leaveRoom(req.key);
     const host = nickname(req.nick, 'Hôte');
+    const mode = req.mode ?? Mode.Duel;
     this.rooms.set(req.code, {
       host: { nick: host, key: req.key },
       map: req.map,
       difficulty: req.difficulty,
+      mode,
     });
     return [
       ...freed,
-      { key: req.key, msg: { t: ServerMessageType.Hosted, code: req.code, host, map: req.map, difficulty: req.difficulty } },
+      { key: req.key, msg: { t: ServerMessageType.Hosted, code: req.code, host, map: req.map, difficulty: req.difficulty, mode } },
     ];
   }
 
@@ -92,7 +96,7 @@ export class Lobby {
         return [{ key, msg: { t: ServerMessageType.Refused, reason: 'En attente du choix des bâtisseurs.' } }];
       }
       const duel = new Duel(
-        { map: room.map, difficulty: room.difficulty, seed, nicks: [room.host.nick, guest.nick], tokens, builders: [room.host.builder, guest.builder] },
+        { map: room.map, difficulty: room.difficulty, seed, nicks: [room.host.nick, guest.nick], tokens, builders: [room.host.builder, guest.builder], mode: room.mode },
         now,
       );
       this.rooms.delete(code);

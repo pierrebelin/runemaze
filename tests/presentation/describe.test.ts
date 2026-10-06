@@ -9,10 +9,10 @@ import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   briefingChip, briefingInfo, builderCard,
   creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, nextWaveInfo, placedTowerInfo, rivalDetail, rivalHeadline, sendPanel, sentMessage, towerSpecials, waveRecap,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, modeLabel, nextWaveInfo, pairingWord, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, towerSpecials, waveRecap,
 } from '../../src/presentation/describe';
 import { GLEANER } from '../../src/domain/catalog/ether';
-import { Verdict } from '../../src/application/online/protocol';
+import { Mode, Verdict } from '../../src/application/online/protocol';
 import { TOWERS, tower } from '../../src/domain/catalog/towers';
 import { builder } from '../../src/domain/catalog/builders';
 import { familyDamage, towerRanking, towerYield } from '../../src/domain/rules/debrief';
@@ -334,6 +334,27 @@ describe('encart de l’économie adverse', () => {
     expect(text).toMatch(/Remparts\D*3/);
   });
 
+  it('[RM-05] n’affiche ni revenu, ni glaneurs, ni Porte dans l’encart quand la carte est coopérative', () => {
+    const w = newWorld();
+    w.gold = 568;
+    expect(w.duel).toBe(false);
+
+    const text = rivalDetail(w);
+
+    expect(text).toContain('Bâtisseur');
+    expect(text).toContain('Or');
+    expect(text).toContain('568');
+    expect(text).not.toContain('Revenu');
+    expect(text).not.toContain('Glaneurs');
+    expect(text).not.toContain('Tir');
+    expect(text).not.toContain('Remparts');
+  });
+
+  it('[CU-04] nomme l’autre joueur « Partenaire » en coopération et « Adversaire » en duel', () => {
+    expect(partnerLabel(true)).toBe('Partenaire');
+    expect(partnerLabel(false)).toBe('Adversaire');
+  });
+
   it('[RM-04] ne mentionne jamais l’éther de l’adversaire quand l’encart est déroulé', () => {
     const w = newDuelWorld();
     w.gold = 568;
@@ -458,6 +479,24 @@ describe('verdict de duel', () => {
     expect(duelVerdictLabel(Verdict.Defeat)).toBe('Défaite');
     expect(duelVerdictLabel(Verdict.Draw)).toBe('Égalité');
     expect(duelVerdictLabel(Verdict.Forfeit)).toBe('Victoire par forfait');
+  });
+});
+
+describe('mode de partie', () => {
+  it('[RM-01] nomme les modes « Duel » et « Coopération »', () => {
+    expect(modeLabel(Mode.Duel)).toBe('Duel');
+    expect(modeLabel(Mode.Coop)).toBe('Coopération');
+  });
+
+  it('[RM-01] relie les joueurs du salon par « contre » en duel et « et » en coopération', () => {
+    expect(pairingWord(Mode.Duel)).toBe('contre');
+    expect(pairingWord(Mode.Coop)).toBe('et');
+  });
+});
+
+describe('titre de fin coopérative', () => {
+  it('[RM-07] titre la fin coopérative « Vague 12 atteinte »', () => {
+    expect(reachedTitle(11)).toBe('Vague 12 atteinte');
   });
 });
 

@@ -37,6 +37,11 @@ export enum ServerMessageType {
   Thawed = 'thawed',
 }
 
+export enum Mode {
+  Duel = 'duel',
+  Coop = 'coop',
+}
+
 export enum Verdict {
   Victory = 'victory',
   Defeat = 'defeat',
@@ -52,7 +57,7 @@ export type ClientMessage =
   | { t: ClientMessageType.Pace; tick: number; paused: boolean }
   | { t: ClientMessageType.Resumable; id: string; token: string }
   | { t: ClientMessageType.Resume; id: string; token: string }
-  | { t: ClientMessageType.Host; nick: string; map: MapDef; difficulty: Difficulty }
+  | { t: ClientMessageType.Host; nick: string; map: MapDef; difficulty: Difficulty; mode: Mode }
   | { t: ClientMessageType.Join; nick: string; code: string }
   | { t: ClientMessageType.Leave }
   | { t: ClientMessageType.Start }
@@ -203,9 +208,16 @@ export function readClientMessage(raw: string): ClientMessage | null {
         isString(m.nick) &&
         isMapDef(m.map) &&
         isString(m.difficulty) &&
-        DIFFICULTIES.includes(m.difficulty as Difficulty)
+        DIFFICULTIES.includes(m.difficulty as Difficulty) &&
+        (m.mode === undefined || m.mode === Mode.Duel || m.mode === Mode.Coop)
       ) {
-        return { t: ClientMessageType.Host, nick: m.nick, map: m.map as MapDef, difficulty: m.difficulty as Difficulty };
+        return {
+          t: ClientMessageType.Host,
+          nick: m.nick,
+          map: m.map as MapDef,
+          difficulty: m.difficulty as Difficulty,
+          mode: m.mode ?? Mode.Duel,
+        };
       }
       return null;
     case ClientMessageType.Join:
@@ -239,8 +251,8 @@ export type ServerMessage =
   | { t: ServerMessageType.Resumed; snapshot: WorldSnapshot; paused: boolean }
   | { t: ServerMessageType.Resumable; ok: boolean }
   | { t: ServerMessageType.Ended }
-  | { t: ServerMessageType.Hosted; code: string; host: string; map: MapDef; difficulty: Difficulty }
-  | { t: ServerMessageType.Room; host: string; guest: string | null; map: MapDef; difficulty: Difficulty; picked: { host: boolean; guest: boolean } }
+  | { t: ServerMessageType.Hosted; code: string; host: string; map: MapDef; difficulty: Difficulty; mode: Mode }
+  | { t: ServerMessageType.Room; host: string; guest: string | null; map: MapDef; difficulty: Difficulty; mode: Mode; picked: { host: boolean; guest: boolean } }
   | { t: ServerMessageType.Refused; reason: string }
   | { t: ServerMessageType.Cancelled }
   | {

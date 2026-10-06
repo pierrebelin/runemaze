@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DUEL_CODE_ALPHABET, duelCode, nickname, Lobby } from '../../../src/application/online/lobby';
-import { ServerMessageType } from '../../../src/application/online/protocol';
+import { Mode, ServerMessageType } from '../../../src/application/online/protocol';
 import { Seat } from '../../../src/application/online/duel';
 import { LOST_LIMIT_MS } from '../../../src/application/online/heldGame';
 import { MAP_SPIRAL } from '../../../src/domain/catalog/map';
@@ -41,9 +41,32 @@ describe('lobby', () => {
           host: 'Zig',
           map: MAP_SPIRAL,
           difficulty: 'hard',
+          mode: Mode.Duel,
         },
       },
     ]);
+  });
+
+  it('[RM-01] annonce le mode choisi à l\'hôte à la création', () => {
+    const lobby = new Lobby();
+
+    const addressed = lobby.host({ code: 'ABCDEF', nick: 'Zig', map: MAP_SPIRAL, difficulty: 'hard', key: 'k1', mode: Mode.Coop });
+
+    expect(addressed).toEqual([
+      { key: 'k1', msg: expect.objectContaining({ t: ServerMessageType.Hosted, mode: Mode.Coop }) },
+    ]);
+  });
+
+  it('[RM-01] montre le mode de l\'hôte à l\'invité qui rejoint', () => {
+    const lobby = new Lobby();
+    lobby.host({ code: 'ABCDEF', nick: 'Ada', map: MAP_SPIRAL, difficulty: 'hard', key: 'h', mode: Mode.Coop });
+
+    const addressed = lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+
+    expect(addressed).toContainEqual({
+      key: 'g',
+      msg: expect.objectContaining({ t: ServerMessageType.Room, mode: Mode.Coop }),
+    });
   });
 
   it('[RM-05] garde le pseudo saisi quand il fait de 1 à 12 caractères', () => {
@@ -92,7 +115,7 @@ describe('lobby', () => {
 
     expect(addressed).toContainEqual({
       key: 'g',
-      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Bob', map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Bob', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
   });
 
@@ -104,7 +127,7 @@ describe('lobby', () => {
 
     expect(addressed).toContainEqual({
       key: 'h',
-      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Bob', map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Bob', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
   });
 
@@ -175,7 +198,7 @@ describe('lobby', () => {
     expect(addressed).toEqual([
       {
         key: 'h',
-        msg: { t: ServerMessageType.Room, host: 'Ada', guest: null, map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+        msg: { t: ServerMessageType.Room, host: 'Ada', guest: null, map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
       },
     ]);
 
@@ -183,7 +206,7 @@ describe('lobby', () => {
 
     expect(rejoin).toContainEqual({
       key: 'z',
-      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Cy', map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Cy', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
   });
 
@@ -215,21 +238,21 @@ describe('lobby', () => {
 
     expect(addressed).toContainEqual({
       key: 'ha',
-      msg: { t: ServerMessageType.Room, host: 'Ada', guest: null, map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Ada', guest: null, map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
     expect(addressed).toContainEqual({
       key: 'hb',
-      msg: { t: ServerMessageType.Room, host: 'Bea', guest: 'Gus', map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Bea', guest: 'Gus', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
     expect(addressed).toContainEqual({
       key: 'g',
-      msg: { t: ServerMessageType.Room, host: 'Bea', guest: 'Gus', map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Bea', guest: 'Gus', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
 
     const rejoinA = lobby.join({ code: 'ABCDEF', nick: 'Zoe', key: 'z' });
     expect(rejoinA).toContainEqual({
       key: 'z',
-      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Zoe', map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Zoe', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
 
     lobby.host({ code: 'NPQRST', nick: 'Zoe', map: MAP_SPIRAL, difficulty: 'hard', key: 'z' });
@@ -237,7 +260,7 @@ describe('lobby', () => {
     const rejoinA2 = lobby.join({ code: 'ABCDEF', nick: 'Zoe2', key: 'z2' });
     expect(rejoinA2).toContainEqual({
       key: 'z2',
-      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Zoe2', map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Zoe2', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
   });
 
@@ -250,11 +273,11 @@ describe('lobby', () => {
 
     expect(addressed).toContainEqual({
       key: 'ha',
-      msg: { t: ServerMessageType.Room, host: 'Ada', guest: null, map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Ada', guest: null, map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
     expect(addressed).toContainEqual({
       key: 'g',
-      msg: { t: ServerMessageType.Hosted, code: 'GHJKLM', host: 'Gus', map: MAP_SPIRAL, difficulty: 'hard' },
+      msg: { t: ServerMessageType.Hosted, code: 'GHJKLM', host: 'Gus', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel },
     });
 
     const lobby2 = new Lobby();
@@ -266,7 +289,7 @@ describe('lobby', () => {
     expect(addressed2).toContainEqual({ key: 'b', msg: { t: ServerMessageType.Cancelled } });
     expect(addressed2).toContainEqual({
       key: 'h2',
-      msg: { t: ServerMessageType.Hosted, code: 'UVWXYZ', host: 'Ada', map: MAP_SPIRAL, difficulty: 'hard' },
+      msg: { t: ServerMessageType.Hosted, code: 'UVWXYZ', host: 'Ada', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel },
     });
   });
 
@@ -284,7 +307,7 @@ describe('lobby', () => {
     const rejoin = lobby.join({ code: 'ABCDEF', nick: 'Gus', key: 'g' });
     expect(rejoin).toContainEqual({
       key: 'g',
-      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Gus', map: MAP_SPIRAL, difficulty: 'hard', picked: { host: false, guest: false } },
+      msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Gus', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
   });
 
@@ -546,6 +569,7 @@ describe('lobby', () => {
       guest: 'Bob',
       map: MAP_SPIRAL,
       difficulty: 'hard',
+      mode: Mode.Duel,
       picked: { host: true, guest: false },
     };
     expect(addressed).toContainEqual({ key: 'h', msg: room });
@@ -629,5 +653,19 @@ describe('lobby', () => {
     expect(lobby.start('h', 7, ['th', 'tg'], 0)).toEqual([
       { key: 'h', msg: { t: ServerMessageType.Refused, reason: EN_ATTENTE } },
     ]);
+  });
+
+  it('[CU-01] lance une partie coopérative quand l\'hôte a choisi la Coopération', () => {
+    const lobby = new Lobby();
+    lobby.host({ code: 'ABCDEF', nick: 'Ada', map: MAP_SPIRAL, difficulty: 'hard', key: 'h', mode: Mode.Coop });
+    lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+    lobby.choose('h', 'forge');
+    lobby.choose('g', 'sylve');
+
+    lobby.start('h', 7, ['th', 'tg'], 0);
+
+    const duel = lobby.duel('ABCDEF')!;
+    expect(duel.worlds.map((w) => w.duel)).toEqual([false, false]);
+    expect(duel.worlds.map((w) => w.lives)).toEqual([20, 20]);
   });
 });

@@ -241,6 +241,7 @@ export enum CommandType {
   Receive = 'receive',
   Gleaner = 'gleaner',
   Gate = 'gate',
+  ReserveLoss = 'reserveLoss',
 }
 
 export type Command =
@@ -251,7 +252,8 @@ export type Command =
   | { c: CommandType.Send; creep: string }
   | { c: CommandType.Receive; creep: string }
   | { c: CommandType.Gleaner }
-  | { c: CommandType.Gate; upgrade: GateUpgrade };
+  | { c: CommandType.Gate; upgrade: GateUpgrade }
+  | { c: CommandType.ReserveLoss; lives: number };
 
 export type Result = { ok: true; id?: number } | { ok: false; reason: string };
 

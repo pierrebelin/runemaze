@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClientMessageType, readClientMessage } from '../../../src/application/online/protocol';
+import { ClientMessageType, Mode, readClientMessage } from '../../../src/application/online/protocol';
 import { MAP_TWO_STONES } from '../../support/maps';
 
 describe('readClientMessage', () => {
@@ -67,6 +67,12 @@ describe('readClientMessage', () => {
 
     expect(readClientMessage(order({ c: 'send', creep: 'grunt' }))).not.toBeNull();
     expect(readClientMessage(order({ c: 'receive', creep: 'grunt' }))).toBeNull();
+  });
+
+  it('[RM-06] rejette un ordre de perte de réserve envoyé par un joueur', () => {
+    const raw = JSON.stringify({ t: 'order', tick: 5, cmd: { c: 'reserveLoss', lives: 3 }, fingerprint: 'abc' });
+
+    expect(readClientMessage(raw)).toBeNull();
   });
 
   it('[RM-04] ignore l\'ordre de mode infini venu du réseau', () => {
@@ -238,6 +244,7 @@ describe('readClientMessage — salon', () => {
       nick: longNick,
       map: MAP_TWO_STONES,
       difficulty: 'hard',
+      mode: Mode.Duel,
     });
 
     expect(
@@ -249,6 +256,30 @@ describe('readClientMessage — salon', () => {
     expect(
       readClientMessage(JSON.stringify({ t: 'host', nick: 42, map: MAP_TWO_STONES, difficulty: 'hard' })),
     ).toBeNull();
+  });
+
+  it('[RM-01] lit le mode Coopération d\'une demande de création', () => {
+    const raw = JSON.stringify({ t: 'host', nick: 'Ada', map: MAP_TWO_STONES, difficulty: 'hard', mode: 'coop' });
+
+    expect(readClientMessage(raw)).toEqual({
+      t: 'host',
+      nick: 'Ada',
+      map: MAP_TWO_STONES,
+      difficulty: 'hard',
+      mode: Mode.Coop,
+    });
+  });
+
+  it('[RM-01] retient le mode Duel quand la demande de création n\'en donne pas', () => {
+    const raw = JSON.stringify({ t: 'host', nick: 'Ada', map: MAP_TWO_STONES, difficulty: 'hard' });
+
+    expect(readClientMessage(raw)).toMatchObject({ t: 'host', mode: Mode.Duel });
+  });
+
+  it('[RM-01] rejette une demande de création au mode inconnu', () => {
+    const raw = JSON.stringify({ t: 'host', nick: 'Ada', map: MAP_TWO_STONES, difficulty: 'hard', mode: 'battle' });
+
+    expect(readClientMessage(raw)).toBeNull();
   });
 
   it('[RM-16] lit la demande de rejoindre avec pseudo et code', () => {
