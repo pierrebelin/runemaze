@@ -140,7 +140,7 @@ function handleMessage(ws: WebSocket, msg: NonNullable<ReturnType<typeof readCli
       send(
         ws,
         referee.open(
-          { map: msg.map, difficulty: msg.difficulty, seed: seed(), id, token, previous: msg.previous },
+          { map: msg.map, difficulty: msg.difficulty, builder: msg.builder, seed: seed(), id, token, previous: msg.previous },
           now,
         ),
       );
@@ -202,6 +202,11 @@ function handleMessage(ws: WebSocket, msg: NonNullable<ReturnType<typeof readCli
     case ClientMessageType.Join: {
       const key = keyBySocket.get(ws)!;
       dispatchAddressed(lobby.join({ code: msg.code, nick: msg.nick, key }));
+      break;
+    }
+    case ClientMessageType.ChooseBuilder: {
+      const key = keyBySocket.get(ws)!;
+      dispatchAddressed(lobby.choose(key, msg.builder));
       break;
     }
     case ClientMessageType.Leave: {

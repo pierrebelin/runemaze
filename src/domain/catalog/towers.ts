@@ -9,7 +9,88 @@ const T: TowerDef[] = [
   {
     id: 'wall', name: 'Mur de pierre', family: 'wall', tier: 0, cost: 3,
     desc: "Bloc de labyrinthe bon marché. N'attaque pas, mais peut devenir n'importe quelle tour de base.",
-    upgrades: ['archer', 'cannon', 'frost', 'storm', 'venom'],
+    upgrades: ['archer', 'cannon', 'frost', 'storm', 'venom', 'pylon', 'guard', 'bramble', 'gong', 'anvil'],
+  },
+
+  // Garde et Ronces : attaque de zone instantanée, frappe tout le sol à portée.
+  {
+    id: 'guard', name: 'Garde', family: 'archer', tier: 1, cost: 15,
+    desc: 'Frappe toutes les créatures au sol à sa portée, sans les arrêter.',
+    attack: { type: 'normal', dmg: [14, 18], cooldown: 0.9, range: 1.5, projectileSpeed: 0, targets: 'ground', area: true },
+    upgrades: ['champion', 'standard'],
+  },
+  {
+    id: 'champion', name: 'Champion', family: 'archer', tier: 3, cost: 45,
+    desc: 'Frappe toutes les créatures au sol à sa portée, bien plus fort.',
+    attack: { type: 'normal', dmg: [45, 55], cooldown: 0.9, range: 1.5, projectileSpeed: 0, targets: 'ground', area: true },
+    upgrades: [],
+  },
+  {
+    id: 'standard', name: 'Porte-étendard', family: 'archer', tier: 3, cost: 45,
+    desc: 'Frappe toutes les créatures au sol à sa portée. Les tours à 3 cases infligent 20 % de dégâts en plus (les auras ne se cumulent pas).',
+    attack: { type: 'normal', dmg: [20, 24], cooldown: 0.9, range: 1.5, projectileSpeed: 0, targets: 'ground', area: true },
+    aura: { kind: 'damage', pct: 0.2, radius: 3 },
+    upgrades: [],
+  },
+  {
+    id: 'bramble', name: 'Ronces', family: 'venom', tier: 1, cost: 8,
+    desc: 'Blesse toutes les créatures au sol à sa portée, sans les arrêter.',
+    attack: { type: 'normal', dmg: [6, 6], cooldown: 1, range: 2, projectileSpeed: 0, targets: 'ground', area: true },
+    upgrades: ['briar', 'mothertorn'],
+  },
+  {
+    id: 'briar', name: 'Roncier', family: 'venom', tier: 3, cost: 30,
+    desc: 'Empoisonne : 8 dégâts par seconde pendant 4 s, cumulable 3 fois, sur tout le sol à portée.',
+    attack: { type: 'normal', dmg: [20, 20], cooldown: 1, range: 2, projectileSpeed: 0, targets: 'ground', area: true, poison: { dps: 8, duration: 4, maxStacks: 3 } },
+    upgrades: [],
+  },
+  {
+    id: 'mothertorn', name: 'Épine-mère', family: 'venom', tier: 3, cost: 30,
+    desc: 'Ralentit de 20 % tout le sol à portée.',
+    attack: { type: 'normal', dmg: [14, 14], cooldown: 1, range: 2, projectileSpeed: 0, targets: 'ground', area: true, slow: { pct: 0.2, duration: 2 } },
+    upgrades: [],
+  },
+
+  // Gong : étourdit tout ce qui est à portée, sol et air.
+  {
+    id: 'gong', name: 'Gong', family: 'frost', tier: 1, cost: 20,
+    desc: 'Onde de choc magique : étourdit 0,5 s toutes les créatures à portée, sol et air.',
+    attack: { type: 'magic', dmg: [10, 10], cooldown: 4, range: 2.5, projectileSpeed: 0, targets: 'both', area: true, stun: { duration: 0.5 } },
+    upgrades: ['greatgong', 'chime'],
+  },
+  {
+    id: 'greatgong', name: 'Grand gong', family: 'frost', tier: 3, cost: 50,
+    desc: 'Onde de choc magique : étourdit 0,8 s toutes les créatures à portée, sol et air.',
+    attack: { type: 'magic', dmg: [30, 30], cooldown: 3.5, range: 3, projectileSpeed: 0, targets: 'both', area: true, stun: { duration: 0.8 } },
+    upgrades: [],
+  },
+  {
+    id: 'chime', name: 'Carillon', family: 'frost', tier: 3, cost: 50,
+    desc: 'Étourdit 0,4 s et ralentit de 30 % toutes les créatures à portée, sol et air.',
+    attack: { type: 'magic', dmg: [20, 20], cooldown: 4, range: 2.5, projectileSpeed: 0, targets: 'both', area: true, stun: { duration: 0.4 }, slow: { pct: 0.3, duration: 2 } },
+    upgrades: [],
+  },
+
+  // Enclume : aura de cadence, les tours voisines tirent plus vite.
+  {
+    id: 'anvil', name: 'Enclume', family: 'cannon', tier: 1, cost: 20,
+    desc: 'Les tours à 3 cases tirent 10 % plus vite (les auras ne se cumulent pas). Sol uniquement.',
+    attack: { type: 'siege', dmg: [16, 20], cooldown: 1.2, range: 3.5, projectileSpeed: 9, targets: 'ground' },
+    aura: { kind: 'attackSpeed', pct: 0.1, radius: 3 },
+    upgrades: ['furnace', 'triphammer'],
+  },
+  {
+    id: 'furnace', name: 'Haut fourneau', family: 'cannon', tier: 3, cost: 50,
+    desc: 'Les tours à 3 cases tirent 25 % plus vite (les auras ne se cumulent pas). Sol uniquement.',
+    attack: { type: 'siege', dmg: [30, 36], cooldown: 1.2, range: 3.5, projectileSpeed: 9, targets: 'ground' },
+    aura: { kind: 'attackSpeed', pct: 0.25, radius: 3 },
+    upgrades: [],
+  },
+  {
+    id: 'triphammer', name: 'Marteau-pilon', family: 'cannon', tier: 3, cost: 50,
+    desc: 'Coups de siège lourds avec dégâts de zone. Sol uniquement.',
+    attack: { type: 'siege', dmg: [70, 85], cooldown: 1.2, range: 3, projectileSpeed: 9, targets: 'ground', splash: { radius: 1.5, falloff: 0.5 } },
+    upgrades: [],
   },
 
   // Archers : perçant, touche le sol et l'air.
@@ -137,6 +218,26 @@ const T: TowerDef[] = [
     id: 'voidprism', name: 'Prisme du néant', family: 'storm', tier: 3, cost: 160,
     desc: 'Dégâts chaotiques : ignorent les types d’armure et touchent les immunisés.',
     attack: { type: 'chaos', dmg: [260, 300], cooldown: 1.4, range: 6.5, projectileSpeed: 0, targets: 'both' },
+    upgrades: [],
+  },
+
+  // Pylône : la cadence monte tant qu'une cible reste à portée.
+  {
+    id: 'pylon', name: 'Pylône', family: 'storm', tier: 1, cost: 20,
+    desc: "Tire plus vite tant qu'une cible reste à portée : +1 % de cadence par seconde, jusqu'à +100 %.",
+    attack: { type: 'magic', dmg: [8, 10], cooldown: 0.8, range: 4.5, projectileSpeed: 0, targets: 'both', rampUp: { max: 1 } },
+    upgrades: ['capacitor', 'volatileprism'],
+  },
+  {
+    id: 'capacitor', name: 'Condensateur', family: 'storm', tier: 3, cost: 55,
+    desc: "Tire plus vite tant qu'une cible reste à portée : +1 % de cadence par seconde, jusqu'à +150 %.",
+    attack: { type: 'magic', dmg: [25, 30], cooldown: 0.8, range: 4.5, projectileSpeed: 0, targets: 'both', rampUp: { max: 1.5 } },
+    upgrades: [],
+  },
+  {
+    id: 'volatileprism', name: 'Prisme volatil', family: 'storm', tier: 3, cost: 55,
+    desc: "Éclair qui rebondit sur 3 cibles ; tire plus vite tant qu'une cible reste à portée, jusqu'à +100 %.",
+    attack: { type: 'magic', dmg: [20, 24], cooldown: 0.8, range: 4.5, projectileSpeed: 0, targets: 'both', chain: { bounces: 3, range: 2.5, decay: 0.8 }, rampUp: { max: 1 } },
     upgrades: [],
   },
 
@@ -334,11 +435,6 @@ const T: TowerDef[] = [
 ];
 
 export const TOWERS: Record<string, TowerDef> = Object.fromEntries(T.map((t) => [t.id, t]));
-
-export const INFUSION_WAVE = 8;
-
-/** Ordre du panneau de construction (touches Q W E R A S). */
-export const BUILD_MENU = ['wall', 'archer', 'cannon', 'frost', 'storm', 'venom'];
 
 export function tower(id: string): TowerDef {
   const d = TOWERS[id];

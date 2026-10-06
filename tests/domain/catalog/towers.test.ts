@@ -46,4 +46,10 @@ describe('catalogue des hybrides', () => {
   it('range une tour hybride dans la famille de son premier élément', () => {
     for (const d of all.filter((d) => d.elements)) expect(d.family, d.id).toBe(d.elements![0]);
   });
+
+  it('[RM-05] toute attaque de zone du catalogue est instantanée', () => {
+    const areas = all.filter((d) => d.attack?.area);
+    expect(areas.length).toBeGreaterThan(0);
+    for (const d of areas) expect(d.attack!.projectileSpeed, d.id).toBe(0);
+  });
 });

@@ -1,4 +1,5 @@
-import { BUILD_MENU, TOWERS } from '../../domain/catalog/towers';
+import { TOWERS } from '../../domain/catalog/towers';
+import { buildMenu } from '../../domain/rules/builder';
 import type { Result } from '../../domain/model/types';
 import type { World } from '../../domain/model/World';
 import { fail } from '../result';
@@ -10,7 +11,7 @@ import { fail } from '../result';
  */
 export function canBuild(world: World, defId: string, x: number, y: number): Result {
   const def = TOWERS[defId];
-  if (!def || !BUILD_MENU.includes(defId)) return fail('Construction inconnue.');
+  if (!def || !buildMenu(world.builder).includes(defId)) return fail('Construction inconnue.');
   const g = world.grid;
   if (!g.inBounds(x, y) || !g.inBounds(x + 1, y + 1)) return fail('Hors de la carte.');
   const cells = g.footprint(x, y);

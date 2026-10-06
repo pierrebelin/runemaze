@@ -5,7 +5,7 @@ import { GameEventType, BreakerPhase } from '../model/types';
 /** Capacités actives des créatures (soin du Chaman, etc). */
 export function updateAbilities(world: World, dt: number): void {
   for (const c of world.creeps) {
-    if (!c.alive || !c.def.heal) continue;
+    if (!c.alive || !c.def.heal || c.frozen > 0) continue;
     c.healTimer -= dt;
     if (c.healTimer > 1e-9) continue;
     c.healTimer += c.def.heal.every;

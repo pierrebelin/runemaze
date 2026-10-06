@@ -11,7 +11,7 @@ Le jeu se joue en ligne : chaque partie est tenue par un serveur qui l'arbitre.
 ```bash
 npm install
 npm run build && npm run server   # build puis serveur de partie (http://localhost:8080)
-npm test                          # tests de la simulation + test d'équilibrage par un bot
+npm test                          # tests de la simulation
 npm run build:artifact            # variante sans enveloppe <html>, pour une page hébergée
 ```
 
@@ -66,7 +66,7 @@ src/
                    ServerLink.ts : liaison WebSocket au serveur de partie
   server/          serveur HTTP + WebSocket : sert dist/, relaie les ordres à l'arbitre
                    (application/online/)
-tests/             même arborescence que src/ ; architecture, balance (bot), support/
+tests/             même arborescence que src/ ; architecture, support/
 ```
 
 Les choix qui comptent :
@@ -86,13 +86,6 @@ Les choix qui comptent :
   objets simples ; ajouter une tour ou une carte ne touche pas au moteur.
 - **Rendu interchangeable.** `Renderer` ne fait que lire `World`. Passer à PixiJS ou à
   WebGL ne toucherait ni la simulation ni les tests.
-
-## Équilibrage
-
-`tests/balance.test.ts` fait jouer un bot volontairement simple (labyrinthe fixe en chicanes,
-aucune adaptation aux vagues) sur trois graines par difficulté. Il gagne toujours en Recrue,
-gagne en Vétéran avec une dizaine de vies perdues et échoue tôt en Légende. Un joueur qui
-construit un vrai labyrinthe fait nettement mieux : Légende est pensée pour lui.
 
 ## Pistes
 

@@ -3,6 +3,7 @@ import { dispatch } from '../../../src/application/dispatch';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { newWorld } from '../../support/helpers';
 import { MAP_GATED_STONES } from '../../support/maps';
+import { MAP_CROSSING } from '../../../src/domain/catalog/map';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('build', () => {
@@ -87,5 +88,38 @@ describe('build', () => {
     expect(r.ok).toBe(true);
     expect(w.towers).toHaveLength(1);
     expect(w.gold).toBe(gold - 3);
+  });
+
+  it('[CU-03] construit la base de sa famille et sa base signature', () => {
+    const w = newWorld('normal', 42, MAP_CROSSING, 'bastion');
+    w.gold = 10_000;
+
+    const a = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 });
+    const g = dispatch(w, { c: CommandType.Build, def: 'guard', x: 14, y: 8 });
+
+    expect(a.ok).toBe(true);
+    expect(g.ok).toBe(true);
+    expect(w.towers).toHaveLength(2);
+  });
+
+  it('[RM-02] refuse de construire la base d’un autre bâtisseur', () => {
+    const w = newWorld('normal', 42, MAP_CROSSING, 'bastion');
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'cannon', x: 10, y: 8 });
+
+    expect(r).toEqual({ ok: false, reason: 'Construction inconnue.' });
+    expect(w.gold).toBe(gold);
+    expect(w.towers).toHaveLength(0);
+  });
+
+  it('[RM-10] refuse une Garde qui fermerait le passage', () => {
+    const w = newWorld('normal', 42, MAP_GATED_STONES, 'bastion');
+    w.gold = 10_000;
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'guard', x: 15, y: 1 });
+
+    expect(r).toEqual({ ok: false, reason: 'Impossible de bloquer le chemin.' });
+    expect(w.towers).toHaveLength(0);
   });
 });

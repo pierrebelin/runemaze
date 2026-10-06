@@ -330,6 +330,57 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
     }
   },
 
+  // Garde et Ronces
+  guard: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.5, ARCHER.dark);
+    disc(p.ctx, p.cx, p.top, 0.4, ARCHER.main);
+    poly(p.ctx, IRON, [p.cx - 0.16, p.top - 0.3, p.cx + 0.16, p.top - 0.3, p.cx + 0.12, p.top + 0.12, p.cx, p.top + 0.28, p.cx - 0.12, p.top + 0.12]);
+  },
+  champion: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.56, ARCHER.dark);
+    disc(p.ctx, p.cx, p.top, 0.46, ARCHER.main);
+    poly(p.ctx, PAL.gold, [p.cx - 0.2, p.top - 0.36, p.cx + 0.2, p.top - 0.36, p.cx + 0.15, p.top + 0.14, p.cx, p.top + 0.34, p.cx - 0.15, p.top + 0.14]);
+    disc(p.ctx, p.cx, p.top - 0.05, 0.07, IRON);
+  },
+  standard: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.5, ARCHER.dark);
+    disc(p.ctx, p.cx, p.top, 0.4, ARCHER.main);
+    line(p.ctx, '#3a2614', 0.06, [p.cx - 0.1, p.top + 0.3, p.cx - 0.1, p.top - 0.7]);
+    poly(p.ctx, PAL.gold, [p.cx - 0.1, p.top - 0.7, p.cx + 0.4, p.top - 0.52, p.cx - 0.1, p.top - 0.34]);
+  },
+  bramble: (p) => {
+    for (const a of [0.3, 1.9, 3.6, 5.1]) line(p.ctx, VENOM.dark, 0.07, [p.cx, p.top, p.cx + Math.cos(a) * 0.5, p.top + Math.sin(a) * 0.5]);
+    disc(p.ctx, p.cx, p.top, 0.14, VENOM.main);
+  },
+  briar: (p) => {
+    for (const a of [0.2, 1.3, 2.4, 3.5, 4.6, 5.5]) line(p.ctx, VENOM.dark, 0.08, [p.cx, p.top, p.cx + Math.cos(a) * 0.62, p.top + Math.sin(a) * 0.62]);
+    disc(p.ctx, p.cx, p.top, 0.2, VENOM.main);
+    drips(p.ctx, p.cx, p.top + 0.3, ACID, p.time);
+  },
+  mothertorn: (p) => {
+    aura(p, '143, 211, 242', 0.7);
+    for (const a of [0.2, 1.3, 2.4, 3.5, 4.6, 5.5]) line(p.ctx, '#2f5a4a', 0.08, [p.cx, p.top, p.cx + Math.cos(a) * 0.62, p.top + Math.sin(a) * 0.62]);
+    disc(p.ctx, p.cx, p.top, 0.2, '#8fd8b8');
+  },
+
+  // Gong
+  gong: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.46, PAL.bronze);
+    disc(p.ctx, p.cx, p.top, 0.36, PAL.gold);
+    disc(p.ctx, p.cx, p.top, 0.1, PAL.bronze);
+  },
+  greatgong: (p) => {
+    aura(p, '216, 243, 255', 0.8);
+    disc(p.ctx, p.cx, p.top, 0.56, PAL.bronze);
+    disc(p.ctx, p.cx, p.top, 0.46, PAL.gold);
+    disc(p.ctx, p.cx, p.top, 0.26, PAL.bronze);
+    disc(p.ctx, p.cx, p.top, 0.12, PAL.gold);
+  },
+  chime: (p) => {
+    for (const x of [-0.3, -0.1, 0.1, 0.3]) line(p.ctx, FROST.main, 0.09, [p.cx + x, p.top - 0.4, p.cx + x, p.top + 0.1 + Math.abs(x) * 0.8]);
+    line(p.ctx, PAL.bronze, 0.06, [p.cx - 0.4, p.top - 0.4, p.cx + 0.4, p.top - 0.4]);
+  },
+
   // Archers
   archer: (p) => {
     deck(p);
@@ -467,6 +518,27 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
   cannon: (p) => {
     turret(p);
     barrel(p, 0.72, 0.24);
+    hub(p, CANNON.glow);
+  },
+  anvil: (p) => {
+    turret(p);
+    poly(p.ctx, IRON, [p.cx - 0.4, p.top - 0.2, p.cx + 0.4, p.top - 0.2, p.cx + 0.2, p.top + 0.05, p.cx + 0.2, p.top + 0.3, p.cx - 0.2, p.top + 0.3, p.cx - 0.2, p.top + 0.05]);
+    barrel(p, 0.6, 0.18);
+  },
+  furnace: (p) => {
+    turret(p, '#6a3a24', 0.52);
+    disc(p.ctx, p.cx, p.top, 0.3, IRON);
+    disc(p.ctx, p.cx, p.top, 0.2 + 0.04 * pulse(p, 4), 'rgba(240,154,74,0.85)');
+    barrel(p, 0.8, 0.2);
+  },
+  triphammer: (p) => {
+    turret(p, CANNON.main, 0.5);
+    aimed(p, (ctx) => {
+      line(ctx, '#3a2614', 0.1, [-0.1, 0, 0.6, 0]);
+      ctx.fillStyle = IRON;
+      roundRect(ctx, 0.5, -0.26, 0.34, 0.52, 0.06);
+      ctx.fill();
+    });
     hub(p, CANNON.glow);
   },
   mortar: (p) => {
@@ -693,6 +765,24 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
       const y = p.top + Math.sin(a) * 0.3;
       poly(p.ctx, '#ff5aa0', [x, y - 0.1, x + 0.06, y, x, y + 0.1, x - 0.06, y]);
     }
+  },
+  pylon: (p) => {
+    poly(p.ctx, STORM.dark, [p.cx - 0.22, p.top + 0.5, p.cx - 0.1, p.top - 0.6, p.cx + 0.1, p.top - 0.6, p.cx + 0.22, p.top + 0.5]);
+    disc(p.ctx, p.cx, p.top - 0.65, 0.1 + 0.04 * pulse(p, 5), STORM.glow);
+  },
+  capacitor: (p) => {
+    for (const x of [-0.26, 0.26]) {
+      p.ctx.fillStyle = COPPER;
+      roundRect(p.ctx, p.cx + x - 0.12, p.top - 0.5, 0.24, 1, 0.06);
+      p.ctx.fill();
+    }
+    bolt(p.ctx, p.cx - 0.26, p.top - 0.5, p.cx + 0.26, p.top - 0.5, STORM.glow, p.time);
+    disc(p.ctx, p.cx, p.top, 0.12 + 0.04 * pulse(p, 5), STORM.glow);
+  },
+  volatileprism: (p) => {
+    poly(p.ctx, STORM.dark, [p.cx, p.top - 0.8, p.cx + 0.36, p.top + 0.45, p.cx - 0.36, p.top + 0.45]);
+    poly(p.ctx, STORM.main, [p.cx, p.top - 0.8, p.cx + 0.36, p.top + 0.45, p.cx + 0.04, p.top + 0.25]);
+    disc(p.ctx, p.cx, p.top, 0.12 + 0.04 * pulse(p, 7), STORM.glow);
   },
   acidarc: (p) => {
     orb(p, ACID, 'rgba(120, 170, 60, A)', STORM.main, 1);

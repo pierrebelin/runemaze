@@ -6,10 +6,10 @@
 
 | Lot | Intention | RM/CU | Dépend de | État |
 |-----|-----------|-------|-----------|------|
-| F1 | Les quinze tours signature et leurs effets (corps à corps, épines, étourdissement, auras, montée en puissance) jouent dans la simulation | RM-05, RM-06, RM-07, RM-08, RM-09, RM-10 / CU-03 | — | ⬜ |
-| F2 | Chaque partie a un bâtisseur obligatoire qui restreint construction et évolutions ; infusion sans condition ; bot et test d'équilibrage supprimés | RM-01, RM-02, RM-03, RM-10, RM-11 / CU-01, CU-03 | F1 | ⬜ |
-| F3 | Choix du bâtisseur en ligne : partie solo tenue par le serveur, choix caché dans le salon de duel | RM-01, RM-04, RM-11 / CU-02 | F2 | ⬜ |
-| F4 | Écrans : choix du bâtisseur, menus de construction et d'évolution, textes des nouveaux effets, bâtisseur adverse | RM-02, RM-04 / CU-01, CU-02, CU-03 | F3 | ⬜ |
+| F1 | Les quinze tours signature et leurs effets (corps à corps, épines, étourdissement, auras, montée en puissance) jouent dans la simulation | RM-05, RM-06, RM-07, RM-08, RM-09, RM-10 / CU-03 | — | ✅ |
+| F2 | Chaque partie a un bâtisseur obligatoire qui restreint construction et évolutions ; infusion sans condition ; bot et test d'équilibrage supprimés | RM-01, RM-02, RM-03, RM-10, RM-11 / CU-03 | F1 | ✅ |
+| F3 | Choix du bâtisseur en ligne : partie solo tenue par le serveur, choix caché dans le salon de duel | RM-01, RM-04, RM-11 / CU-02 | F2 | ✅ |
+| F4 | Écrans : choix du bâtisseur, menus de construction et d'évolution, textes des nouveaux effets, bâtisseur adverse | RM-02, RM-04 / CU-01, CU-02, CU-03 | F3 | ✅ |
 
 ## Périmètre
 
@@ -52,13 +52,13 @@
 | RM-09 — montée en puissance | `AttackDef.rampUp` + `Tower.ramp` + `domain/rules/attackSpeed.ts` | F1 |
 | RM-10 — règles de construction inchangées | `canBuild`, `refundValue`, emprise 2×2 inchangés ; tests sur tours signature | F1, F2 |
 | RM-11 — partie rejouable | bâtisseur dans `WorldOptions` et l'instantané ; aucun aléatoire nouveau | F2, F3 |
-| CU-01 — choisir son bâtisseur en solo | `Game` (écran de départ) + `describe.ts` `builderCard()` | F2, F4 |
+| CU-01 — choisir son bâtisseur en solo | `Game` (écran de départ) + `describe.ts` `builderCard()` | F4 |
 | CU-02 — choisir son bâtisseur en duel | `ClientMessageType.ChooseBuilder` → `Lobby.choose()` ; `Game` (salon, panneau adverse) | F3, F4 |
 | CU-03 — construire avec son bâtisseur | `buildMenu()` (Q W E), `upgradeOptions()` ; `Game.computeSlots()` | F1, F2, F4 |
 
 ---
 
-## Lot F1 — Tours signature et nouveaux effets — ⬜
+## Lot F1 — Tours signature et nouveaux effets — ✅
 
 ### Intention
 Ajouter au catalogue les quinze tours signature et les mécanismes qu'elles demandent. Toutes restent constructibles par tout joueur jusqu'à F2. **RM** : RM-05, RM-06, RM-07, RM-08, RM-09, RM-10 · **CU** : CU-03
@@ -77,7 +77,7 @@ Ajouter au catalogue les quinze tours signature et les mécanismes qu'elles dema
 ### Étapes et tests
 Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre : cas nominal d'abord (il fixe les signatures), refus ensuite.
 
-#### Étape 1 — Corps à corps et épines frappent toute la zone sans arrêter les créatures — ⬜
+#### Étape 1 — Corps à corps et épines frappent toute la zone sans arrêter les créatures — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-05] la Garde blesse à chaque coup toutes les créatures au sol à sa portée` | `tests/domain/systems/combat.test.ts` | RM-05 |
@@ -91,7 +91,7 @@ Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre :
 
 **Production autorisée** : `src/domain/model/types.ts` (`AttackDef.area`), `src/domain/systems/combat.ts` (`updateCombat`), `src/domain/catalog/towers.ts` (`guard`, `champion`, `bramble`, `briar`, `mothertorn`, ajout à `wall.upgrades`), `src/infrastructure/render/sprites.ts` (dessins de ces tours, exigés par `tests/infrastructure/render/sprites.test.ts`).
 
-#### Étape 2 — Le gong étourdit — ⬜
+#### Étape 2 — Le gong étourdit — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-08] le Gong immobilise 0,5 s toutes les créatures, au sol et en vol, à 2,5 cases` | `tests/domain/systems/combat.test.ts` | RM-08 |
@@ -100,10 +100,11 @@ Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre :
 | 4 | `[RM-08] un Chaman étourdi ne soigne pas` | `tests/domain/systems/abilities.test.ts` | RM-08 |
 | 5 | `[RM-08] une créature étourdie ne déclenche pas son sprint quand elle est touchée` | `tests/domain/systems/status.test.ts` | RM-08 |
 | 6 | `[RM-08] le Carillon étourdit 0,4 s et ralentit de 30 %` | `tests/domain/systems/combat.test.ts` | RM-08 |
+| 7 | `[RM-08] le coup qui étourdit ne déclenche pas le sprint` (H3) | `tests/domain/systems/status.test.ts` | RM-08 |
 
 **Production autorisée** : `src/domain/model/types.ts` (`AttackDef.stun`), `src/domain/rules/stun.ts` (nouveau, `stunDuration`), `src/domain/systems/status.ts` (`applyOnHit`), `src/domain/systems/combat.ts` (`hitCreep`, sprint), `src/domain/systems/abilities.ts` (soin), `src/domain/catalog/towers.ts` (`gong`, `greatgong`, `chime`), `src/infrastructure/render/sprites.ts`.
 
-#### Étape 3 — Les auras renforcent les tours voisines — ⬜
+#### Étape 3 — Les auras renforcent les tours voisines — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-06] donne à une tour le bonus de dégâts d'une aura à portée` | `tests/domain/rules/aura.test.ts` | RM-06 |
@@ -116,7 +117,7 @@ Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre :
 
 **Production autorisée** : `src/domain/model/types.ts` (`TowerDef.aura`), `src/domain/rules/aura.ts` (nouveau), `src/domain/rules/attackSpeed.ts` (nouveau, `attackCooldown`), `src/domain/systems/combat.ts` (`updateCombat`), `src/domain/catalog/towers.ts` (`standard`, `anvil`, `furnace`, `triphammer`), `src/infrastructure/render/sprites.ts`.
 
-#### Étape 4 — La montée en puissance accélère le Pylône — ⬜
+#### Étape 4 — La montée en puissance accélère le Pylône — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-09] donne 1 % de vitesse d'attaque par seconde avec une cible, plafonné au maximum` | `tests/domain/rules/attackSpeed.test.ts` | RM-09 |
@@ -127,7 +128,7 @@ Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre :
 
 **Production autorisée** : `src/domain/model/types.ts` (`AttackDef.rampUp`, `Tower.ramp`), `src/domain/rules/attackSpeed.ts` (`rampBonus`), `src/domain/systems/combat.ts` (`updateCombat`), `src/application/commands/build.ts` (`ramp: 0`), `src/domain/catalog/towers.ts` (`pylon`, `capacitor`, `volatileprism`), `src/infrastructure/render/sprites.ts`.
 
-#### Étape 5 — Vérification — ⬜
+#### Étape 5 — Vérification — ✅
 Pas de nouveau test. `npx tsc --noEmit` + `npm test`.
 
 ### Éléments de code
@@ -146,14 +147,16 @@ Signatures seulement, jamais de corps.
 - `domain/systems/status.ts` — `applyOnHit` : `c.frozen = max(c.frozen, stunDuration(…))`, sans toucher `freezeGuard`
 
 ### Hypothèses
-_Vide à l'écriture. Rempli par `/implement-tdd` : `Hn — [hypothèse] — à valider par [qui]`._
+- H1 — Les évolutions signature (`champion`, `briar`, `mothertorn`, et suivantes) sont en `tier: 3`, pas 2 : le test existant « offre à chaque tour de niveau 2 toutes les infusions de sa famille » l'impose tant que l'infusion n'est pas filtrée par bâtisseur. À reconsidérer en F2 — à valider par l'utilisateur.
+- H2 — Chiffres absents de la spec, repris du catalogue existant : lenteur sur 2 s (Épine-mère, Carillon), rebond `range: 2.5, decay: 0.8` (Prisme volatil), `falloff: 0.5` (Marteau-pilon) — à valider par l'utilisateur.
+- H3 — Le coup qui étourdit ne déclenche pas le sprint de la créature touchée (lecture stricte de RM-08, cohérente avec D8) — à valider par l'utilisateur.
 
 ---
 
-## Lot F2 — Bâtisseur obligatoire dans la partie — ⬜
+## Lot F2 — Bâtisseur obligatoire dans la partie — ✅
 
 ### Intention
-Une partie a toujours un bâtisseur, fixé à la création. Il restreint ce que le joueur construit et fait évoluer à son jeu de tours. Les hybrides de son bâtisseur s'infusent sans condition. **RM** : RM-01, RM-02, RM-03, RM-10, RM-11 · **CU** : CU-01, CU-03
+Une partie a toujours un bâtisseur, fixé à la création. Il restreint ce que le joueur construit et fait évoluer à son jeu de tours. Les hybrides de son bâtisseur s'infusent sans condition. **RM** : RM-01, RM-02, RM-03, RM-10, RM-11 · **CU** : CU-03
 
 ### Conception
 | Point | Décision |
@@ -170,7 +173,7 @@ Une partie a toujours un bâtisseur, fixé à la création. Il restreint ce que 
 ### Étapes et tests
 Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre : cas nominal d'abord (il fixe les signatures), refus ensuite.
 
-#### Étape 1 — Chaque bâtisseur a son jeu de tours — ⬜
+#### Étape 1 — Chaque bâtisseur a son jeu de tours — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-02] le jeu du Bastion contient le mur, l'arbre des archers, la lignée de la Garde, Baliste et Flèches de givre et leurs évolutions` | `tests/domain/rules/builder.test.ts` | RM-02 |
@@ -183,7 +186,7 @@ Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre :
 
 **Production autorisée** : `src/domain/model/types.ts` (`BuilderDef`), `src/domain/catalog/builders.ts` (nouveau), `src/domain/rules/builder.ts` (nouveau).
 
-#### Étape 2 — La partie se joue avec un bâtisseur fixe — ⬜
+#### Étape 2 — La partie se joue avec un bâtisseur fixe — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-01] garde le bâtisseur choisi à la création de la partie` | `tests/domain/model/World.test.ts` | RM-01 |
@@ -193,7 +196,7 @@ Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre :
 **Production autorisée** : `src/domain/model/World.ts` (`WorldOptions.builder`, `builder`), `src/domain/model/snapshot.ts` (`builder`), `src/application/online/referee.ts`, `src/application/online/duel.ts`, `src/presentation/Game.ts` (`createWorld` : bâtisseur passé tel quel, sans écran à ce stade), `tests/support/helpers.ts` (`newWorld(difficulty, seed, map, builder = 'bastion')`, `newDuelWorld` idem).
 **Tests existants à adapter** (bâtisseur compatible avec les tours posées) : les fichiers de `tests/` qui font `new World(...)` ou posent `cannon`, `frost`, `storm`, `venom` ; voir `grep -rln "'cannon'\|'frost'\|'storm'\|'venom'\|new World" tests`.
 
-#### Étape 3 — Le joueur ne construit et ne fait évoluer que ses tours — ⬜
+#### Étape 3 — Le joueur ne construit et ne fait évoluer que ses tours — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[CU-03] construit la base de sa famille et sa base signature` | `tests/application/commands/build.test.ts` | CU-03 |
@@ -206,10 +209,10 @@ Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre :
 
 **Production autorisée** : `src/application/queries/canBuild.ts`, `src/application/commands/upgrade.ts`, `src/domain/catalog/towers.ts` (retrait `INFUSION_WAVE`, `BUILD_MENU`), suppression de `src/domain/rules/infusion.ts` et `src/application/queries/infusionLock.ts`, `src/presentation/Game.ts` (menu par `buildMenu`, évolutions par `upgradeOptions`, retrait de `infusionLock`), `src/presentation/describe.ts` (retrait du paramètre `locked` de `towerInfo` s'il n'a plus d'usage).
 
-#### Étape 4 — Retrait du bot d'équilibrage — ⬜
+#### Étape 4 — Retrait du bot d'équilibrage — ✅
 Pas de nouveau test : suppression de `tests/support/bot.ts` et `tests/balance.test.ts` (D5), mise à jour des mentions listées dans Conception > Retraits.
 
-#### Étape 5 — Vérification — ⬜
+#### Étape 5 — Vérification — ✅
 Pas de nouveau test. `npx tsc --noEmit` + `npm test`.
 
 ### Éléments de code
@@ -226,11 +229,14 @@ Signatures seulement, jamais de corps.
 - `application/commands/upgrade.ts` — refuse `fail('Amélioration indisponible.')` si `cmd.def` n'est pas dans `upgradeOptions(t.def, builderTowers(world.builder, TOWERS))` ; plus d'appel à `infusionLock`
 
 ### Hypothèses
-_Vide à l'écriture. Rempli par `/implement-tdd` : `Hn — [hypothèse] — à valider par [qui]`._
+- H1 — En attendant F3 (protocole) et F4 (écran), `Game`, `referee` et `duel` créent la partie avec le bâtisseur `bastion` fixe ; les helpers de test l'ont aussi par défaut — à valider par l'utilisateur.
+- H2 — Tests existants multi-familles adaptés sans toucher aux assertions : seconde tour remplacée par `guard`, ou deux mondes de bâtisseurs différents pour `familyDamage`. Tests d'infusion contraires à D2/RM-03 supprimés (« tour de guet en Dard corrosif », « refusée pour la vague ») ; la Grêle est testée depuis un glacier (Sanctuaire), plus depuis une tour d'orage — à valider par l'utilisateur.
+- H3 — Reprise de H1 (F1) : les évolutions signature restent en `tier: 3` ; la fiche et le rendu affichent donc « niveau 3 » pour une évolution qui suit directement la base signature. À trancher par l'utilisateur : garder, ou passer en `tier: 2` (vérifier alors le test « offre à chaque tour de niveau 2 toutes les infusions de sa famille » s'il existe encore) — à valider par l'utilisateur.
+- H4 — Les mentions du bot dans `.claude/` (ignoré par git) ont été retirées dans le dépôt principal `/Users/pierre/Documents/Dev/tower-defense/.claude/`, le worktree n'en ayant pas de copie : `rules/tests.md`, skills `plan-implementation`, `tests-unit-tests`, `implement-tdd` — à valider par l'utilisateur.
 
 ---
 
-## Lot F3 — Choix du bâtisseur en ligne — ⬜
+## Lot F3 — Choix du bâtisseur en ligne — ✅
 
 ### Intention
 La partie solo tenue par le serveur reçoit le bâtisseur choisi. Dans le salon de duel, chaque joueur choisit le sien sans voir celui de l'autre. L'hôte ne peut lancer qu'une fois les deux choix faits. **RM** : RM-01, RM-04, RM-11 · **CU** : CU-02
@@ -249,7 +255,7 @@ La partie solo tenue par le serveur reçoit le bâtisseur choisi. Dans le salon 
 ### Étapes et tests
 Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre : cas nominal d'abord (il fixe les signatures), refus ensuite.
 
-#### Étape 1 — La partie solo en ligne s'ouvre avec le bâtisseur choisi — ⬜
+#### Étape 1 — La partie solo en ligne s'ouvre avec le bâtisseur choisi — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-01] ouvre la partie avec le bâtisseur demandé` | `tests/application/online/referee.test.ts` | RM-01 |
@@ -258,7 +264,7 @@ Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre :
 
 **Production autorisée** : `src/application/online/protocol.ts` (`Open`, `readClientMessage`), `src/application/online/referee.ts` (`OpenRequest.builder`), `src/server/main.ts` (transmission de `builder`), `src/presentation/Game.ts` (envoi de `builder` à l'ouverture).
 
-#### Étape 2 — Choix caché dans le salon, lancement quand les deux ont choisi — ⬜
+#### Étape 2 — Choix caché dans le salon, lancement quand les deux ont choisi — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[CU-02] annonce aux deux joueurs qu'un joueur a choisi sans dire lequel` | `tests/application/online/lobby.test.ts` | RM-04 |
@@ -271,9 +277,9 @@ Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre :
 | 8 | `[CU-02] lit un choix de bâtisseur connu et rejette un inconnu` | `tests/application/online/protocol.test.ts` | CU-02 |
 | 9 | `[RM-11] donne à chaque siège une carte au bâtisseur de son joueur` | `tests/application/online/duel.test.ts` | RM-11 |
 
-**Production autorisée** : `src/application/online/protocol.ts` (`ChooseBuilder`, `Room.picked`, `readClientMessage`), `src/application/online/lobby.ts` (`choose`, `start`, `leaveRoom`), `src/application/online/duel.ts` (`DuelConfig.builders`), `src/server/main.ts` (routage de `ChooseBuilder`).
+**Production autorisée** : `src/application/online/protocol.ts` (`ChooseBuilder`, `Room.picked`, `readClientMessage`), `src/application/online/lobby.ts` (`choose`, `start`, `leaveRoom`), `src/application/online/duel.ts` (`DuelConfig.builders`), `src/server/main.ts` (routage de `ChooseBuilder`), `src/presentation/Game.ts` (envoi de `ChooseBuilder 'bastion'`, H5).
 
-#### Étape 3 — Vérification — ⬜
+#### Étape 3 — Vérification — ✅
 Pas de nouveau test. `npx tsc --noEmit` + `npm test`.
 
 ### Éléments de code
@@ -283,11 +289,15 @@ Signatures seulement, jamais de corps.
 - `application/online/duel.ts` — `DuelConfig.builders: [string, string]` ; une `World` par siège avec son bâtisseur
 
 ### Hypothèses
-_Vide à l'écriture. Rempli par `/implement-tdd` : `Hn — [hypothèse] — à valider par [qui]`._
+- H1 — En attendant l'écran de F4, `Game` envoie `builder: 'bastion'` à l'ouverture solo en ligne — à valider par l'utilisateur.
+- H2 — Un choix de bâtisseur venant d'une connexion hors de tout salon (ou en duel lancé) est ignoré sans réponse — à valider par l'utilisateur.
+- H3 — Le choix de l'hôte survit au départ de l'invité ; seul le choix de l'invité qui part est oublié — à valider par l'utilisateur.
+- H4 — Refus « En attente du choix des bâtisseurs. » évalué après les refus existants (non-hôte, pas d'invité) — à valider par l'utilisateur.
+- H5 — En attendant l'écran de F4, `Game` envoie `ChooseBuilder 'bastion'` en entrant au salon (hôte à `Hosted`, invité au premier `Room`), sinon le duel en ligne ne se lance plus ; `Game.ts` ajouté à la production de l'étape 2 pour cet envoi (correction d'audit, sans test : présentation) — à valider par l'utilisateur.
 
 ---
 
-## Lot F4 — Écrans des bâtisseurs — ⬜
+## Lot F4 — Écrans des bâtisseurs — ✅
 
 ### Intention
 Le joueur voit les cinq bâtisseurs et en choisit un, en solo comme dans le salon. Il construit avec Q W E et lit les nouveaux effets dans les fiches des tours. En duel, il voit le bâtisseur adverse. **RM** : RM-02, RM-04 · **CU** : CU-01, CU-02, CU-03
@@ -304,20 +314,21 @@ Le joueur voit les cinq bâtisseurs et en choisit un, en solo comme dans le salo
 ### Étapes et tests
 Tests écrits et **rouges avant toute ligne de production** de l'étape. Ordre : cas nominal d'abord (il fixe les signatures), refus ensuite.
 
-#### Étape 1 — Fiche d'un bâtisseur — ⬜
+#### Étape 1 — Fiche d'un bâtisseur — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[CU-01] présente le nom, le style, la faiblesse et les deux tours de base d'un bâtisseur` | `tests/presentation/describe.test.ts` | CU-01 |
 
 **Production autorisée** : `src/presentation/describe.ts` (`builderCard`), `src/presentation/Game.ts` (choix sur l'écran de départ, choix dans le salon, nom du bâtisseur adverse dans le panneau adverse), `index.html` (styles des cartes de bâtisseur).
 
-#### Étape 2 — Textes des nouveaux effets — ⬜
+#### Étape 2 — Textes des nouveaux effets — ✅
 | # | Test (`it`) | Fichier de test | RM |
 |---|-------------|-----------------|----|
 | 1 | `[RM-05] annonce « corps à corps » pour une attaque de zone au sol de portée 1,5` | `tests/presentation/describe.test.ts` | RM-05 |
 | 2 | `[RM-06] annonce l'aura, son bonus et son rayon` | idem | RM-06 |
 | 3 | `[RM-08] annonce la durée d'étourdissement` | idem | RM-08 |
 | 4 | `[RM-09] annonce le maximum de montée en puissance` | idem | RM-09 |
+| 5 | `[RM-07] annonce une frappe de toute la zone pour une attaque de zone hors corps à corps` (correction d'audit) | idem | RM-07, RM-08 |
 
 **Production autorisée** : `src/presentation/describe.ts` (`towerSpecials`).
 
@@ -330,4 +341,5 @@ Signatures seulement, jamais de corps.
 - `presentation/Game.ts` — `private builderId: string` (choix courant) ; `createWorld(map, d, builder)` ; envoi de `ChooseBuilder` depuis le salon
 
 ### Hypothèses
-_Vide à l'écriture. Rempli par `/implement-tdd` : `Hn — [hypothèse] — à valider par [qui]`._
+- H1 — Dans le salon, aucun bâtisseur n'est envoyé par défaut : le joueur doit cliquer une carte ; il peut rechoisir tant que le duel n'est pas lancé (dernier clic gardé, RM-01 F3). Le choix de l'écran de départ ne pré-sélectionne pas le salon côté serveur — à valider par l'utilisateur.
+- H2 — L'écran de départ présélectionne Bastion, comme la carte et la difficulté : « Commencer » lance sans clic sur un bâtisseur (CU-01 dit « en choisit un, puis lance »). Un clic dans le salon met aussi à jour ce choix solo, repris à l'écran de départ après le duel — à valider par l'utilisateur.

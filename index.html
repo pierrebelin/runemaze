@@ -164,6 +164,13 @@
   .diff { text-align: left; background: var(--slot); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; cursor: pointer; }
   .diff:hover { border-color: var(--bronze); }
   .diff[aria-checked="true"] { border-color: var(--gold); background: #2e2615; }
+  .builders { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 18px; text-align: left; }
+  .builder { text-align: left; background: var(--slot); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; cursor: pointer; color: var(--text); }
+  .builder:hover { border-color: var(--bronze); }
+  .builder[aria-checked="true"] { border-color: var(--gold); background: #2e2615; }
+  .builder h3 { margin: 0 0 4px; }
+  .builder p { margin: 0 0 4px; font-size: 13px; color: var(--text-dim); }
+  .builder em { display: block; font-style: normal; font-size: 11px; text-transform: uppercase; color: var(--bronze); }
   .diff strong { display: block; font: 700 22px var(--display); color: var(--text); }
   .diff span { display: block; font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
   .maps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 18px; }

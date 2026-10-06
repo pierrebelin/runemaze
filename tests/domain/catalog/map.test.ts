@@ -8,7 +8,7 @@ import { CommandType } from '../../../src/domain/model/types';
 describe('MAPS', () => {
   describe.each(MAPS)('$name', (map) => {
     it("[RM-05] trouve un chemin pour chaque tronçon quand la carte n'a aucune tour", () => {
-      const w = new World({ map, difficulty: 'normal', seed: 1 });
+      const w = new World({ map, difficulty: 'normal', seed: 1, builder: 'bastion' });
       expect(w.fields[0].reachable(w.spawnCell)).toBe(true);
       for (let k = 0; k < w.grid.checkpoints.length; k++) {
         const reached = w.grid.checkpoints[k].some((i) => w.fields[k + 1].reachable(i));
@@ -17,14 +17,14 @@ describe('MAPS', () => {
     });
 
     it('[RM-05] rend non constructibles le portail, les pierres et la porte', () => {
-      const g = new World({ map, difficulty: 'normal', seed: 1 }).grid;
+      const g = new World({ map, difficulty: 'normal', seed: 1, builder: 'bastion' }).grid;
       for (const i of g.spawnCells) expect(g.buildable(i)).toBe(false);
       for (const cells of g.checkpoints) for (const i of cells) expect(g.buildable(i)).toBe(false);
       for (const i of g.exitCells) expect(g.buildable(i)).toBe(false);
     });
 
     it('[RM-05] numérote les pierres sans trou à partir de 1', () => {
-      const g = new World({ map, difficulty: 'normal', seed: 1 }).grid;
+      const g = new World({ map, difficulty: 'normal', seed: 1, builder: 'bastion' }).grid;
       const stoneCount = new Set(map.rows.join('').split('').filter((ch) => /[1-9]/.test(ch))).size;
       expect(g.checkpoints).toHaveLength(stoneCount);
       for (const entry of g.checkpoints) expect(entry.length).toBeGreaterThan(0);
@@ -40,20 +40,20 @@ describe('MAPS', () => {
     const [crossing, spiral, seals] = MAPS;
     expect(crossing.width).toBe(36);
     expect(crossing.height).toBe(24);
-    expect(new World({ map: crossing, difficulty: 'normal', seed: 1 }).grid.checkpoints).toHaveLength(1);
+    expect(new World({ map: crossing, difficulty: 'normal', seed: 1, builder: 'bastion' }).grid.checkpoints).toHaveLength(1);
 
     expect(spiral.width).toBe(36);
     expect(spiral.height).toBe(24);
-    expect(new World({ map: spiral, difficulty: 'normal', seed: 1 }).grid.checkpoints).toHaveLength(1);
+    expect(new World({ map: spiral, difficulty: 'normal', seed: 1, builder: 'bastion' }).grid.checkpoints).toHaveLength(1);
 
     expect(seals.width).toBe(40);
     expect(seals.height).toBe(24);
-    expect(new World({ map: seals, difficulty: 'normal', seed: 1 }).grid.checkpoints).toHaveLength(2);
+    expect(new World({ map: seals, difficulty: 'normal', seed: 1, builder: 'bastion' }).grid.checkpoints).toHaveLength(2);
   });
 
   it('[CU-02] fait sortir une créature des Deux Sceaux après la pierre 1 puis la pierre 2', () => {
     const seals = MAPS.find((m) => m.id === 'seals')!;
-    const w = new World({ map: seals, difficulty: 'normal', seed: 42 });
+    const w = new World({ map: seals, difficulty: 'normal', seed: 42, builder: 'bastion' });
     dispatch(w, { c: CommandType.CallWave });
     const legs: number[] = [];
     for (let i = 0; i < 60 * 60 && w.stats.leaked === 0; i++) {
@@ -70,7 +70,7 @@ describe('MAPS', () => {
   it.each(DIFFICULTIES)(
     '[RM-08] démarre avec le même or et les mêmes vies sur chaque carte quand la difficulté est %s',
     (difficulty) => {
-      const worlds = MAPS.map((map) => new World({ map, difficulty, seed: 7 }));
+      const worlds = MAPS.map((map) => new World({ map, difficulty, seed: 7, builder: 'bastion' }));
       const [reference, ...others] = worlds;
       for (const w of others) {
         expect(w.gold).toBe(reference.gold);
@@ -80,7 +80,7 @@ describe('MAPS', () => {
   );
 
   it('[RM-08] lance la même première vague sur chaque carte', () => {
-    const worlds = MAPS.map((map) => new World({ map, difficulty: 'normal', seed: 7 }));
+    const worlds = MAPS.map((map) => new World({ map, difficulty: 'normal', seed: 7, builder: 'bastion' }));
     const compositions = worlds.map((w) => {
       dispatch(w, { c: CommandType.CallWave });
       for (let i = 0; i < 60 * 60 && w.spawners.length > 0; i++) w.step();

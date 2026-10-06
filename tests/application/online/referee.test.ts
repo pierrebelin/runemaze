@@ -15,10 +15,10 @@ describe('Referee', () => {
   it('[RM-02] ouvre la partie à la carte, la difficulté et la graine fixées par le serveur', () => {
     const referee = new Referee();
 
-    referee.open({ map: MAP_CROSSING, difficulty: 'hard', seed: 7, id: 'a', token: 'tok-a' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'hard', seed: 7, id: 'a', token: 'tok-a', builder: 'bastion' }, 0);
 
     const held = referee.game('a');
-    const expected = new World({ map: MAP_CROSSING, difficulty: 'hard', seed: 7 });
+    const expected = new World({ map: MAP_CROSSING, difficulty: 'hard', seed: 7, builder: 'bastion' });
     expect(held?.world.map).toBe(MAP_CROSSING);
     expect(held?.world.difficulty).toBe('hard');
     expect(held && fingerprint(held.world)).toBe(fingerprint(expected));
@@ -27,7 +27,7 @@ describe('Referee', () => {
   it('[RM-02] rend l\'instantané de départ au tick 0 avec l\'or et les vies de la difficulté', () => {
     const referee = new Referee();
 
-    const msg = referee.open({ map: MAP_CROSSING, difficulty: 'easy', seed: 1, id: 'b', token: 'tok-b' }, 0);
+    const msg = referee.open({ map: MAP_CROSSING, difficulty: 'easy', seed: 1, id: 'b', token: 'tok-b', builder: 'bastion' }, 0);
 
     expect(msg).toMatchObject({ t: ServerMessageType.Opened, id: 'b', token: 'tok-b' });
     if (msg.t !== ServerMessageType.Opened) throw new Error('message inattendu');
@@ -36,10 +36,20 @@ describe('Referee', () => {
     expect(msg.snapshot.lives).toBe(DIFFICULTY.easy.lives);
   });
 
+  it('[RM-01] ouvre la partie avec le bâtisseur demandé', () => {
+    const referee = new Referee();
+
+    const msg = referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 1, id: 'a', token: 'tok-a', builder: 'forge' }, 0);
+
+    if (msg.t !== ServerMessageType.Opened) throw new Error('message inattendu');
+    expect(msg.snapshot.builder).toBe('forge');
+    expect(referee.game('a')?.world.builder.id).toBe('forge');
+  });
+
   it('[CU-01] tient plusieurs parties sans qu\'un ordre de l\'une touche l\'autre', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a' }, 0);
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'b', token: 'tok-b' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a', builder: 'bastion' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'b', token: 'tok-b', builder: 'bastion' }, 0);
 
     const goldB = referee.game('b')!.world.gold;
     dispatch(referee.game('a')!.world, { c: CommandType.Build, def: 'archer', x: 10, y: 8 });
@@ -50,7 +60,7 @@ describe('Referee', () => {
 
   it('[RM-07] gèle la partie du serveur quand la connexion du joueur tombe', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'c', token: 'tok-c' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'c', token: 'tok-c', builder: 'bastion' }, 0);
     referee.game('c')!.advance(1000);
     expect(referee.game('c')!.world.tick).toBe(45);
 
@@ -62,7 +72,7 @@ describe('Referee', () => {
 
   it('[CU-03] rend l\'instantané du serveur quand le joueur revient dans les 30 s', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'd', token: 'tok-d' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'd', token: 'tok-d', builder: 'bastion' }, 0);
     referee.game('d')!.advance(1000);
     referee.lose('d', 1000);
 
@@ -75,7 +85,7 @@ describe('Referee', () => {
 
   it('[CU-04] rend la pause et la vitesse d\'avant la coupure quand le joueur reprend', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'e', token: 'tok-e' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'e', token: 'tok-e', builder: 'bastion' }, 0);
     referee.game('e')!.advance(1000);
     referee.game('e')!.pace({ tick: 45, paused: true, speed: 2 }, 1000);
     referee.lose('e', 1000);
@@ -90,7 +100,7 @@ describe('Referee', () => {
 
   it('[RM-07] reprend l\'horloge au tick du gel quand le joueur revient', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'f', token: 'tok-f' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'f', token: 'tok-f', builder: 'bastion' }, 0);
     referee.game('f')!.advance(1000);
     referee.lose('f', 1000);
 
@@ -102,8 +112,8 @@ describe('Referee', () => {
 
   it('[RM-07] termine la partie en défaite par abandon quand 30 s passent sans retour', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a' }, 0);
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'g', token: 'tok-g' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a', builder: 'bastion' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'g', token: 'tok-g', builder: 'bastion' }, 0);
     referee.lose('a', 1000);
 
     expect(referee.sweep(31_000)).toEqual([]);
@@ -116,7 +126,7 @@ describe('Referee', () => {
 
   it('[RM-07] rend la défaite par abandon et le bilan du serveur quand le joueur revient après 30 s', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'h', token: 'tok-h' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'h', token: 'tok-h', builder: 'bastion' }, 0);
     referee.game('h')!.advance(1000);
     referee.lose('h', 1000);
 
@@ -140,7 +150,7 @@ describe('Referee', () => {
 
   it('[RM-08] retire au balayage les parties finies', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'hard', seed: 1, id: 'a', token: 'tok-a' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'hard', seed: 1, id: 'a', token: 'tok-a', builder: 'bastion' }, 0);
     const held = referee.game('a')!;
     let now = 0;
     for (let i = 0; i < 200 && held.world.phase !== Phase.Defeat; i++) {
@@ -155,7 +165,7 @@ describe('Referee', () => {
 
   it('[RM-10] garde au balayage la partie passée en mode infini après la victoire', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'easy', seed: 1, id: 'a', token: 'tok-a' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'easy', seed: 1, id: 'a', token: 'tok-a', builder: 'bastion' }, 0);
     const held = referee.game('a')!;
     const world = held.world;
     let now = 0;
@@ -179,7 +189,7 @@ describe('Referee', () => {
 
   it('[CU-04] propose la reprise quand le jeton correspond et que la coupure date de moins de 30 s', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a', builder: 'bastion' }, 0);
     referee.lose('a', 1000);
 
     expect(referee.resumable('a', 'tok-a', 31_000)).toBe(true);
@@ -189,7 +199,7 @@ describe('Referee', () => {
 
   it('[RM-09] refuse la reprise quand le jeton ne correspond pas', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a', builder: 'bastion' }, 0);
     referee.lose('a', 1000);
 
     expect(referee.resumable('a', 'autre', 2000)).toBe(false);
@@ -201,10 +211,10 @@ describe('Referee', () => {
 
   it('[CU-04] termine l\'ancienne partie par abandon quand le joueur en lance une nouvelle', () => {
     const referee = new Referee();
-    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a' }, 0);
+    referee.open({ map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'a', token: 'tok-a', builder: 'bastion' }, 0);
 
     referee.open(
-      { map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'b', token: 'tok-b', previous: { id: 'a', token: 'tok-a' } },
+      { map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'b', token: 'tok-b', builder: 'bastion', previous: { id: 'a', token: 'tok-a' } },
       1000,
     );
 
@@ -212,7 +222,7 @@ describe('Referee', () => {
     expect(referee.game('b')).toBeDefined();
 
     referee.open(
-      { map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'c', token: 'tok-c', previous: { id: 'b', token: 'faux' } },
+      { map: MAP_CROSSING, difficulty: 'normal', seed: 3, id: 'c', token: 'tok-c', builder: 'bastion', previous: { id: 'b', token: 'faux' } },
       2000,
     );
 

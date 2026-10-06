@@ -1,6 +1,7 @@
 import type { World } from '../model/World';
 import type { AttackDef, Creep } from '../model/types';
 import { applyDamage } from './combat';
+import { stunDuration } from '../rules/stun';
 
 /** Poison, ralentissement, corrosion d'armure et régénération. */
 export function updateStatuses(world: World, dt: number): void {
@@ -47,6 +48,7 @@ export function applyOnHit(world: World, c: Creep, a: AttackDef, towerId: number
     c.frozen = a.freeze.duration;
     c.freezeGuard = a.freeze.guard;
   }
+  if (a.stun) c.frozen = Math.max(c.frozen, stunDuration(a.stun.duration, c.def));
   if (a.slow && !c.def.magicImmune) {
     if (a.slow.pct >= c.slowPct) {
       c.slowPct = a.slow.pct;

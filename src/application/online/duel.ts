@@ -27,6 +27,7 @@ export interface DuelConfig {
   seed: number;
   nicks: [string, string];
   tokens: [string, string];
+  builders: [string, string];
 }
 
 export interface SeatMessage {
@@ -65,7 +66,10 @@ export class Duel {
 
   constructor(config: DuelConfig, now: number) {
     const options = { map: config.map, difficulty: config.difficulty, seed: config.seed, duel: true };
-    this.worlds = [new World(options), new World(options)];
+    this.worlds = [
+      new World({ ...options, builder: config.builders[Seat.Host] }),
+      new World({ ...options, builder: config.builders[Seat.Guest] }),
+    ];
     this.lastNow = now;
     this.lastRivalAt = now;
     this.nicks = config.nicks;

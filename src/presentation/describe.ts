@@ -1,10 +1,11 @@
 import type { World } from '../domain/model/World';
 import type { WaveBriefing, WaveBriefingGroup } from '../application/queries/waveBriefing';
 import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage';
-import type { ArmorType, AttackType, Creep, CreepDef, Result, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
+import type { AuraKind, BuilderDef, ArmorType, AttackType, Creep, CreepDef, Result, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
 import type { breakerLosses, familyDamage, waveCurve } from '../domain/rules/debrief';
 import { towerYield } from '../domain/rules/debrief';
 import { CREEPS } from '../domain/catalog/creeps';
+import { tower } from '../domain/catalog/towers';
 import { GATE, GLEANER } from '../domain/catalog/ether';
 import { gateLevelCost, gateLevelIncome } from '../domain/rules/pricing';
 import { creepSpeed } from '../domain/rules/speed';
@@ -64,10 +65,16 @@ export function matchupTags(type: AttackType): string {
   return [...good.map((g) => `<span class="tag good">${g}</span>`), ...bad.map((b) => `<span class="tag bad">${b}</span>`)].join('');
 }
 
+const AURA_LABEL: Record<AuraKind, string> = { damage: 'de dégâts', attackSpeed: 'de cadence' };
+
 export function towerSpecials(def: TowerDef): string[] {
   const a = def.attack;
-  if (!a) return [];
   const s: string[] = [];
+  if (def.aura) s.push(`aura ${AURA_LABEL[def.aura.kind]} +${Math.round(def.aura.pct * 100)} % à ${fmt1(def.aura.radius)} cases`);
+  if (!a) return s;
+  if (a.area) s.push(a.range === 1.5 && a.targets === 'ground' ? 'corps à corps' : 'frappe toute la zone');
+  if (a.stun) s.push(`étourdit ${fmt1(a.stun.duration)} s`);
+  if (a.rampUp) s.push(`montée en puissance jusqu’à +${Math.round(a.rampUp.max * 100)} %`);
   if (a.splash) s.push(`zone ${fmt1(a.splash.radius)} cases`);
   if (a.slow) s.push(`ralentit de ${Math.round(a.slow.pct * 100)} % pendant ${fmt1(a.slow.duration)} s`);
   if (a.poison) s.push(`poison ${a.poison.dps}/s pendant ${a.poison.duration} s (×${a.poison.maxStacks})`);
@@ -83,11 +90,10 @@ export function elementsLabel(def: TowerDef): string {
   return def.elements ? def.elements.map((f) => FAMILY_LABEL[f]).join(' · ') : '';
 }
 
-export function towerInfo(def: TowerDef, cost: number | null, heading = def.name, locked?: string): string {
+export function towerInfo(def: TowerDef, cost: number | null, heading = def.name): string {
   const a = def.attack;
   const costLine = cost !== null ? ` · ${cost} or` : '';
-  const lockedLine = locked ? `<p class="locked">${esc(locked)}</p>` : '';
-  if (!a) return `<h3>${esc(heading)}${costLine}</h3><p>${esc(def.desc)}</p>${lockedLine}`;
+  if (!a) return `<h3>${esc(heading)}${costLine}</h3><p>${esc(def.desc)}</p>`;
   const dps = ((a.dmg[0] + a.dmg[1]) / 2 / a.cooldown) * (a.multishot ?? 1);
   const specials = towerSpecials(def);
   return `<h3>${esc(heading)}${costLine}</h3>
@@ -100,7 +106,7 @@ export function towerInfo(def: TowerDef, cost: number | null, heading = def.name
       ${stat('DPS', `≈ ${fmt0(dps)}`)}
     </div>
     <p>${esc(def.desc)}${specials.length ? ' ' + esc(cap(specials.join(' · '))) + '.' : ''}</p>
-    <div>${matchupTags(a.type)}</div>${lockedLine}`;
+    <div>${matchupTags(a.type)}</div>`;
 }
 
 export function creepTags(def: CreepDef): string {
@@ -265,4 +271,12 @@ export function creepInfo(c: Creep): string {
     <div>${creepTags(c.def)}</div>
     ${effects ? `<div>${effects}</div>` : ''}
     <p>${esc(`Le plus efficace : ${counters(c.def)}.`)}</p>`;
+}
+
+export function builderCard(b: BuilderDef): string {
+  const roots = b.roots.map((id) => esc(tower(id).name)).join(' · ');
+  return `<h3>${esc(b.name)}</h3>
+    <p>${esc(b.style)}</p>
+    <p class="weakness"><em>Faiblesse</em> ${esc(b.weakness)}</p>
+    <p class="roots"><em>Tours de base</em> ${roots}</p>`;
 }

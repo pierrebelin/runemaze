@@ -1,13 +1,16 @@
 import { MAP_CROSSING } from '../../src/domain/catalog/map';
 import { World } from '../../src/domain/model/World';
-import type { Difficulty, MapDef } from '../../src/domain/model/types';
+import { dispatch } from '../../src/application/dispatch';
+import { spawnCreep } from '../../src/domain/systems/waves';
+import { CommandType } from '../../src/domain/model/types';
+import type { Creep, Difficulty, MapDef, Tower } from '../../src/domain/model/types';
 
-export function newWorld(difficulty: Difficulty = 'normal', seed = 42, map: MapDef = MAP_CROSSING): World {
-  return new World({ map, difficulty, seed });
+export function newWorld(difficulty: Difficulty = 'normal', seed = 42, map: MapDef = MAP_CROSSING, builder = 'bastion'): World {
+  return new World({ map, difficulty, seed, builder });
 }
 
-export function newDuelWorld(difficulty: Difficulty = 'normal', seed = 42, map: MapDef = MAP_CROSSING): World {
-  return new World({ map, difficulty, seed, duel: true });
+export function newDuelWorld(difficulty: Difficulty = 'normal', seed = 42, map: MapDef = MAP_CROSSING, builder = 'bastion'): World {
+  return new World({ map, difficulty, seed, duel: true, builder });
 }
 
 export function run(world: World, seconds: number): void {
@@ -22,4 +25,23 @@ export function killAllCreeps(world: World): void {
     world.creepGone(c);
   }
   world.creeps = world.creeps.filter((c) => c.alive);
+}
+
+/** Bâtit un mur en (10, 8) puis l'améliore dans l'ordre des ids donnés ; renvoie la tour. */
+export function buildTowerChain(world: World, chain: string[], x = 10, y = 8): Tower {
+  world.gold = 100000;
+  const built = dispatch(world, { c: CommandType.Build, def: 'wall', x, y }) as { ok: true; id: number };
+  for (const def of chain) dispatch(world, { c: CommandType.Upgrade, tower: built.id, def });
+  return world.towerById.get(built.id)!;
+}
+
+/** Fait apparaître une créature immobile (gelée), très résistante, à la position donnée. */
+export function spawnDummy(world: World, x: number, y: number, air = false): Creep {
+  const c = spawnCreep(world, 'rat', 0);
+  c.x = x;
+  c.y = y;
+  c.hp = c.maxHp = 1e6;
+  c.frozen = 1e6;
+  if (air) c.def = { ...c.def, air: true };
+  return c;
 }

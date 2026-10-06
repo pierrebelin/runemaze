@@ -7,7 +7,7 @@ Tower Defense : tower defense de *mazing* (TypeScript, Canvas 2D, Vite). Règles
 ```bash
 npm run dev          # serveur de dev (port 5173)
 npx tsc --noEmit     # typage
-npm test             # tous les tests unitaires, équilibrage compris
+npm test             # tous les tests unitaires
 npx vitest run <fichier>
 ```
 

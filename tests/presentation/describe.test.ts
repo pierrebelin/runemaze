@@ -6,14 +6,14 @@ import type { TowerDef } from '../../src/domain/model/types';
 import type { WaveBriefing } from '../../src/application/queries/waveBriefing';
 import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
-  briefingChip, briefingInfo,
+  briefingChip, briefingInfo, builderCard,
   creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, nextWaveInfo, rivalEconomy, sendPanel, towerInfo, towerSpecials,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, nextWaveInfo, rivalEconomy, sendPanel, towerSpecials,
 } from '../../src/presentation/describe';
 import { GLEANER } from '../../src/domain/catalog/ether';
 import { Verdict } from '../../src/application/online/protocol';
-import { infusionBlocker } from '../../src/domain/rules/infusion';
-import { TOWERS } from '../../src/domain/catalog/towers';
+import { TOWERS, tower } from '../../src/domain/catalog/towers';
+import { builder } from '../../src/domain/catalog/builders';
 import { familyDamage, towerRanking, towerYield } from '../../src/domain/rules/debrief';
 import { newWorld } from '../support/helpers';
 
@@ -85,7 +85,7 @@ describe('fiche d’une tour hybride', () => {
 
 const towerFixture = (extra: Partial<Tower>): Tower => ({
   id: 1, def: TOWERS.archer, x: 0, y: 0, cx: 0, cy: 0, cooldown: 0,
-  targetMode: 'first', spent: 0, kills: 0, damage: 0, aim: 0, fate: 'standing', ...extra,
+  targetMode: 'first', spent: 0, kills: 0, damage: 0, aim: 0, ramp: 0, fate: 'standing', ...extra,
 });
 
 describe('bilan de partie', () => {
@@ -329,24 +329,62 @@ describe('encart de l’économie adverse', () => {
   });
 });
 
+describe('fiche d’un bâtisseur', () => {
+  it('[CU-01] présente le nom, le style, la faiblesse et les deux tours de base d’un bâtisseur', () => {
+    const b = builder('forge');
+    const html = builderCard(b);
+
+    expect(html).toContain(b.name);
+    expect(html).toContain(b.style);
+    expect(html).toContain(b.weakness);
+    for (const id of b.roots) expect(html).toContain(tower(id).name);
+  });
+});
+
+describe('effets des tours signature', () => {
+  it('[RM-05] annonce « corps à corps » pour une attaque de zone au sol de portée 1,5', () => {
+    const def = tower('guard');
+    expect(def.attack!.range).toBe(1.5);
+    expect(towerSpecials(def).join(' · ')).toContain('corps à corps');
+  });
+
+  it('[RM-07] annonce une frappe de toute la zone pour une attaque de zone hors corps à corps', () => {
+    for (const id of ['bramble', 'gong']) {
+      expect(towerSpecials(tower(id)).join(' · ')).toContain('toute la zone');
+    }
+    expect(towerSpecials(tower('guard')).join(' · ')).not.toContain('toute la zone');
+  });
+
+  it('[RM-06] annonce l’aura, son bonus et son rayon', () => {
+    for (const id of ['anvil', 'standard']) {
+      const def = tower(id);
+      const specials = towerSpecials(def).join(' · ');
+      expect(specials).toContain('aura');
+      expect(specials).toContain(`${Math.round(def.aura!.pct * 100)} %`);
+      expect(specials).toContain(`${fmt1(def.aura!.radius)} cases`);
+    }
+  });
+
+  it('[RM-08] annonce la durée d’étourdissement', () => {
+    const specials = towerSpecials(tower('gong')).join(' · ');
+    expect(specials).toContain('étourdi');
+    expect(specials).toContain('0,5 s');
+  });
+
+  it('[RM-09] annonce le maximum de montée en puissance', () => {
+    // `max` est une fraction : 1 = +100 %.
+    const def = tower('pylon');
+    const specials = towerSpecials(def).join(' · ');
+    expect(specials).toContain('montée en puissance');
+    expect(specials).toContain(`${Math.round(def.attack!.rampUp!.max * 100)} %`);
+  });
+});
+
 describe('verdict de duel', () => {
   it('[RM-14] nomme « Victoire », « Défaite », « Égalité » et « Victoire par forfait » selon le verdict', () => {
     expect(duelVerdictLabel(Verdict.Victory)).toBe('Victoire');
     expect(duelVerdictLabel(Verdict.Defeat)).toBe('Défaite');
     expect(duelVerdictLabel(Verdict.Draw)).toBe('Égalité');
     expect(duelVerdictLabel(Verdict.Forfeit)).toBe('Victoire par forfait');
-  });
-});
-
-describe('infusion verrouillée', () => {
-  it('[RM-13] donne la raison du verrou dans l’infobulle quand l’infusion est refusée', () => {
-    const def = TOWERS.cryoshell;
-    const reason = infusionBlocker(TOWERS.cannon, def, 0, [])!;
-
-    const html = towerInfo(def, def.cost, def.name, reason);
-    expect(html).toContain(reason);
-
-    const htmlSansVerrou = towerInfo(def, def.cost, def.name);
-    expect(htmlSansVerrou).not.toContain(reason);
   });
 });

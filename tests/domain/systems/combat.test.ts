@@ -5,7 +5,21 @@ import { creepHp, spawnCreep } from '../../../src/domain/systems/waves';
 import { TOWERS } from '../../../src/domain/catalog/towers';
 import { CREEPS, bountyFor } from '../../../src/domain/catalog/creeps';
 import type { AttackDef } from '../../../src/domain/model/types';
-import { newWorld } from '../../support/helpers';
+import { damageMultiplier } from '../../../src/domain/rules/Damage';
+import { buildTowerChain, newWorld, run, spawnDummy } from '../../support/helpers';
+import type { Tower } from '../../../src/domain/model/types';
+import type { World } from '../../../src/domain/model/World';
+
+/** Avance jusqu'au prochain tir de la tour (borne 5 s) et renvoie la recharge qui vient d'être posée. */
+function cooldownAtNextShot(w: World, t: Tower): number {
+  let prev = t.cooldown;
+  for (let i = 0; i < 300; i++) {
+    w.step();
+    if (t.cooldown > prev) return t.cooldown;
+    prev = t.cooldown;
+  }
+  return NaN;
+}
 
 const PLAIN_ATTACK: AttackDef = {
   type: 'normal',
@@ -248,5 +262,208 @@ describe('combat', () => {
 
     expect(w.offspring).toHaveLength(2);
     expect(w.offspring.every((c) => c.hp === c.maxHp)).toBe(true);
+  });
+
+  it('[RM-05] la Garde blesse à chaque coup toutes les créatures au sol à sa portée', () => {
+    const w = newWorld();
+    const t = buildTowerChain(w, ['guard']);
+    const a = spawnDummy(w, t.cx + 1, t.cy);
+    const b = spawnDummy(w, t.cx, t.cy + 1);
+
+    run(w, 0.5);
+    expect(a.hp).toBeLessThan(a.maxHp);
+    expect(b.hp).toBeLessThan(b.maxHp);
+
+    const [a1, b1] = [a.hp, b.hp];
+    run(w, 1);
+    expect(a.hp).toBeLessThan(a1);
+    expect(b.hp).toBeLessThan(b1);
+  });
+
+  it('[RM-05] la Garde ignore les volants', () => {
+    const w = newWorld();
+    const t = buildTowerChain(w, ['guard']);
+    const flyer = spawnDummy(w, t.cx + 1, t.cy, true);
+    const walker = spawnDummy(w, t.cx, t.cy + 1);
+
+    run(w, 2);
+
+    expect(walker.hp).toBeLessThan(walker.maxHp);
+    expect(flyer.hp).toBe(flyer.maxHp);
+  });
+
+  it('[RM-05] une créature au contact d\'une Garde poursuit son trajet sans s\'arrêter', () => {
+    const w = newWorld();
+    const t = buildTowerChain(w, ['guard']);
+    const c = spawnDummy(w, t.cx + 1, t.cy);
+    c.frozen = 0;
+    const ref = newWorld();
+    const r = spawnDummy(ref, t.cx + 1, t.cy);
+    r.frozen = 0;
+
+    run(w, 0.5);
+    run(ref, 0.5);
+
+    expect(c.hp).toBeLessThan(c.maxHp);
+    expect(c.x !== t.cx + 1 || c.y !== t.cy).toBe(true);
+    expect(c.x).toBe(r.x);
+    expect(c.y).toBe(r.y);
+  });
+
+  it('[RM-07] les Ronces infligent 6 dégâts par seconde à chaque créature au sol à une case de leur bord', () => {
+    const w = newWorld('normal', 42, undefined, 'sylve');
+    const t = buildTowerChain(w, ['bramble']);
+    const a = spawnDummy(w, t.cx + 2, t.cy);
+    const b = spawnDummy(w, t.cx, t.cy - 2);
+    const expected = 6 * damageMultiplier('normal', a.def, 0, false);
+
+    run(w, 0.5);
+
+    expect(a.maxHp - a.hp).toBeCloseTo(expected);
+    expect(b.maxHp - b.hp).toBeCloseTo(expected);
+
+    run(w, 0.7); // t = 1,2 s, soit 0,9 s après le premier coup (t = 0,3 s) : pas de second coup
+    expect(a.maxHp - a.hp).toBeCloseTo(expected);
+    expect(b.maxHp - b.hp).toBeCloseTo(expected);
+
+    run(w, 0.2); // t = 1,4 s, soit 1,1 s après le premier coup : second coup
+    expect(a.maxHp - a.hp).toBeCloseTo(2 * expected);
+    expect(b.maxHp - b.hp).toBeCloseTo(2 * expected);
+  });
+
+  it('[RM-07] les Ronces épargnent une créature au sol à plus d\'une case de leur bord', () => {
+    const w = newWorld('normal', 42, undefined, 'sylve');
+    const t = buildTowerChain(w, ['bramble']);
+    const far = spawnDummy(w, t.cx + 2 + CREEPS.rat.radius + 0.5, t.cy);
+    const near = spawnDummy(w, t.cx + 2, t.cy);
+
+    run(w, 3);
+
+    expect(near.hp).toBeLessThan(near.maxHp);
+    expect(far.hp).toBe(far.maxHp);
+  });
+
+  it('[RM-07] le Roncier empoisonne au plus trois fois une créature qui reste à son contact', () => {
+    const w = newWorld('normal', 42, undefined, 'sylve');
+    const t = buildTowerChain(w, ['bramble', 'briar']);
+    const c = spawnDummy(w, t.cx + 1, t.cy);
+
+    run(w, 5);
+
+    expect(c.poisons).toHaveLength(3);
+  });
+
+  it('[RM-08] le Gong immobilise 0,5 s toutes les créatures, au sol et en vol, à 2,5 cases', () => {
+    const w = newWorld('normal', 42, undefined, 'sanctuary');
+    const t = buildTowerChain(w, ['gong']);
+    const ground = spawnDummy(w, t.cx + 2, t.cy);
+    const flyer = spawnDummy(w, t.cx, t.cy + 2, true);
+    const far = spawnDummy(w, t.cx + 3.2, t.cy);
+    for (const c of [ground, flyer, far]) c.frozen = 0;
+
+    // La tour garde un court délai avant son premier tir : on avance jusqu'à la touche (borne 1 s).
+    for (let i = 0; i < 60 && ground.frozen <= 0; i++) w.step();
+
+    for (const c of [ground, flyer]) {
+      expect(c.frozen).toBeGreaterThan(0.4);
+      expect(c.frozen).toBeLessThanOrEqual(0.5);
+    }
+    expect(far.frozen).toBe(0);
+  });
+
+  it('[RM-06] une tour à côté d\'une Enclume tire plus souvent que seule', () => {
+    const shots = (withAnvil: boolean): number => {
+      const w = newWorld('normal', 42, undefined, 'forge');
+      const t = buildTowerChain(w, ['cannon']);
+      if (withAnvil) buildTowerChain(w, ['anvil'], 12, 8);
+      spawnDummy(w, t.cx + 1, t.cy);
+      let n = 0;
+      let prev = t.cooldown;
+      for (let i = 0; i < 600; i++) {
+        w.step();
+        if (t.cooldown > prev) n++;
+        prev = t.cooldown;
+      }
+      return n;
+    };
+
+    expect(shots(true)).toBeGreaterThan(shots(false));
+  });
+
+  it('[RM-06] une Garde à côté d\'un Porte-étendard inflige plus de dégâts que seule', () => {
+    // Garde 14-18 : moyenne 16 seule, 19,2 avec +20 % ; seuil 17,5 sur une dizaine de coups (graine fixe).
+    const meanHit = (withStandard: boolean): number => {
+      const w = newWorld('normal', 42);
+      const t = buildTowerChain(w, ['guard']);
+      if (withStandard) buildTowerChain(w, ['guard', 'standard'], 12, 8);
+      const c = spawnDummy(w, t.cx - 1, t.cy);
+      let hits = 0;
+      let prev = t.cooldown;
+      for (let i = 0; i < 600; i++) {
+        w.step();
+        if (t.cooldown > prev) hits++;
+        prev = t.cooldown;
+      }
+      return (c.maxHp - c.hp) / damageMultiplier('normal', c.def, 0, false) / hits;
+    };
+
+    expect(meanHit(false)).toBeLessThan(17.5);
+    expect(meanHit(true)).toBeGreaterThan(17.5);
+  });
+
+  it('[RM-09] le Pylône tire plus souvent après 30 s avec une cible qu\'au premier tir', () => {
+    const w = newWorld('normal', 42, undefined, 'arcanists');
+    const t = buildTowerChain(w, ['pylon']);
+    spawnDummy(w, t.cx + 1, t.cy);
+
+    const first = cooldownAtNextShot(w, t);
+    run(w, 30);
+    const later = cooldownAtNextShot(w, t);
+
+    expect(t.ramp).toBeGreaterThanOrEqual(30);
+    expect(later).toBeLessThan(first);
+    expect(later).toBeCloseTo(0.8 / 1.3, 1);
+  });
+
+  it('[RM-09] la montée n\'avance pas tant qu\'aucune créature n\'est à portée', () => {
+    const w = newWorld('normal', 42, undefined, 'arcanists');
+    const t = buildTowerChain(w, ['pylon']);
+    const c = spawnDummy(w, t.cx + 9, t.cy);
+
+    run(w, 5);
+    expect(t.ramp).toBe(0);
+
+    // Témoin : la même créature ramenée à portée fait avancer la montée.
+    c.x = t.cx + 1;
+    run(w, 1);
+    expect(t.ramp).toBeGreaterThan(0.9);
+  });
+
+  it('[RM-09] la montée retombe à zéro quand plus aucune créature n\'est sur la carte', () => {
+    const w = newWorld('normal', 42, undefined, 'arcanists');
+    const t = buildTowerChain(w, ['pylon']);
+    spawnDummy(w, t.cx + 1, t.cy);
+
+    run(w, 3);
+    expect(t.ramp).toBeGreaterThan(2.5);
+
+    // Carte vidée sans passer par `creepGone` : aucune vague n'a été lancée, pas de fin de vague à solder.
+    w.creeps = [];
+    run(w, 0.1);
+
+    expect(t.ramp).toBe(0);
+  });
+
+  it('[RM-08] le Carillon étourdit 0,4 s et ralentit de 30 %', () => {
+    const w = newWorld('normal', 42, undefined, 'sanctuary');
+    const t = buildTowerChain(w, ['gong', 'chime']);
+    const c = spawnDummy(w, t.cx + 2, t.cy);
+    c.frozen = 0;
+
+    for (let i = 0; i < 60 && c.frozen <= 0; i++) w.step();
+
+    expect(c.frozen).toBeGreaterThan(0.3);
+    expect(c.frozen).toBeLessThanOrEqual(0.4);
+    expect(c.slowPct).toBe(0.3);
   });
 });

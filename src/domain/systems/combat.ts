@@ -1,4 +1,6 @@
 import { damageMultiplier } from '../rules/Damage';
+import { auraBonus } from '../rules/aura';
+import { attackCooldown, rampBonus } from '../rules/attackSpeed';
 import type { World } from '../model/World';
 import type { AttackDef, AttackType, Creep, TargetMode, Tower } from '../model/types';
 import { applyOnHit } from './status';
@@ -21,36 +23,54 @@ function score(mode: TargetMode, t: Pick<Tower, 'cx' | 'cy'>, c: Creep): number 
   }
 }
 
+function isTargetInRange(t: Pick<Tower, 'cx' | 'cy'>, a: AttackDef, c: Creep): boolean {
+  return canTarget(a, c) && Math.hypot(c.x - t.cx, c.y - t.cy) <= a.range + c.def.radius;
+}
+
 export function acquireTargets(world: World, t: Pick<Tower, 'cx' | 'cy' | 'targetMode'>, a: AttackDef, n: number): Creep[] {
   const inRange: Creep[] = [];
   for (const c of world.creeps) {
-    if (!canTarget(a, c)) continue;
-    if (Math.hypot(c.x - t.cx, c.y - t.cy) <= a.range + c.def.radius) inRange.push(c);
+    if (isTargetInRange(t, a, c)) inRange.push(c);
   }
   inRange.sort((p, q) => score(t.targetMode, t, p) - score(t.targetMode, t, q) || p.id - q.id);
   return inRange.slice(0, n);
+}
+
+function hasTargetInRange(world: World, t: Tower, a: AttackDef): boolean {
+  for (const c of world.creeps) {
+    if (isTargetInRange(t, a, c)) return true;
+  }
+  return false;
+}
+
+function updateRamp(world: World, t: Tower, a: AttackDef, dt: number): void {
+  if (world.creeps.length === 0) t.ramp = 0;
+  else if (hasTargetInRange(world, t, a)) t.ramp += dt;
 }
 
 export function updateCombat(world: World, dt: number): void {
   for (const t of world.towers) {
     const a = t.def.attack;
     if (!a) continue;
+    if (a.rampUp) updateRamp(world, t, a, dt);
     t.cooldown -= dt;
     if (t.cooldown > 0) continue;
-    const targets = acquireTargets(world, t, a, a.multishot ?? 1);
+    const targets = acquireTargets(world, t, a, a.area ? Infinity : a.multishot ?? 1);
     if (targets.length === 0) {
       t.cooldown = 0;
       continue;
     }
-    t.cooldown = a.cooldown;
+    const bonus = auraBonus(t, world.towers);
+    t.cooldown = attackCooldown(a.cooldown, bonus.attackSpeed + (a.rampUp ? rampBonus(t.ramp, a.rampUp.max) : 0));
     t.aim = Math.atan2(targets[0].y - t.cy, targets[0].x - t.cx);
     world.emit({ t: GameEventType.Fire, towerId: t.id, family: t.def.family });
     for (const target of targets) {
       const roll = world.rng.range(a.dmg[0], a.dmg[1]);
       const crit = !!a.crit && world.rng.next() < a.crit.chance;
-      const dmg = crit ? roll * a.crit!.mult : roll;
+      const dmg = (crit ? roll * a.crit!.mult : roll) * (1 + bonus.damage);
       if (a.projectileSpeed === 0) {
         if (a.chain) fireChain(world, t, a, target, dmg);
+        else if (a.area) hitCreep(world, t.id, t.def.id, a, target, dmg);
         else {
           hitCreep(world, t.id, t.def.id, a, target, dmg);
           world.emit({ t: GameEventType.Chain, points: [{ x: t.cx, y: t.cy - 0.6 }, { x: target.x, y: target.y }] });
@@ -63,6 +83,7 @@ export function updateCombat(world: World, dt: number): void {
         });
       }
     }
+    if (a.area) world.emit({ t: GameEventType.Hit, x: t.cx, y: t.cy, family: t.def.family, splash: a.range, crit: false, dmg: 0 });
   }
 }
 
@@ -134,8 +155,8 @@ export function hitCreep(world: World, towerId: number, defId: string, a: Attack
     c.shield--;
     return;
   }
-  if (c.def.sprint && c.sprint <= 0 && c.sprintCooldown <= 0) c.sprint = c.def.sprint.duration;
   applyOnHit(world, c, a, towerId, defId);
+  if (c.def.sprint && c.frozen <= 0 && c.sprint <= 0 && c.sprintCooldown <= 0) c.sprint = c.def.sprint.duration;
   applyDamage(world, c, raw, a.type, towerId, false);
 }
 

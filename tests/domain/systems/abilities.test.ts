@@ -83,6 +83,23 @@ describe('abilities', () => {
     expect(neighbor.hp).toBeCloseTo(1 + shaman.maxHp * 0.25);
   });
 
+  it('[RM-08] un Chaman étourdi ne soigne pas', () => {
+    const w = newWorld();
+    const shaman = spawnCreep(w, 'shaman', 0);
+    shaman.x = 5;
+    shaman.y = 5;
+    shaman.healTimer = 0;
+    shaman.frozen = 1;
+    const neighbor = spawnCreep(w, 'rat', 0);
+    neighbor.x = 6.5;
+    neighbor.y = 5;
+    neighbor.hp = 1;
+
+    updateAbilities(w, TICK);
+
+    expect(neighbor.hp).toBe(1);
+  });
+
   describe('briseur', () => {
     it('[RM-04] ouvre la fenêtre 2 s après l’apparition du Sapeur', () => {
       const w = newWorld();

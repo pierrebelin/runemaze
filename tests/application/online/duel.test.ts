@@ -14,19 +14,29 @@ import { run } from '../../support/helpers';
 describe('Duel', () => {
   it('[RM-01] crée les deux mondes avec la même empreinte au lancement', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
 
-    const attendu = fingerprint(new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true }));
+    const attendu = fingerprint(new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' }));
 
     expect(fingerprint(duel.worlds[0])).toBe(attendu);
     expect(fingerprint(duel.worlds[1])).toBe(attendu);
   });
 
+  it('[RM-11] donne à chaque siège une carte au bâtisseur de son joueur', () => {
+    const duel = new Duel(
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['forge', 'sylve'] },
+      0,
+    );
+
+    expect(duel.worlds[Seat.Host].builder.id).toBe('forge');
+    expect(duel.worlds[Seat.Guest].builder.id).toBe('sylve');
+  });
+
   it('[RM-07] avance les deux cartes de 60 ticks par seconde, 15 ticks derrière l\'horloge', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
 
@@ -40,14 +50,14 @@ describe('Duel', () => {
   });
 
   it('[CU-04] construit sur la carte de l\'hôte sans écart quand son empreinte concorde', () => {
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
     const fp = fingerprint(witness);
 
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -59,16 +69,16 @@ describe('Duel', () => {
   });
 
   it('[RM-01] laisse or et tours de l\'invité intacts quand l\'hôte construit', () => {
-    const freshGold = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true }).gold;
+    const freshGold = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' }).gold;
 
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
     const fp = fingerprint(witness);
 
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -80,7 +90,7 @@ describe('Duel', () => {
 
   it('[RM-10] renvoie un écart quand un joueur demande le mode infini', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -94,13 +104,13 @@ describe('Duel', () => {
   });
 
   it('[RM-08] renvoie un écart quand un joueur envoie un appel de vague direct', () => {
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 45 / 60);
     expect(dispatch(witness, { c: CommandType.CallWave }).ok).toBe(true);
     const fp = fingerprint(witness);
 
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -113,7 +123,7 @@ describe('Duel', () => {
 
   it('[RM-09] arrête les deux cartes et annonce victoire et défaite dès qu\'un joueur est éliminé', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -140,13 +150,13 @@ describe('Duel', () => {
 
   it('[RM-07] avance aussi la carte adverse jusqu\'au tick annoncé par un ordre', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
     expect(duel.worlds[Seat.Guest].tick).toBe(45);
 
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 55 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -159,7 +169,7 @@ describe('Duel', () => {
 
   it('[RM-14] joint au verdict les instantanés des deux cartes', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -178,7 +188,7 @@ describe('Duel', () => {
 
   it('[RM-10] continue d\'avancer la carte encore en jeu quand l\'autre a fini la campagne', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -193,7 +203,7 @@ describe('Duel', () => {
 
   it('[RM-11] continue d\'envoyer la carte adverse quand l\'autre carte a fini la campagne', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -208,14 +218,14 @@ describe('Duel', () => {
   });
 
   it('[RM-07] ne garde pas les événements de rendu du serveur d\'un pas à l\'autre', () => {
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'archer', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
     const fp = fingerprint(witness);
 
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -229,12 +239,12 @@ describe('Duel', () => {
 
   it('[CU-05] envoie à l\'hôte l\'instantané de la carte de l\'invité, tours comprises', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
 
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -256,7 +266,7 @@ describe('Duel', () => {
 
   it('[RM-11] porte le pseudo, les vies et l\'or adverses dans chaque envoi', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['Alice', 'Bob'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['Alice', 'Bob'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -275,7 +285,7 @@ describe('Duel', () => {
 
   it('[CU-05] n\'envoie la carte adverse qu\'une fois par 200 ms', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -289,7 +299,7 @@ describe('Duel', () => {
 
   it('[CU-06] annonce « prêt » au demandeur et « adversaire prêt » à l\'autre', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
 
@@ -303,7 +313,7 @@ describe('Duel', () => {
 
   it('[CU-06] retire la demande quand le joueur la renouvelle', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
 
@@ -318,7 +328,7 @@ describe('Duel', () => {
 
   it('[RM-08] ne lance aucune vague quand un seul joueur est prêt', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     const waveHost = duel.worlds[Seat.Host].wave;
@@ -336,7 +346,7 @@ describe('Duel', () => {
 
   it('[RM-08] lance la vague sur les deux cartes au même tick quand les deux sont prêts', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
 
@@ -355,6 +365,7 @@ describe('Duel', () => {
       seed: 7,
       nicks: ['A', 'B'] as [string, string],
       tokens: ['th', 'tg'] as [string, string],
+      builders: ['bastion', 'bastion'] as [string, string],
     };
     const witness = new Duel(config, 0);
     witness.advance(1000);
@@ -371,7 +382,7 @@ describe('Duel', () => {
 
   it('[RM-08] journalise l\'appel dans les deux mondes et recale les deux joueurs', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
 
@@ -389,7 +400,7 @@ describe('Duel', () => {
 
   it('[RM-08] ignore la demande quand plus aucune vague ne peut être appelée', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     const campaignLength = duel.worlds[Seat.Host].campaignLength;
@@ -419,6 +430,7 @@ describe('Duel', () => {
       seed: 7,
       nicks: ['A', 'B'] as [string, string],
       tokens: ['th', 'tg'] as [string, string],
+      builders: ['bastion', 'bastion'] as [string, string],
     };
     const duel = new Duel(config, 0);
     duel.ready(Seat.Host, 0);
@@ -447,11 +459,12 @@ describe('Duel', () => {
       seed: 7,
       nicks: ['A', 'B'] as [string, string],
       tokens: ['th', 'tg'] as [string, string],
+      builders: ['bastion', 'bastion'] as [string, string],
     };
     const duel = new Duel(config, 0);
     duel.ready(Seat.Host, 0);
 
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 2115 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
@@ -482,6 +495,7 @@ describe('Duel', () => {
       seed: 7,
       nicks: ['A', 'B'] as [string, string],
       tokens: ['th', 'tg'] as [string, string],
+      builders: ['bastion', 'bastion'] as [string, string],
     };
     const duel = new Duel(config, 0);
     duel.ready(Seat.Host, 0);
@@ -514,7 +528,7 @@ describe('Duel', () => {
 
   it('[RM-12] n\'avance plus aucune des deux cartes pendant la coupure d\'un joueur', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -533,7 +547,7 @@ describe('Duel', () => {
 
   it('[RM-12] ignore la coupure d\'un duel déjà terminé', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -550,7 +564,7 @@ describe('Duel', () => {
 
   it('[CU-07] prévient le joueur resté que l\'adversaire est déconnecté pour 30 s', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -565,7 +579,7 @@ describe('Duel', () => {
 
   it('[RM-12] donne la victoire par forfait au joueur resté après 30 s de coupure', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -596,14 +610,14 @@ describe('Duel', () => {
   });
 
   it('[RM-12] refuse les ordres et n\'avance aucune carte pendant la coupure d\'un joueur', () => {
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 45 / 60);
     const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     expect(dispatch(witness, cmd).ok).toBe(true);
     const fp = fingerprint(witness);
 
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -628,7 +642,7 @@ describe('Duel', () => {
 
   it('[RM-12] ignore l\'appel à deux d\'un joueur pendant la coupure', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.ready(Seat.Guest, 0);
@@ -646,7 +660,7 @@ describe('Duel', () => {
 
   it('[RM-12] ignore une seconde coupure pendant le gel : le délai reste celui de la première', () => {
     const duel = new Duel(
-      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'] },
+      { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
     );
     duel.advance(1000);
@@ -671,13 +685,14 @@ describe('Duel', () => {
     seed: 7,
     nicks: ['A', 'B'] as [string, string],
     tokens: ['th', 'tg'] as [string, string],
+    builders: ['bastion', 'bastion'] as [string, string],
   };
   const sendWolf = { c: CommandType.Send, creep: 'wolf' } as const;
 
   const WOLF_ETHER = 16;
 
   const witnessSend = () => {
-    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+    const witness = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
     run(witness, 45 / 60);
     witness.ether = WOLF_ETHER;
     expect(dispatch(witness, sendWolf).ok).toBe(true);
@@ -740,7 +755,7 @@ describe('Duel', () => {
 
     for (const seat of [Seat.Host, Seat.Guest]) {
       const original = duel.worlds[seat];
-      const replay = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true });
+      const replay = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, builder: 'bastion' });
       replay.ether = seat === Seat.Host ? WOLF_ETHER : 0;
       for (const entry of original.log) {
         while (replay.tick < entry.tick) replay.step();

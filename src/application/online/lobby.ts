@@ -15,8 +15,8 @@ export function nickname(raw: string, fallback: string): string {
 }
 
 interface Room {
-  host: { nick: string; key: string };
-  guest?: { nick: string; key: string };
+  host: { nick: string; key: string; builder?: string };
+  guest?: { nick: string; key: string; builder?: string };
   map: MapDef;
   difficulty: Difficulty;
 }
@@ -24,6 +24,18 @@ interface Room {
 export interface Addressed {
   key: string;
   msg: ServerMessage;
+}
+
+/** `picked` dit qui a choisi, jamais quoi : le choix reste caché jusqu'au lancement. */
+function roomMessage(room: Room): ServerMessage {
+  return {
+    t: ServerMessageType.Room,
+    host: room.host.nick,
+    guest: room.guest?.nick ?? null,
+    map: room.map,
+    difficulty: room.difficulty,
+    picked: { host: room.host.builder !== undefined, guest: room.guest?.builder !== undefined },
+  };
 }
 
 export class Lobby {
@@ -58,13 +70,7 @@ export class Lobby {
     const freed = this.leaveRoom(req.key);
     const guest = nickname(req.nick, 'Invité');
     room.guest = { nick: guest, key: req.key };
-    const msg: ServerMessage = {
-      t: ServerMessageType.Room,
-      host: room.host.nick,
-      guest,
-      map: room.map,
-      difficulty: room.difficulty,
-    };
+    const msg = roomMessage(room);
     return [
       ...freed,
       { key: room.host.key, msg },
@@ -82,8 +88,11 @@ export class Lobby {
         return [{ key, msg: { t: ServerMessageType.Refused, reason: "En attente d'un adversaire." } }];
       }
       const guest = room.guest;
+      if (!room.host.builder || !guest.builder) {
+        return [{ key, msg: { t: ServerMessageType.Refused, reason: 'En attente du choix des bâtisseurs.' } }];
+      }
       const duel = new Duel(
-        { map: room.map, difficulty: room.difficulty, seed, nicks: [room.host.nick, guest.nick], tokens },
+        { map: room.map, difficulty: room.difficulty, seed, nicks: [room.host.nick, guest.nick], tokens, builders: [room.host.builder, guest.builder] },
         now,
       );
       this.rooms.delete(code);
@@ -117,6 +126,17 @@ export class Lobby {
       ];
     }
     return [{ key, msg: { t: ServerMessageType.Refused, reason: CODE_TAKEN_MSG } }];
+  }
+
+  choose(key: string, builder: string): Addressed[] {
+    for (const room of this.rooms.values()) {
+      const seat = room.host.key === key ? room.host : room.guest?.key === key ? room.guest : undefined;
+      if (!seat) continue;
+      seat.builder = builder;
+      const msg = roomMessage(room);
+      return [room.host, ...(room.guest ? [room.guest] : [])].map((p) => ({ key: p.key, msg }));
+    }
+    return [];
   }
 
   duel(code: string): Duel | undefined {
@@ -166,10 +186,7 @@ export class Lobby {
       if (room.guest?.key === key) {
         room.guest = undefined;
         return [
-          {
-            key: room.host.key,
-            msg: { t: ServerMessageType.Room, host: room.host.nick, guest: null, map: room.map, difficulty: room.difficulty },
-          },
+          { key: room.host.key, msg: roomMessage(room) },
         ];
       }
     }
