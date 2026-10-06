@@ -9,7 +9,7 @@ describe('debrief', () => {
   it('[RM-01] classe les tours par dégâts effectifs décroissants, vendues comprises', () => {
     const w = newWorld();
     const a = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
-    const b = dispatch(w, { c: CommandType.Build, def: 'cannon', x: 12, y: 8 }) as { ok: true; id: number };
+    const b = dispatch(w, { c: CommandType.Build, def: 'guard', x: 12, y: 8 }) as { ok: true; id: number };
     w.towerById.get(a.id)!.damage = 50;
     w.towerById.get(b.id)!.damage = 200;
     dispatch(w, { c: CommandType.Sell, tower: b.id });
@@ -44,7 +44,7 @@ describe('debrief', () => {
   it('[RM-01] départage deux tours à dégâts égaux par ordre de pose', () => {
     const w = newWorld();
     const first = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
-    const second = dispatch(w, { c: CommandType.Build, def: 'cannon', x: 12, y: 8 }) as { ok: true; id: number };
+    const second = dispatch(w, { c: CommandType.Build, def: 'guard', x: 12, y: 8 }) as { ok: true; id: number };
     w.towerById.get(first.id)!.damage = 80;
     w.towerById.get(second.id)!.damage = 80;
 
@@ -54,13 +54,14 @@ describe('debrief', () => {
   });
 
   it('[RM-03] somme les dégâts par famille avec leur part du total, triés par ordre décroissant', () => {
-    const w = newWorld();
-    const archer = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
-    const cannon = dispatch(w, { c: CommandType.Build, def: 'cannon', x: 12, y: 8 }) as { ok: true; id: number };
-    w.towerById.get(archer.id)!.damage = 30;
-    w.towerById.get(cannon.id)!.damage = 70;
+    const w1 = newWorld();
+    const w2 = newWorld('normal', 42, undefined, 'forge');
+    const archer = dispatch(w1, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
+    const cannon = dispatch(w2, { c: CommandType.Build, def: 'cannon', x: 12, y: 8 }) as { ok: true; id: number };
+    w1.towerById.get(archer.id)!.damage = 30;
+    w2.towerById.get(cannon.id)!.damage = 70;
 
-    const result = familyDamage(w.stats.towers.values());
+    const result = familyDamage([...w1.stats.towers.values(), ...w2.stats.towers.values()]);
 
     expect(result).toEqual([
       { family: 'cannon', damage: 70, share: 0.7 },
@@ -69,16 +70,13 @@ describe('debrief', () => {
   });
 
   it("[RM-03] range une tour infusée dans les hybrides, dégâts d'avant l'infusion compris", () => {
-    const w = newWorld();
+    const w = newWorld('normal', 42, undefined, 'sylve');
     w.gold = 1000;
-    const sniper = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
-    dispatch(w, { c: CommandType.Upgrade, tower: sniper.id, def: 'sniper' });
-    w.towerById.get(sniper.id)!.damage = 40;
     const acid = dispatch(w, { c: CommandType.Build, def: 'venom', x: 12, y: 8 }) as { ok: true; id: number };
     dispatch(w, { c: CommandType.Upgrade, tower: acid.id, def: 'acid' });
-    w.wave = 7;
-    dispatch(w, { c: CommandType.Upgrade, tower: sniper.id, def: 'stinger' });
-    w.towerById.get(sniper.id)!.damage += 25;
+    w.towerById.get(acid.id)!.damage = 40;
+    dispatch(w, { c: CommandType.Upgrade, tower: acid.id, def: 'stinger' });
+    w.towerById.get(acid.id)!.damage += 25;
 
     const result = familyDamage(w.stats.towers.values());
 
@@ -125,7 +123,7 @@ describe('debrief', () => {
   it('[RM-05] compte les tours détruites et l\'or qu\'elles avaient coûté', () => {
     const w = newWorld();
     const destroyed = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
-    const other = dispatch(w, { c: CommandType.Build, def: 'cannon', x: 12, y: 8 }) as { ok: true; id: number };
+    const other = dispatch(w, { c: CommandType.Build, def: 'guard', x: 12, y: 8 }) as { ok: true; id: number };
     const standing = dispatch(w, { c: CommandType.Build, def: 'wall', x: 14, y: 8 }) as { ok: true; id: number };
     w.towerById.get(destroyed.id)!.fate = 'destroyed';
     w.towerById.get(other.id)!.fate = 'destroyed';
@@ -141,7 +139,7 @@ describe('debrief', () => {
     const w = newWorld();
     const sold = dispatch(w, { c: CommandType.Build, def: 'archer', x: 10, y: 8 }) as { ok: true; id: number };
     dispatch(w, { c: CommandType.Sell, tower: sold.id });
-    dispatch(w, { c: CommandType.Build, def: 'cannon', x: 12, y: 8 });
+    dispatch(w, { c: CommandType.Build, def: 'guard', x: 12, y: 8 });
 
     const result = breakerLosses(w.stats.towers.values());
 

@@ -2,7 +2,8 @@ import { Sfx } from '../infrastructure/audio/Sfx';
 import { GameLoop } from '../infrastructure/GameLoop';
 import { CAMPAIGN_LENGTH, CREEPS, DIFFICULTY, waveAt } from '../domain/catalog/creeps';
 import { MAPS } from '../domain/catalog/map';
-import { BUILD_MENU, TOWERS } from '../domain/catalog/towers';
+import { BUILDERS } from '../domain/catalog/builders';
+import { TOWERS } from '../domain/catalog/towers';
 import { Effects } from '../infrastructure/render/Effects';
 import { Renderer, type ViewState } from '../infrastructure/render/Renderer';
 import { PAL } from '../infrastructure/render/palette';
@@ -11,7 +12,7 @@ import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage'
 import { dispatch } from '../application/dispatch';
 import { canBuild } from '../application/queries/canBuild';
 import { canBuyGleaner } from '../application/queries/canBuyGleaner';
-import { infusionLock } from '../application/queries/infusionLock';
+import { builderTowers, buildMenu, upgradeOptions } from '../domain/rules/builder';
 import { previewRoute } from '../application/queries/previewRoute';
 import { waveBriefing } from '../application/queries/waveBriefing';
 import { realign } from '../application/online/realign';
@@ -28,7 +29,7 @@ import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, MapD
 import { CommandType, GameEventType, Phase } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
-import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gleanerPanel, nextWaveInfo, sendPanel, TARGET_LABEL, towerInfo } from './describe';
+import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gleanerPanel, nextWaveInfo, sendPanel, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -55,7 +56,6 @@ interface Slot {
   cost?: number;
   poor?: boolean;
   active?: boolean;
-  locked?: string;
   run: () => void;
   info: () => string;
 }
@@ -83,6 +83,11 @@ export class Game {
   private readonly loop: GameLoop;
   private difficulty: Difficulty = 'normal';
   private mapId: string = MAPS[0].id;
+  private builderId = 'bastion';
+  /** Bâtisseur envoyé dans le salon ; vide tant que le joueur n'a pas cliqué. */
+  private lobbyBuilderId: string | null = null;
+  /** Qui a choisi son bâtisseur dans le salon (sans l'id adverse). */
+  private duelPicked = { host: false, guest: false };
   private link: ServerLink | null = null;
   private launching = false;
   private pausedByVisibility = false;
@@ -154,7 +159,7 @@ export class Game {
   }
 
   private createWorld(map: MapDef, d: Difficulty): World {
-    return new World({ map, difficulty: d, seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0 });
+    return new World({ map, difficulty: d, seed: (Date.now() ^ (Math.random() * 1e9)) >>> 0, builder: this.builderId });
   }
 
   private async newGame(d: Difficulty): Promise<void> {
@@ -173,7 +178,7 @@ export class Game {
         link.onMessage((msg) => {
           if (msg.t === ServerMessageType.Opened) resolve(msg);
         });
-        link.send({ t: ClientMessageType.Open, map, difficulty: d, ...(previous ? { previous } : {}) });
+        link.send({ t: ClientMessageType.Open, map, difficulty: d, builder: this.builderId, ...(previous ? { previous } : {}) });
       });
     } catch {
       this.launching = false;
@@ -723,22 +728,15 @@ export class Game {
     const slots: (Slot | null)[] = new Array(12).fill(null);
     const t = this.selectedTower();
     if (t) {
-      t.def.upgrades.forEach((id, i) => {
+      upgradeOptions(t.def, builderTowers(w.builder, TOWERS)).forEach((id, i) => {
         const to = TOWERS[id];
         const cost = upgradeCost(t.def, to);
         const heading = t.def.family === 'wall' ? `Transformer en ${to.name}` : `Améliorer en ${to.name}`;
-        const locked = infusionLock(w, t.id, id);
-        slots[i] = locked
-          ? {
-              label: to.name, icon: this.icon(id), cost, poor: true, locked,
-              run: () => this.toast(locked, true),
-              info: () => towerInfo(to, cost, heading, locked),
-            }
-          : {
-              label: to.name, icon: this.icon(id), cost, poor: w.gold < cost,
-              run: () => this.upgrade(t, id),
-              info: () => towerInfo(to, cost, heading),
-            };
+        slots[i] = {
+          label: to.name, icon: this.icon(id), cost, poor: w.gold < cost,
+          run: () => this.upgrade(t, id),
+          info: () => towerInfo(to, cost, heading),
+        };
       });
       if (t.def.attack) {
         slots[8] = {
@@ -764,7 +762,7 @@ export class Game {
       slots[11] = { label: 'Retour', icon: ICON_BACK, run: () => (this.selected = null), info: () => '<h3>Retour</h3><p>Revient au menu de construction (Échap).</p>' };
       return slots;
     }
-    BUILD_MENU.forEach((id, i) => {
+    buildMenu(w.builder).forEach((id, i) => {
       const def = TOWERS[id];
       slots[i] = {
         label: def.name, icon: this.icon(id), cost: def.cost, poor: w.gold < def.cost, active: this.buildDef === id,
@@ -966,7 +964,7 @@ export class Game {
     const panel = document.createElement('span');
     panel.id = 'rivalPanel';
     panel.className = 'res';
-    panel.innerHTML = `<small id="rivalNick"></small> <b id="rivalLives">0</b> vies · <b id="rivalGold">0</b> or · revenu <b id="rivalIncome">0</b> <button type="button" class="btn" id="rivalViewBtn">Voir l'adversaire</button>`;
+    panel.innerHTML = `<small id="rivalNick"></small> <small id="rivalBuilder"></small> <b id="rivalLives">0</b> vies · <b id="rivalGold">0</b> or · revenu <b id="rivalIncome">0</b> <button type="button" class="btn" id="rivalViewBtn">Voir l'adversaire</button>`;
     bar.insertBefore(panel, $('pauseBtn'));
     $('rivalViewBtn').addEventListener('click', () => this.toggleRivalView(!this.viewingRival));
   }
@@ -996,6 +994,7 @@ export class Game {
       $(id).textContent = v;
     };
     set('rivalNick', this.rivalNick);
+    set('rivalBuilder', this.rivalWorld.builder.name);
     set('rivalLives', fmt0(this.rivalWorld.lives));
     set('rivalGold', fmt0(this.rivalWorld.gold));
     set('rivalIncome', fmt0(this.rivalWorld.income));
@@ -1271,6 +1270,23 @@ export class Game {
       .join('');
   }
 
+  private buildersHtml(checkedId: string | null): string {
+    return Object.values(BUILDERS)
+      .map((b) => `<button type="button" class="builder" role="radio" data-builder="${b.id}" aria-checked="${b.id === checkedId}">${builderCard(b)}</button>`)
+      .join('');
+  }
+
+  /** Sélection d'un bâtisseur dans `root` ; `onPick` est appelé après le choix. */
+  private bindBuilders(root: HTMLElement, onPick?: () => void): void {
+    root.querySelectorAll<HTMLButtonElement>('[data-builder]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.builderId = b.dataset.builder!;
+        root.querySelectorAll('[data-builder]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+        onPick?.();
+      }),
+    );
+  }
+
   private showStart(): void {
     this.link?.close();
     this.link = null;
@@ -1291,6 +1307,8 @@ export class Game {
         </ol>
         <p class="label">Carte</p>
         <div class="maps" role="radiogroup" aria-label="Carte">${maps}</div>
+        <p class="label">Bâtisseur</p>
+        <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.builderId)}</div>
         <p class="label">Difficulté</p>
         <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
         <div class="row"><button type="button" class="btn primary" id="startBtn">Commencer</button><button type="button" class="btn" id="startHelp">Commandes et armures</button></div>
@@ -1327,6 +1345,7 @@ export class Game {
       );
     };
     bindDiffs();
+    this.bindBuilders(el);
     el.querySelectorAll<HTMLButtonElement>('[data-map]').forEach((b) =>
       b.addEventListener('click', () => {
         this.mapId = b.dataset.map!;
@@ -1389,6 +1408,7 @@ export class Game {
       return;
     }
     this.duelRole = 'host';
+    this.lobbyBuilderId = null;
     this.setDuelControlsHidden(true);
     link.onMessage((msg) => this.onLobbyMessage(msg));
     link.send({ t: ClientMessageType.Host, nick, map, difficulty: this.difficulty });
@@ -1408,6 +1428,7 @@ export class Game {
       return;
     }
     this.duelRole = 'guest';
+    this.lobbyBuilderId = null;
     this.setDuelControlsHidden(true);
     link.onMessage((msg) => this.onLobbyMessage(msg));
     const seat = this.loadSeat(DUEL_SEAT_KEY);
@@ -1434,9 +1455,11 @@ export class Game {
         this.duelMap = msg.map;
         this.duelDifficulty = msg.difficulty;
         this.duelInRoom = true;
+        this.duelPicked = { host: false, guest: false };
         this.showLobby();
         break;
       case ServerMessageType.Room:
+        this.duelPicked = msg.picked;
         this.duelHostNick = msg.host;
         this.duelGuestNick = msg.guest;
         this.duelMap = msg.map;
@@ -1613,6 +1636,8 @@ export class Game {
     const host = escapeHtml(this.duelHostNick ?? '');
     const map = this.duelMap ? escapeHtml(this.duelMap.name) : '';
     const diff = this.duelDifficulty ? escapeHtml(DIFFICULTY[this.duelDifficulty].label) : '';
+    const picked = (p: boolean) => (p ? 'a choisi' : 'choisit…');
+    const status = `<p>${host} : ${picked(this.duelPicked.host)} · ${guest} : ${picked(this.duelPicked.guest)}</p>`;
     const startBtn = this.duelRole === 'host' ? '<button type="button" class="btn primary" id="startDuel">Lancer la partie</button>' : '';
     return `
       <div class="sheet" style="width:min(360px,100%);text-align:center">
@@ -1620,6 +1645,8 @@ export class Game {
         ${code}
         <p>${host} contre ${guest}</p>
         <p>${map} · ${diff}</p>
+        <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.lobbyBuilderId)}</div>
+        ${status}
         <div class="row" style="justify-content:center">${startBtn}<button type="button" class="btn" id="leaveLobby">Quitter</button></div>
       </div>`;
   }
@@ -1627,6 +1654,10 @@ export class Game {
   private showLobby(): void {
     this.openOverlay(Overlay.Lobby, this.lobbyHtml());
     $('leaveLobby').addEventListener('click', () => this.leaveLobby());
+    this.bindBuilders($('overlay'), () => {
+      this.lobbyBuilderId = this.builderId;
+      this.duelLink?.send({ t: ClientMessageType.ChooseBuilder, builder: this.builderId });
+    });
     if (this.duelRole === 'host') {
       $('startDuel').addEventListener('click', () => this.duelLink?.send({ t: ClientMessageType.Start }));
     }
@@ -1643,6 +1674,7 @@ export class Game {
     this.duelLink?.close();
     this.duelLink = null;
     this.duelRole = null;
+    this.lobbyBuilderId = null;
     this.sendOpen = false;
     this.duelCode = null;
     this.duelInRoom = false;

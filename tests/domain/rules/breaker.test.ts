@@ -13,7 +13,7 @@ function build(world: ReturnType<typeof newWorld>, def: string, x: number, y: nu
 
 describe('nearestTowers', () => {
   it('[RM-05] retient le mur à 1 case plutôt que le Canon à 2 cases', () => {
-    const w = newWorld();
+    const w = newWorld('normal', 42, undefined, 'forge');
     const wall = build(w, 'wall', 5, 5);
     build(w, 'cannon', 9, 4);
 

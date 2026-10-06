@@ -5,6 +5,7 @@ import { hitCreep } from '../../../src/domain/systems/combat';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { dispatch } from '../../../src/application/dispatch';
 import type { AttackDef } from '../../../src/domain/model/types';
+import { TOWERS } from '../../../src/domain/catalog/towers';
 import { newWorld } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
@@ -203,6 +204,29 @@ describe('status', () => {
     updateStatuses(w, 1);
 
     expect(w.stats.towers.get(t.id)!.damage).toBe(2);
+  });
+
+  it('[RM-08] une créature étourdie ne déclenche pas son sprint quand elle est touchée', () => {
+    const w = newWorld();
+    const c = spawnCreep(w, 'rat', 0);
+    c.def = { ...c.def, sprint: { mult: 2, duration: 1, cooldown: 4 } };
+    c.frozen = 1;
+
+    hitCreep(w, 1, 'archer', PLAIN_ATTACK, c, 10);
+
+    expect(c.sprint).toBe(0);
+  });
+
+  it('[RM-08] le coup qui étourdit ne déclenche pas le sprint', () => {
+    const w = newWorld();
+    const c = spawnCreep(w, 'rat', 0);
+    c.def = { ...c.def, sprint: { mult: 2, duration: 1, cooldown: 4 } };
+    expect(c.frozen).toBe(0);
+
+    hitCreep(w, 1, 'gong', TOWERS.gong.attack!, c, 10);
+
+    expect(c.frozen).toBeGreaterThan(0);
+    expect(c.sprint).toBe(0);
   });
 
   it('[RM-12] ne relance pas le sprint quand il se recharge encore 4 s après sa fin', () => {

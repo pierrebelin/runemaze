@@ -22,7 +22,7 @@ describe('pricing', () => {
   });
 
   it('[RM-01] compte le mur et la différence payée quand un mur transformé est vendu', () => {
-    const w = newWorld();
+    const w = newWorld('normal', 42, undefined, 'forge');
     const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y: 8 }) as { ok: true; id: number };
     dispatch(w, { c: CommandType.Upgrade, tower: r.id, def: 'cannon' });
     const t = w.towerById.get(r.id)!;

@@ -1,5 +1,6 @@
 import { Rng } from '../Rng';
 import { CAMPAIGN_LENGTH, DIFFICULTY } from '../catalog/creeps';
+import { builder } from '../catalog/builders';
 import { FlowField } from '../rules/FlowField';
 import { Grid } from './Grid';
 import { updateAbilities } from '../systems/abilities';
@@ -9,7 +10,7 @@ import { updateMovement } from '../systems/movement';
 import { updateStatuses } from '../systems/status';
 import { updateWaves, type Spawner } from '../systems/waves';
 import { Phase } from './types';
-import type { Command, Creep, Difficulty, GameEvent, MapDef, Projectile, Tower, WaveTally } from './types';
+import type { BuilderDef, Command, Creep, Difficulty, GameEvent, MapDef, Projectile, Tower, WaveTally } from './types';
 
 export const TICK = 1 / 60;
 export const FIRST_WAVE_DELAY = 35;
@@ -19,6 +20,7 @@ export interface WorldOptions {
   difficulty: Difficulty;
   seed: number;
   duel?: boolean;
+  builder: string;
 }
 
 export interface Stats {
@@ -47,6 +49,7 @@ export class World {
   readonly waypoints: { x: number; y: number }[];
 
   readonly duel: boolean;
+  readonly builder: BuilderDef;
   income = 0;
   ether = 0;
   gleaners: number[] = [];
@@ -85,6 +88,7 @@ export class World {
     this.rng = new Rng(opts.seed);
     this.difficulty = opts.difficulty;
     this.duel = opts.duel ?? false;
+    this.builder = builder(opts.builder);
     this.map = opts.map;
     const d = DIFFICULTY[opts.difficulty];
     this.gold = d.gold;

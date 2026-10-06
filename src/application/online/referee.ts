@@ -12,6 +12,7 @@ export interface OpenRequest {
   seed: number;
   id: string;
   token: string;
+  builder: string;
   previous?: { id: string; token: string };
 }
 
@@ -23,7 +24,7 @@ export class Referee {
     if (req.previous && this.owns(req.previous.id, req.previous.token)) {
       this.games.delete(req.previous.id);
     }
-    const world = new World({ map: req.map, difficulty: req.difficulty, seed: req.seed });
+    const world = new World({ map: req.map, difficulty: req.difficulty, seed: req.seed, builder: req.builder });
     const held = new HeldGame(world, req.token, now);
     this.games.set(req.id, held);
     return { t: ServerMessageType.Opened, id: req.id, token: req.token, snapshot: snapshot(world) };

@@ -11,7 +11,7 @@ export function build(world: World, cmd: Extract<Command, { c: CommandType.Build
   const t: Tower = {
     id: world.id(), def, x: cmd.x, y: cmd.y, cx: cmd.x + 1, cy: cmd.y + 1,
     cooldown: 0.2, targetMode: 'first', spent: def.cost,
-    kills: 0, damage: 0, aim: -Math.PI / 2, fate: 'standing',
+    kills: 0, damage: 0, aim: -Math.PI / 2, ramp: 0, fate: 'standing',
   };
   world.gold -= def.cost;
   world.towers.push(t);

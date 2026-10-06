@@ -8,6 +8,8 @@ export type TargetLayer = 'ground' | 'air' | 'both';
 export type Family = 'wall' | 'archer' | 'cannon' | 'frost' | 'storm' | 'venom';
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
+export type AuraKind = 'damage' | 'attackSpeed';
+
 export interface AttackDef {
   type: AttackType;
   dmg: [number, number];
@@ -23,9 +25,15 @@ export interface AttackDef {
   poison?: { dps: number; duration: number; maxStacks: number };
   chain?: { bounces: number; range: number; decay: number };
   multishot?: number;
+  /** Frappe d'un coup toutes les créatures à portée. */
+  area?: true;
   crit?: { chance: number; mult: number };
   armorShred?: { amount: number; duration: number };
   freeze?: { chance: number; duration: number; guard: number };
+  /** Immobilise sans toucher à la garde de gel. */
+  stun?: { duration: number };
+  /** Montée en puissance : bonus de vitesse d'attaque plafonné à `max`. */
+  rampUp?: { max: number };
 }
 
 export interface TowerDef {
@@ -37,6 +45,7 @@ export interface TowerDef {
   cost: number;
   desc: string;
   attack?: AttackDef;
+  aura?: { kind: AuraKind; pct: number; radius: number };
   upgrades: string[];
   /** Familles d'origine pour une tour hybride issue d'une infusion. */
   elements?: [Family, Family];
@@ -159,6 +168,8 @@ export interface Tower {
   kills: number;
   damage: number;
   aim: number;
+  /** Secondes cumulées avec une cible à portée. */
+  ramp: number;
   fate: TowerFate;
 }
 
@@ -242,3 +253,12 @@ export type Command =
   | { c: CommandType.Gleaner };
 
 export type Result = { ok: true; id?: number } | { ok: false; reason: string };
+
+export interface BuilderDef {
+  id: string;
+  name: string;
+  style: string;
+  weakness: string;
+  roots: [string, string];
+  hybrids: [string, string];
+}

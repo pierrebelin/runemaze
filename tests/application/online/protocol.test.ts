@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readClientMessage } from '../../../src/application/online/protocol';
+import { ClientMessageType, readClientMessage } from '../../../src/application/online/protocol';
 import { MAP_TWO_STONES } from '../../support/maps';
 
 describe('readClientMessage', () => {
@@ -133,11 +133,36 @@ describe('readClientMessage', () => {
       ),
     ).toBeNull();
 
-    expect(readClientMessage(JSON.stringify({ t: 'open', map: MAP_TWO_STONES, difficulty: 'easy' }))).toEqual({
+    expect(
+      readClientMessage(JSON.stringify({ t: 'open', map: MAP_TWO_STONES, difficulty: 'easy', builder: 'bastion' })),
+    ).toEqual({
       t: 'open',
       map: MAP_TWO_STONES,
       difficulty: 'easy',
+      builder: 'bastion',
     });
+  });
+
+  it('[RM-01] lit une ouverture qui porte un bâtisseur connu', () => {
+    const raw = JSON.stringify({ t: 'open', map: MAP_TWO_STONES, difficulty: 'easy', builder: 'sylve' });
+
+    expect(readClientMessage(raw)).toMatchObject({ t: 'open', builder: 'sylve' });
+  });
+
+  it('[RM-01] rejette une ouverture sans bâtisseur ou avec un bâtisseur inconnu', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'open', map: MAP_TWO_STONES, difficulty: 'easy' }))).toBeNull();
+    expect(
+      readClientMessage(JSON.stringify({ t: 'open', map: MAP_TWO_STONES, difficulty: 'easy', builder: 'inconnu' })),
+    ).toBeNull();
+  });
+
+  it('[CU-02] lit un choix de bâtisseur connu et rejette un inconnu', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'chooseBuilder', builder: 'forge' }))).toEqual({
+      t: ClientMessageType.ChooseBuilder,
+      builder: 'forge',
+    });
+    expect(readClientMessage(JSON.stringify({ t: 'chooseBuilder', builder: 'inconnu' }))).toBeNull();
+    expect(readClientMessage(JSON.stringify({ t: 'chooseBuilder' }))).toBeNull();
   });
 
   it('[CU-04] lit l\'ancienne partie à abandonner d\'une ouverture', () => {
@@ -145,6 +170,7 @@ describe('readClientMessage', () => {
       t: 'open',
       map: MAP_TWO_STONES,
       difficulty: 'normal',
+      builder: 'bastion',
       previous: { id: 'a', token: 'tok-a' },
     });
 
@@ -152,6 +178,7 @@ describe('readClientMessage', () => {
       t: 'open',
       map: MAP_TWO_STONES,
       difficulty: 'normal',
+      builder: 'bastion',
       previous: { id: 'a', token: 'tok-a' },
     });
   });

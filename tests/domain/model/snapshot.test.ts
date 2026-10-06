@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { snapshot, restore } from '../../../src/domain/model/snapshot';
+import { MAP_CROSSING } from '../../../src/domain/catalog/map';
+import { World } from '../../../src/domain/model/World';
 import { launchWave, spawnCreep } from '../../../src/domain/systems/waves';
-import { newDuelWorld, newWorld, run } from '../../support/helpers';
+import { buildTowerChain, newDuelWorld, newWorld, run, spawnDummy } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('snapshot', () => {
+  it('[RM-01] rend le même bâtisseur après un instantané', () => {
+    const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 42, builder: 'sylve' });
+
+    const restored = restore(snapshot(w));
+    const viaJson = restore(JSON.parse(JSON.stringify(snapshot(w))));
+
+    expect(restored.builder.id).toBe('sylve');
+    expect(viaJson.builder.id).toBe('sylve');
+  });
+
   it('[RM-06] continue à l’identique quand la partie est restaurée en pleine vague', () => {
     const w = newWorld('normal', 42);
     dispatch(w, { c: CommandType.Build, def: 'archer', x: 8, y: 3 });
@@ -197,6 +209,18 @@ describe('snapshot', () => {
 
     expect(restored.sends).toEqual([]);
     expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
+  });
+
+  it('[RM-09] la montée d\'un Pylône survit à un instantané', () => {
+    const w = newWorld('normal', 42, undefined, 'arcanists');
+    const t = buildTowerChain(w, ['pylon']);
+    spawnDummy(w, t.cx + 1, t.cy);
+    run(w, 5);
+    expect(t.ramp).toBeGreaterThan(4);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+
+    expect(restored.towerById.get(t.id)!.ramp).toBe(t.ramp);
   });
 
   it('[RM-12] restaure l\'éther et le tick d\'achat de chaque glaneur depuis un instantané', () => {

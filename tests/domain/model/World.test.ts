@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { MAP_CROSSING } from '../../../src/domain/catalog/map';
+import { builder } from '../../../src/domain/catalog/builders';
 import { World } from '../../../src/domain/model/World';
 import { BreakerPhase, CommandType, Phase } from '../../../src/domain/model/types';
 import { spawnCreep } from '../../../src/domain/systems/waves';
@@ -11,6 +12,28 @@ import { MAP_BENT_STONES, MAP_CORRIDOR, MAP_TWO_STONES } from '../../support/map
 import { MAP_SEALS, MAP_SPIRAL } from '../../../src/domain/catalog/map';
 
 describe('World', () => {
+  it('[RM-01] garde le bâtisseur choisi à la création de la partie', () => {
+    const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 1, builder: 'forge' });
+    expect(w.builder.id).toBe('forge');
+    expect(w.builder).toBe(builder('forge'));
+  });
+
+  it('[RM-11] rejoue la même partie avec même graine, même bâtisseur et mêmes ordres', () => {
+    const play = () => {
+      const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 21, builder: 'forge' });
+      w.gold = 1000;
+      dispatch(w, { c: CommandType.Build, def: 'cannon', x: 8, y: 3 });
+      dispatch(w, { c: CommandType.Build, def: 'anvil', x: 12, y: 3 });
+      dispatch(w, { c: CommandType.CallWave });
+      run(w, 30);
+      return { builder: w.builder?.id, gold: w.gold, kills: w.stats.kills, lives: w.lives, tick: w.tick };
+    };
+    const a = play();
+    const b = play();
+    expect(a).toEqual(b);
+    expect(a.builder).toBe('forge');
+  });
+
   it('fait passer les créatures par la pierre runique avant la sortie', () => {
     const w = newWorld();
     dispatch(w, { c: CommandType.CallWave });
@@ -25,9 +48,9 @@ describe('World', () => {
 
   it('est déterministe : même graine et mêmes ordres, même partie', () => {
     const play = () => {
-      const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 7 });
+      const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 7, builder: 'bastion' });
       dispatch(w, { c: CommandType.Build, def: 'archer', x: 8, y: 3 });
-      dispatch(w, { c: CommandType.Build, def: 'cannon', x: 12, y: 5 });
+      dispatch(w, { c: CommandType.Build, def: 'guard', x: 12, y: 5 });
       dispatch(w, { c: CommandType.CallWave });
       run(w, 60);
       return { gold: w.gold, kills: w.stats.kills, lives: w.lives, tick: w.tick };
@@ -37,11 +60,11 @@ describe('World', () => {
 
   it('rejoue une partie à partir du journal de commandes', () => {
     const a = newWorld('normal', 99);
-    dispatch(a, { c: CommandType.Build, def: 'frost', x: 8, y: 3 });
+    dispatch(a, { c: CommandType.Build, def: 'archer', x: 8, y: 3 });
     run(a, 3);
     dispatch(a, { c: CommandType.CallWave });
     run(a, 10);
-    dispatch(a, { c: CommandType.Build, def: 'storm', x: 14, y: 3 });
+    dispatch(a, { c: CommandType.Build, def: 'guard', x: 14, y: 3 });
     run(a, 30);
 
     const b = newWorld('normal', 99);
@@ -57,15 +80,11 @@ describe('World', () => {
 
   it('[RM-10] rejoue à l’identique une partie avec Obus cryogénique quand la graine et le journal sont les mêmes', () => {
     const play = () => {
-      const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 11 });
+      const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 11, builder: 'forge' });
       w.gold = 1000;
       const cannon = dispatch(w, { c: CommandType.Build, def: 'cannon', x: 8, y: 3 }) as { ok: true; id: number };
       expect(cannon.ok).toBe(true);
       expect(dispatch(w, { c: CommandType.Upgrade, tower: cannon.id, def: 'mortar' }).ok).toBe(true);
-      const frost = dispatch(w, { c: CommandType.Build, def: 'frost', x: 12, y: 3 }) as { ok: true; id: number };
-      expect(frost.ok).toBe(true);
-      expect(dispatch(w, { c: CommandType.Upgrade, tower: frost.id, def: 'glacier' }).ok).toBe(true);
-      w.wave = 7;
       expect(dispatch(w, { c: CommandType.Upgrade, tower: cannon.id, def: 'cryoshell' }).ok).toBe(true);
       expect(dispatch(w, { c: CommandType.CallWave }).ok).toBe(true);
       const frozenIds = new Set<number>();
@@ -89,17 +108,12 @@ describe('World', () => {
   });
 
   it('[RM-12] ralentit toutes les créatures touchées par les rebonds de la Grêle', () => {
-    const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 11 });
+    const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 11, builder: 'sanctuary' });
     w.gold = 1000;
-    const storm = dispatch(w, { c: CommandType.Build, def: 'storm', x: 8, y: 3 }) as { ok: true; id: number };
-    expect(storm.ok).toBe(true);
-    expect(dispatch(w, { c: CommandType.Upgrade, tower: storm.id, def: 'tempest' }).ok).toBe(true);
     const frost = dispatch(w, { c: CommandType.Build, def: 'frost', x: 12, y: 3 }) as { ok: true; id: number };
     expect(frost.ok).toBe(true);
     expect(dispatch(w, { c: CommandType.Upgrade, tower: frost.id, def: 'glacier' }).ok).toBe(true);
-    w.wave = 7;
-    expect(dispatch(w, { c: CommandType.Upgrade, tower: storm.id, def: 'hail' }).ok).toBe(true);
-    expect(dispatch(w, { c: CommandType.Sell, tower: frost.id }).ok).toBe(true);
+    expect(dispatch(w, { c: CommandType.Upgrade, tower: frost.id, def: 'hail' }).ok).toBe(true);
     expect(dispatch(w, { c: CommandType.CallWave }).ok).toBe(true);
 
     let maxSlowedAtOnce = 0;
@@ -155,12 +169,12 @@ describe('World', () => {
     const a = newWorld('normal', 99);
     const archer = dispatch(a, { c: CommandType.Build, def: 'archer', x: 8, y: 3 }) as { ok: true; id: number };
     expect(archer.ok).toBe(true);
-    const cannon = dispatch(a, { c: CommandType.Build, def: 'cannon', x: 12, y: 3 }) as { ok: true; id: number };
-    expect(cannon.ok).toBe(true);
+    const guard = dispatch(a, { c: CommandType.Build, def: 'guard', x: 12, y: 3 }) as { ok: true; id: number };
+    expect(guard.ok).toBe(true);
     run(a, 3);
     dispatch(a, { c: CommandType.CallWave });
     run(a, 60);
-    expect(dispatch(a, { c: CommandType.Upgrade, tower: cannon.id, def: 'mortar' }).ok).toBe(true);
+    expect(dispatch(a, { c: CommandType.Upgrade, tower: guard.id, def: 'champion' }).ok).toBe(true);
     expect(dispatch(a, { c: CommandType.Sell, tower: archer.id }).ok).toBe(true);
     dispatch(a, { c: CommandType.CallWave });
     run(a, 400);
@@ -344,14 +358,14 @@ describe('World', () => {
   });
 
   it('[RM-07] démarre la partie sur la carte passée en paramètre', () => {
-    const spiral = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 1 });
+    const spiral = new World({ map: MAP_SPIRAL, difficulty: 'normal', seed: 1, builder: 'bastion' });
     expect(spiral.grid.w).toBe(MAP_SPIRAL.width);
     expect(spiral.grid.h).toBe(MAP_SPIRAL.height);
     expect(spiral.grid.checkpoints).toHaveLength(1);
     expect(spiral.grid.spawnCells.length).toBeGreaterThan(0);
     expect(spiral.grid.exitCells.length).toBeGreaterThan(0);
 
-    const seals = new World({ map: MAP_SEALS, difficulty: 'normal', seed: 1 });
+    const seals = new World({ map: MAP_SEALS, difficulty: 'normal', seed: 1, builder: 'bastion' });
     expect(seals.grid.w).toBe(MAP_SEALS.width);
     expect(seals.grid.h).toBe(MAP_SEALS.height);
     expect(seals.grid.checkpoints).toHaveLength(2);

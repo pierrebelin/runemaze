@@ -1,6 +1,7 @@
 import type { Command, Difficulty, MapDef, TargetMode } from '../../domain/model/types';
 import type { WorldSnapshot } from '../../domain/model/snapshot';
 import { CommandType } from '../../domain/model/types';
+import { BUILDERS } from '../../domain/catalog/builders';
 import type { Seat } from './duel';
 
 export enum ClientMessageType {
@@ -16,6 +17,7 @@ export enum ClientMessageType {
   Start = 'start',
   Ready = 'ready',
   Rejoin = 'rejoin',
+  ChooseBuilder = 'chooseBuilder',
 }
 
 export enum ServerMessageType {
@@ -46,7 +48,7 @@ export enum Verdict {
 }
 
 export type ClientMessage =
-  | { t: ClientMessageType.Open; map: MapDef; difficulty: Difficulty; previous?: { id: string; token: string } }
+  | { t: ClientMessageType.Open; map: MapDef; difficulty: Difficulty; builder: string; previous?: { id: string; token: string } }
   | { t: ClientMessageType.Order; tick: number; cmd: Command; fingerprint: string }
   | { t: ClientMessageType.Check; tick: number; fingerprint: string }
   | { t: ClientMessageType.Pace; tick: number; paused: boolean; speed: number }
@@ -57,7 +59,8 @@ export type ClientMessage =
   | { t: ClientMessageType.Leave }
   | { t: ClientMessageType.Start }
   | { t: ClientMessageType.Ready }
-  | { t: ClientMessageType.Rejoin; code: string; token: string };
+  | { t: ClientMessageType.Rejoin; code: string; token: string }
+  | { t: ClientMessageType.ChooseBuilder; builder: string };
 
 const TARGET_MODES: TargetMode[] = ['first', 'last', 'strong', 'weak', 'close'];
 const DIFFICULTIES: Difficulty[] = ['easy', 'normal', 'hard'];
@@ -78,6 +81,10 @@ function isBoolean(v: unknown): v is boolean {
 
 function isPositiveInt(v: unknown): v is number {
   return isNumber(v) && Number.isInteger(v) && v > 0;
+}
+
+function isBuilderId(v: unknown): v is string {
+  return isString(v) && Object.hasOwn(BUILDERS, v);
 }
 
 function isPrevious(v: unknown): v is { id: string; token: string } {
@@ -155,12 +162,14 @@ export function readClientMessage(raw: string): ClientMessage | null {
         isMapDef(m.map) &&
         isString(m.difficulty) &&
         DIFFICULTIES.includes(m.difficulty as Difficulty) &&
+        isBuilderId(m.builder) &&
         (m.previous === undefined || isPrevious(m.previous))
       ) {
         return {
           t: ClientMessageType.Open,
           map: m.map as MapDef,
           difficulty: m.difficulty as Difficulty,
+          builder: m.builder,
           ...(m.previous !== undefined ? { previous: m.previous } : {}),
         };
       }
@@ -222,6 +231,11 @@ export function readClientMessage(raw: string): ClientMessage | null {
         return { t: ClientMessageType.Rejoin, code: m.code, token: m.token };
       }
       return null;
+    case ClientMessageType.ChooseBuilder:
+      if (isBuilderId(m.builder)) {
+        return { t: ClientMessageType.ChooseBuilder, builder: m.builder };
+      }
+      return null;
     default:
       return null;
   }
@@ -235,7 +249,7 @@ export type ServerMessage =
   | { t: ServerMessageType.Resumable; ok: boolean }
   | { t: ServerMessageType.Ended }
   | { t: ServerMessageType.Hosted; code: string; host: string; map: MapDef; difficulty: Difficulty }
-  | { t: ServerMessageType.Room; host: string; guest: string | null; map: MapDef; difficulty: Difficulty }
+  | { t: ServerMessageType.Room; host: string; guest: string | null; map: MapDef; difficulty: Difficulty; picked: { host: boolean; guest: boolean } }
   | { t: ServerMessageType.Refused; reason: string }
   | { t: ServerMessageType.Cancelled }
   | {
