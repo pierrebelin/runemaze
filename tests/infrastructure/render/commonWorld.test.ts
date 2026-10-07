@@ -200,3 +200,32 @@ describe('commonWorld', () => {
     expect(isMapVisible(view, screen, world.maps[0])).toBe(false);
   });
 });
+
+describe('grille 2 contre 2', () => {
+  const sizes = [{ w: 20, h: 14 }, { w: 20, h: 14 }, { w: 20, h: 14 }, { w: 20, h: 14 }];
+
+  it('[RM-11] place quatre cartes en deux rangées de deux, séparées de 2 cases, quand la grille a 2 colonnes', () => {
+    const world = layOutMaps(sizes, 2);
+
+    expect(world.maps).toEqual([
+      { x: 0, y: 0, w: 20, h: 14 },
+      { x: 22, y: 0, w: 20, h: 14 },
+      { x: 0, y: 16, w: 20, h: 14 },
+      { x: 22, y: 16, w: 20, h: 14 },
+    ]);
+  });
+
+  it('[RM-11] couvre la largeur de deux cartes et la hauteur de deux rangées avec leurs écarts', () => {
+    const world = layOutMaps(sizes, 2);
+
+    expect(world.w).toBe(42);
+    expect(world.h).toBe(30);
+  });
+
+  it('[RM-11] donne la carte touchée et la case locale sur la rangée du bas', () => {
+    const world = layOutMaps(sizes, 2);
+
+    expect(mapAt(world, { x: 5.5, y: 20 })).toEqual({ index: 2, x: 5.5, y: 4 });
+    expect(mapAt(world, { x: 25.5, y: 17 })).toEqual({ index: 3, x: 3.5, y: 1 });
+  });
+});

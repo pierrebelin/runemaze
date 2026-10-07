@@ -38,7 +38,7 @@ export const BUILDERS: Record<string, BuilderDef> = {
     name: 'Arcanistes',
     style: 'magie, chaînes, montée en puissance',
     weakness: 'contre les immunisés à la magie',
-    roots: ['storm', 'pylon'],
+    roots: ['storm', 'pylon', 'dispeller'],
     hybrids: ['thunderarrow', 'acidarc'],
   },
 };

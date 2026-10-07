@@ -5,7 +5,7 @@ import { creepHp, launchWave, WAVE_GAP, waveDuration } from '../../../src/domain
 import { CommandType } from '../../../src/domain/model/types';
 import { killAllCreeps, newDuelWorld, observeSpawns, run } from '../../support/helpers';
 
-const receive = (creep: string) => ({ c: CommandType.Receive, creep }) as const;
+const receive = (creep: string, from = 0) => ({ c: CommandType.Receive, creep, from }) as const;
 
 describe('receive', () => {
   it('[RM-01] fait sortir le premier envoi avec la première créature et les suivants répartis sur la vague, dans l\'ordre d\'achat', () => {
@@ -91,7 +91,7 @@ describe('receive', () => {
     const w = newDuelWorld();
     launchWave(w);
     dispatch(w, receive('rat'));
-    expect(w.sends).toEqual(['rat']);
+    expect(w.sends).toEqual([{ creep: 'rat', from: 0 }]);
 
     launchWave(w);
 
@@ -107,6 +107,15 @@ describe('receive', () => {
     const r = dispatch(w, receive('rat'));
 
     expect(r.ok).toBe(true);
-    expect(w.sends).toEqual(['rat']);
+    expect(w.sends).toEqual([{ creep: 'rat', from: 0 }]);
+  });
+
+  it('[CU-04] note le siège de l\'envoyeur avec la créature reçue', () => {
+    const w = newDuelWorld();
+
+    const r = dispatch(w, receive('wolf', 2));
+
+    expect(r.ok).toBe(true);
+    expect(w.sends).toEqual([{ creep: 'wolf', from: 2 }]);
   });
 });

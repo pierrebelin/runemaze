@@ -17,7 +17,8 @@ describe('catalogue des hybrides', () => {
   });
 
   it('offre à chaque tour de niveau 2 toutes les infusions de sa famille', () => {
-    for (const d of all.filter((d) => d.tier === 2 && !d.elements)) {
+    // Exception : le Grand dissipateur est une fin de lignée, il n'ouvre aucune infusion.
+    for (const d of all.filter((d) => d.tier === 2 && !d.elements && d.id !== 'greatdispeller')) {
       const expected = infusions.filter((h) => h.elements!.includes(d.family)).map((h) => h.id);
       expect(d.upgrades, d.id).toEqual(expect.arrayContaining(expected));
     }

@@ -193,4 +193,20 @@ describe('HeldGame', () => {
     now += 5000;
     expect(held.advance(now)).toBeNull();
   });
+
+  it('[RM-08] annonce une défaite quand le joueur abandonne une partie solo tenue par le serveur', () => {
+    const held = new HeldGame(newWorld(), 'tok', 0);
+    held.advance(1000);
+    const player = newWorld();
+    run(player, 45 / 60);
+    const cmd = { c: CommandType.Resign } as const;
+    expect(dispatch(player, cmd).ok).toBe(true);
+
+    held.order({ tick: 45, cmd, fingerprint: fingerprint(player) }, 1000);
+    const over = held.advance(1000) as { t: ServerMessageType.Over; verdict: string; snapshot: ReturnType<typeof snapshot> } | null;
+
+    expect(over?.t).toBe(ServerMessageType.Over);
+    expect(over?.verdict).toBe(Verdict.Defeat);
+    expect(over?.snapshot.phase).toBe(Phase.Defeat);
+  });
 });

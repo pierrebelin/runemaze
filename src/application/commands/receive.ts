@@ -6,6 +6,6 @@ import { CommandType } from '../../domain/model/types';
 
 export function receive(world: World, cmd: Extract<Command, { c: CommandType.Receive }>): Result {
   if (!CREEPS[cmd.creep]?.send) return fail('Créature impossible à envoyer.');
-  world.sends.push(cmd.creep);
+  world.sends.push({ creep: cmd.creep, from: cmd.from });
   return { ok: true };
 }

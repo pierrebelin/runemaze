@@ -108,8 +108,8 @@ describe('World', () => {
   it('[RM-10] fait sortir les envois aux mêmes instants quand la même partie est rejouée', () => {
     const play = () => {
       const w = newDuelWorld('normal', 3);
-      dispatch(w, { c: CommandType.Receive, creep: 'wolf' });
-      dispatch(w, { c: CommandType.Receive, creep: 'raider' });
+      dispatch(w, { c: CommandType.Receive, creep: 'wolf', from: 0 });
+      dispatch(w, { c: CommandType.Receive, creep: 'raider', from: 0 });
       launchWave(w);
       return observeSpawns(w, 10).filter((s) => s.id !== 'rat');
     };

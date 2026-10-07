@@ -4,6 +4,8 @@ import { CREEPS, DIFFICULTY, waveAt } from '../domain/catalog/creeps';
 import { MAPS } from '../domain/catalog/map';
 import { BUILDERS } from '../domain/catalog/builders';
 import { TOWERS } from '../domain/catalog/towers';
+import { GLEANER } from '../domain/catalog/ether';
+import { etherPerMinute } from '../domain/rules/etherRate';
 import { fittedView, isDrag, zoomView, layOutMaps, panView, mapAt, toWorldPoint, isMapVisible, type CommonWorld, type WorldView } from '../infrastructure/render/commonWorld';
 import { Effects } from '../infrastructure/render/Effects';
 import { Renderer, type Board, type ViewState } from '../infrastructure/render/Renderer';
@@ -15,12 +17,13 @@ import { canBuild } from '../application/queries/canBuild';
 import { canBuyGleaner } from '../application/queries/canBuyGleaner';
 import { builderTowers, buildMenu, upgradeOptions } from '../domain/rules/builder';
 import { previewRoute } from '../application/queries/previewRoute';
+import { goldForecast } from '../application/queries/goldForecast';
 import { groupSends, waveBriefing } from '../application/queries/waveBriefing';
 import { realign } from '../application/online/realign';
-import { Seat } from '../application/online/duel';
+import { Seat, rivalSeats, teamOf } from '../application/online/duel';
 import { LOST_LIMIT_MS } from '../application/online/heldGame';
-import { ClientMessageType, Mode, ServerMessageType } from '../application/online/protocol';
-import type { ServerMessage } from '../application/online/protocol';
+import { ClientMessageType, Mode, ServerMessageType, Team } from '../application/online/protocol';
+import type { OtherMap, ServerMessage } from '../application/online/protocol';
 import { refundValue, upgradeCost } from '../domain/rules/pricing';
 import { World, type Stats } from '../domain/model/World';
 import { restore, type WorldSnapshot } from '../domain/model/snapshot';
@@ -29,7 +32,7 @@ import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, Gate
 import { CommandType, GameEventType } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
-import { briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeLabel, pairingWord, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
+import { resignPrompt, etherChip,goldForecastChip, goldForecastInfo, briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeLabel, pairingWord, teamRoster, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -67,9 +70,10 @@ enum Overlay {
   Pause = 'pause',
   Lost = 'lost',
   Lobby = 'lobby',
+  Resign = 'resign',
 }
 
-type Selection = { kind: 'tower' | 'creep'; id: number; rival: boolean } | null;
+type Selection = { kind: 'tower' | 'creep'; id: number; board: number } | null;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -77,8 +81,6 @@ export class Game {
   private world: World;
   private readonly renderer: Renderer;
   private readonly fx = new Effects();
-  /** Effets de la carte adverse, sans son. */
-  private readonly rivalFx = new Effects(false);
   private readonly sfx = new Sfx();
   private readonly loop: GameLoop;
   private difficulty: Difficulty = 'normal';
@@ -114,11 +116,15 @@ export class Game {
   private duelInRoom = false;
   /** Mode choisi par l'hôte avant la création, puis mode de la salle reçu du serveur. */
   private duelMode = Mode.Duel;
+  private duelTeams: Record<Team, { nick: string; picked: boolean }[]> = { [Team.A]: [], [Team.B]: [] };
+  private duelWaiting: string[] = [];
   /** Vrai tant qu'une reprise de siège est en attente de réponse. */
   private duelRejoining = false;
-  /** Carte adverse : restaurée à chaque `Rival`, avancée localement entre deux envois (D3). */
-  private rivalWorld: World | null = null;
-  private rivalNick = '';
+  /** Siège du joueur dans la partie en ligne (0 hors ligne). */
+  private duelSeat = 0;
+  private ownNick = '';
+  /** Autres cartes par siège : restaurées à chaque `Rival`, avancées localement entre deux envois (D3). */
+  private others = new Map<number, Omit<Board, 'place'>>();
   /** Dernière vague dont le lancement a été annoncé. Pas recalée par `realign` : un lancement reçu du serveur doit s'annoncer. */
   private announcedWave = 0;
   /** Coin haut-gauche de l'écran dans le monde commun (en cases) et taille d'une case en pixels. */
@@ -129,7 +135,6 @@ export class Game {
   private sendTab: 'sends' | 'gleaners' | 'gate' = 'sends';
 
   private selected: Selection = null;
-  private rivalView: ViewState = { buildDef: null, ghost: null, previewRoute: null, selectedTower: null, selectedCreep: null, showRoute: false };
   private buildDef: string | null = null;
   private anchor: { x: number; y: number } | null = null;
   private ghostReason = '';
@@ -143,6 +148,7 @@ export class Game {
   private sendCache = '';
   private unitCache = '';
   private briefingCache = '';
+  private walletCache = '';
   private hud: Record<string, string> = {};
   private overlay: Overlay | null = null;
   private pausedByOverlay = false;
@@ -305,20 +311,28 @@ export class Game {
     this.recenter();
   }
 
-  /** Cartes de la partie de gauche à droite : l'hôte d'abord, l'invité ensuite (RM-09), et leur monde commun. */
+  /**
+   * Cartes de la partie et leur monde commun. Duel et coop : une rangée, un siège par carte (RM-09).
+   * 2 contre 2 : grille 2×2, son équipe en haut (soi puis coéquipier), les adversaires en bas (RM-11).
+   */
   private layout(): { boards: Board[]; common: CommonWorld } {
-    const duel = this.duelRole !== null;
-    const ownNick = !duel ? '' : (this.duelRole === 'host' ? this.duelHostNick : this.duelGuestNick) ?? '';
+    const teams = this.duelMode === Mode.Teams;
+    const ownNick = this.duelRole === null ? '' : teams ? this.ownNick : (this.duelRole === 'host' ? this.duelHostNick : this.duelGuestNick) ?? '';
     const own = { world: this.world, fx: this.fx, view: this.view, nick: ownNick };
-    const rival = this.rivalWorld && { world: this.rivalWorld, fx: this.rivalFx, view: this.rivalView, nick: this.rivalNick };
-    const ordered = !rival ? [own] : this.duelRole === 'guest' ? [rival, own] : [own, rival];
+    const seats = [...this.others.keys()].sort((a, b) => a - b);
+    const boardsOf = (list: number[]) => list.map((s) => this.others.get(s)!);
+    const mates = seats.filter((s) => teamOf(this.duelMode, s) === teamOf(this.duelMode, this.duelSeat));
+    const ordered = teams
+      ? [own, ...boardsOf(mates), ...boardsOf(seats.filter((s) => !mates.includes(s)))]
+      : [...boardsOf(seats.filter((s) => s < this.duelSeat)), own, ...boardsOf(seats.filter((s) => s > this.duelSeat))];
     const sizes = ordered.map((b) => ({ w: b.world.grid.w, h: b.world.grid.h }));
-    const common = layOutMaps(sizes);
+    const common = layOutMaps(sizes, teams ? 2 : ordered.length);
     return { boards: ordered.map((b, i) => ({ ...b, place: common.maps[i] })), common };
   }
 
   private ownIndex(): number {
-    return this.rivalWorld && this.duelRole === 'guest' ? 1 : 0;
+    if (this.duelMode === Mode.Teams) return 0;
+    return [...this.others.keys()].filter((s) => s < this.duelSeat).length;
   }
 
   /** Ramène la vue ajustée sur sa carte. */
@@ -337,9 +351,9 @@ export class Game {
     this.world.step();
     // Carte adverse avancée localement entre deux `Rival` : effets visuels, aucun son (pas la nôtre).
     // Un monde restauré repart sans événement : rien n'est rejoué en double.
-    if (this.rivalWorld) {
-      this.rivalWorld.step();
-      this.rivalFx.consume(this.rivalWorld.drainEvents());
+    for (const o of this.others.values()) {
+      o.world.step();
+      o.fx.consume(o.world.drainEvents());
     }
     const events = this.world.drainEvents();
     if (events.length === 0) return;
@@ -378,7 +392,7 @@ export class Game {
     }
     const w = this.world;
     this.fx.update(this.loop.paused ? 0 : dt);
-    this.rivalFx.update(this.loop.paused ? 0 : dt);
+    for (const o of this.others.values()) o.fx.update(this.loop.paused ? 0 : dt);
 
     const sw = this.selectedWorld();
     if (this.selected?.kind === 'creep' && !sw?.creeps.some((c) => c.id === this.selected!.id && c.alive)) this.selected = null;
@@ -389,12 +403,13 @@ export class Game {
     if (this.buildDef && this.anchor && this.ghostCheck <= 0) this.updateGhost();
 
     this.view.buildDef = this.buildDef;
-    const own = this.selected && !this.selected.rival ? this.selected : null;
-    const rival = this.selected?.rival ? this.selected : null;
-    this.view.selectedTower = own?.kind === 'tower' ? own.id : null;
-    this.view.selectedCreep = own?.kind === 'creep' ? own.id : null;
-    this.rivalView.selectedTower = rival?.kind === 'tower' ? rival.id : null;
-    this.rivalView.selectedCreep = rival?.kind === 'creep' ? rival.id : null;
+    const select = (view: ViewState, board: number) => {
+      const sel = this.selected?.board === board ? this.selected : null;
+      view.selectedTower = sel?.kind === 'tower' ? sel.id : null;
+      view.selectedCreep = sel?.kind === 'creep' ? sel.id : null;
+    };
+    select(this.view, this.duelSeat);
+    for (const [seat, o] of this.others) select(o.view, seat);
     this.canvas.classList.toggle('building', !!this.buildDef);
 
     this.announceWave();
@@ -540,9 +555,10 @@ export class Game {
       this.showStart();
       return;
     }
-    if (this.overlay === Overlay.Help || this.overlay === Overlay.Pause) {
+    if (this.overlay === Overlay.Help || this.overlay === Overlay.Pause || this.overlay === Overlay.Resign) {
       this.closeOverlay();
       if (!this.pausedByOverlay) this.setPaused(false);
+      if (!this.duelRole) this.sendPace();
       return;
     }
     if (this.buildDef) this.setBuild(null);
@@ -626,9 +642,12 @@ export class Game {
       press = null;
       if (!done || done.drag || this.overlay) return;
       // Clic sur la carte adverse : fiche en lecture seule, sauf tour en main (rien n'est posé).
-      const hit = mapAt(this.layout().common, toWorldPoint(this.worldView, this.renderer.toScreen(e.clientX, e.clientY)));
-      if (hit && hit.index !== this.ownIndex() && this.rivalWorld && !this.buildDef) {
-        this.pick(this.rivalWorld, hit.x, hit.y, true);
+      const { boards, common } = this.layout();
+      const hit = mapAt(common, toWorldPoint(this.worldView, this.renderer.toScreen(e.clientX, e.clientY)));
+      if (hit && hit.index !== this.ownIndex() && !this.buildDef) {
+        const touched = boards[hit.index].world;
+        const seat = [...this.others].find(([, o]) => o.world === touched)![0];
+        this.pick(touched, hit.x, hit.y, seat);
         return;
       }
       const g = this.ownCell(e.clientX, e.clientY);
@@ -652,7 +671,7 @@ export class Game {
         this.build();
         return;
       }
-      this.pick(this.world, g.x, g.y, false);
+      this.pick(this.world, g.x, g.y, this.duelSeat);
     });
 
     const card = $('card');
@@ -692,6 +711,7 @@ export class Game {
     });
 
     $('pauseBtn').addEventListener('click', () => this.togglePause());
+    $('resignBtn').addEventListener('click', () => this.showResign());
     $('sendBtn').addEventListener('click', () => this.toggleSendPanel());
     // Souris sur `pointerdown` : `#sendPanel` est reconstruit quand l'or franchit un seuil, un `click` serait perdu.
     // `click` ne sert qu'au clavier (`detail === 0`).
@@ -779,13 +799,13 @@ export class Game {
     }
   }
 
-  private pick(w: World, gx: number, gy: number, rival: boolean): void {
+  private pick(w: World, gx: number, gy: number, board: number): void {
     const cx = Math.floor(gx);
     const cy = Math.floor(gy);
     if (w.grid.inBounds(cx, cy)) {
       const id = w.grid.tower[w.grid.idx(cx, cy)];
       if (id) {
-        this.selected = { kind: 'tower', id, rival };
+        this.selected = { kind: 'tower', id, board };
         this.sfx.click();
         return;
       }
@@ -799,7 +819,7 @@ export class Game {
         bestD = d;
       }
     }
-    this.selected = best ? { kind: 'creep', id: best.id, rival } : null;
+    this.selected = best ? { kind: 'creep', id: best.id, board } : null;
   }
 
   private runSlot(i: number): void {
@@ -827,12 +847,12 @@ export class Game {
   }
 
   private selectedWorld(): World | null {
-    return this.selected?.rival ? this.rivalWorld : this.world;
+    return this.selected && this.selected.board !== this.duelSeat ? this.others.get(this.selected.board)?.world ?? null : this.world;
   }
 
   /** Tour sélectionnée sur sa carte : celles de l'adversaire ne se commandent pas. */
   private selectedTower(): Tower | undefined {
-    return this.selected?.kind === 'tower' && !this.selected.rival ? this.world.towerById.get(this.selected.id) : undefined;
+    return this.selected?.kind === 'tower' && this.selected.board === this.duelSeat ? this.world.towerById.get(this.selected.id) : undefined;
   }
 
   private computeSlots(): (Slot | null)[] {
@@ -870,7 +890,7 @@ export class Game {
       };
       return slots;
     }
-    if (this.selected?.kind === 'creep' && !this.selected.rival) {
+    if (this.selected?.kind === 'creep' && this.selected.board === this.duelSeat) {
       slots[11] = { label: 'Retour', icon: ICON_BACK, run: () => (this.selected = null), info: () => '<h3>Retour</h3><p>Revient au menu de construction (Échap).</p>' };
       return slots;
     }
@@ -943,11 +963,11 @@ export class Game {
           : `<p>Trajet inchangé : ${fmt0(now)} cases.</p>`;
       }
       html = towerInfo(def, def.cost) + status;
-    } else if (shown) html = placedTowerInfo(shown, !this.selected!.rival);
+    } else if (shown) html = placedTowerInfo(shown, this.selected!.board === this.duelSeat);
     else if (this.selected?.kind === 'creep') {
       const c = this.selectedWorld()?.creeps.find((k) => k.id === this.selected!.id);
-      html = c ? creepInfo(c) : nextWaveInfo(waveBriefing(w));
-    } else html = nextWaveInfo(waveBriefing(w));
+      html = c ? creepInfo(c, this.world.builder) : nextWaveInfo(waveBriefing(w), this.world.builder);
+    } else html = nextWaveInfo(waveBriefing(w), this.world.builder);
     if (html !== this.infoCache) {
       this.infoCache = html;
       $('info').innerHTML = html;
@@ -959,10 +979,10 @@ export class Game {
       const def = TOWERS[this.buildDef];
       const touch = matchMedia('(pointer: coarse)').matches;
       unit = `<h2>${def.name}</h2><div class="sub">Construction · ${def.cost} or</div><div class="facts">${touch ? 'Touchez pour prévisualiser, touchez à nouveau pour bâtir.' : 'Clic pour bâtir · Échap pour annuler'}</div>`;
-    } else if (shown && !this.selected!.rival) {
+    } else if (shown && this.selected!.board === this.duelSeat) {
       const family = shown.def.elements ? `${elementsLabel(shown.def)} · hybride` : FAMILY_LABEL[shown.def.family];
       unit = `<h2>${shown.def.name}</h2><div class="sub">${family}${shown.def.tier ? ` · niveau ${shown.def.tier}` : ''}</div><div class="facts">${shown.def.attack ? `${ATTACK_LABEL[shown.def.attack.type]} · ${fmt0(shown.kills)} éliminations` : 'Bloc de labyrinthe'}</div>`;
-    } else if (this.selected?.kind === 'creep' && !this.selected.rival) {
+    } else if (this.selected?.kind === 'creep' && this.selected.board === this.duelSeat) {
       const c = w.creeps.find((k) => k.id === this.selected!.id);
       unit = c
         ? `<h2>${c.def.name}</h2><div class="sub">Armure ${ARMOR_LABEL[c.def.armorType].toLowerCase()} · vague ${c.wave + 1}</div><div class="hpbar"><i style="width:${Math.max(0, (c.hp / c.maxHp) * 100).toFixed(1)}%"></i></div><div class="facts">${fmt0(c.hp)} / ${fmt0(c.maxHp)} PV</div>`
@@ -982,12 +1002,28 @@ export class Game {
   /** Résumé de la prochaine vague dans la barre du haut ; détail au survol. */
   private updateBriefing(): void {
     const b = waveBriefing(this.world);
-    const html = briefingChip(b) + briefingInfo(b);
+    const html = briefingChip(b) + briefingInfo(b, this.world.builder);
     if (html === this.briefingCache) return;
     this.briefingCache = html;
     $('briefing').hidden = false;
     $('briefingChip').innerHTML = briefingChip(b);
-    $('briefingDetail').innerHTML = briefingInfo(b);
+    $('briefingDetail').innerHTML = briefingInfo(b, this.world.builder);
+  }
+
+  /** Or et gain prévu, éther et rythme (duel) au-dessus des commandes ; détail au survol ou à l'appui. */
+  private updateWallet(): void {
+    const w = this.world;
+    const forecast = goldForecast(w);
+    const gold = goldForecastChip(w.gold, forecast);
+    const goldInfo = goldForecastInfo(forecast, w.duel);
+    const ether = etherChip(w.ether, etherPerMinute(w.gleaners.length, GLEANER.period));
+    const html = gold + goldInfo + ether + w.duel;
+    if (html === this.walletCache) return;
+    this.walletCache = html;
+    $('goldChip').innerHTML = gold;
+    $('goldDetail').innerHTML = goldInfo;
+    $('etherPouch').hidden = !w.duel;
+    $('etherChip').innerHTML = ether;
   }
 
   private drawPortrait(): void {
@@ -1008,7 +1044,7 @@ export class Game {
       return;
     }
     let creep: Creep | undefined;
-    if (this.selected?.kind === 'creep' && !this.selected.rival) creep = w.creeps.find((k) => k.id === this.selected!.id);
+    if (this.selected?.kind === 'creep' && this.selected.board === this.duelSeat) creep = w.creeps.find((k) => k.id === this.selected!.id);
     const def = creep ? creep.def : CREEPS[waveAt(w.wave + 1).groups[0].creep];
     const span = Math.max(1.4, def.radius * 4.2);
     const s = c.width / span;
@@ -1024,8 +1060,18 @@ export class Game {
     const w = this.world;
     if (w.wave === this.announcedWave) return;
     this.announcedWave = w.wave;
-    if (this.fx.banner) this.fx.banner.lines = waveRecap(waveBriefing(w, w.wave), groupSends(w.waveSends.received), this.rivalNick);
-    if (this.duelRole && w.waveSends.sent.length) this.toast(sentMessage(groupSends(w.waveSends.sent), this.rivalNick));
+    const bySeat = (list: { creep: string; seat: number }[]) => {
+      const seats = new Map<number, string[]>();
+      for (const { creep, seat } of list) seats.set(seat, [...(seats.get(seat) ?? []), creep]);
+      return [...seats].sort(([x], [y]) => x - y).map(([seat, creeps]) => ({ nick: this.others.get(seat)?.nick ?? '', groups: groupSends(creeps) }));
+    };
+    if (this.fx.banner) this.fx.banner.lines = waveRecap(waveBriefing(w, w.wave), bySeat(w.waveSends.received.map((s) => ({ creep: s.creep, seat: s.from }))));
+    if (this.duelRole) {
+      // `to` est un rang parmi les sièges adverses, pas un siège.
+      const rivals = rivalSeats(this.duelMode, this.duelSeat);
+      const lines = bySeat(w.waveSends.sent.map((s) => ({ creep: s.creep, seat: rivals[s.to] }))).map((t) => sentMessage(t.groups, t.nick));
+      if (lines.length) this.toast(lines.join('\n'));
+    }
   }
 
   private updateHud(): void {
@@ -1035,9 +1081,7 @@ export class Game {
       this.hud[id] = v;
       $(id).textContent = v;
     };
-    set('gold', fmt0(w.gold));
-    set('ether', fmt0(w.ether));
-    $('etherRes').hidden = !w.duel;
+    this.updateWallet();
     set('lives', fmt0(w.lives));
     $('lives').style.color = w.lives <= 5 ? PAL.danger : '';
     set('wave', String(Math.max(0, w.wave + 1)));
@@ -1052,48 +1096,59 @@ export class Game {
     set('timer', can ? `${secs} s` : '');
   }
 
-  // ─── Carte adverse (duel) ────────────────────────────────────────────────
+  // ─── Autres cartes (duel, coop, 2 contre 2) ──────────────────────────────
 
-  /** Crée l'encart adverse permanent et son bouton de bascule de vue, une fois par duel. */
-  private ensureRivalPanel(): void {
-    if (document.getElementById('rivalPanel')) return;
+  /** Crée l'encart permanent d'une autre carte et son bouton de bascule de vue, une fois par siège. */
+  private ensureRivalPanel(seat: number): void {
+    if (document.getElementById(`rivalPanel${seat}`)) return;
     const side = document.getElementById('stageSide');
     if (!side) return;
     const panel = document.createElement('details');
-    panel.id = 'rivalPanel';
+    panel.id = `rivalPanel${seat}`;
     panel.className = 'rival-panel';
-    panel.innerHTML = `<summary id="rivalHeadline"></summary><div id="rivalDetail"></div><button type="button" class="btn" id="rivalViewBtn">Ma carte</button>`;
+    panel.innerHTML = `<summary id="rivalHeadline${seat}"></summary><div id="rivalDetail${seat}"></div><button type="button" class="btn" id="rivalViewBtn${seat}">Ma carte</button>`;
     side.prepend(panel);
-    $('rivalViewBtn').addEventListener('click', () => this.recenter());
+    // Coéquipier d'abord, puis les adversaires, chacun par siège.
+    const rank = (el: Element) => {
+      const n = Number(el.id.slice('rivalPanel'.length));
+      return (this.duelMode === Mode.Teams && teamOf(this.duelMode, n) === teamOf(this.duelMode, this.duelSeat) ? 0 : 10) + n;
+    };
+    side.prepend(...[...side.querySelectorAll('.rival-panel')].sort((x, y) => rank(x) - rank(y)));
+    $(`rivalViewBtn${seat}`).addEventListener('click', () => this.recenter());
   }
 
   private removeRivalPanel(): void {
-    document.getElementById('rivalPanel')?.remove();
+    document.querySelectorAll('.rival-panel').forEach((p) => p.remove());
   }
 
-  /** Reçoit l'instantané périodique de la carte adverse (`Rival`) : restaure, garde le pseudo, met à jour l'encart. */
-  private applyRival(msg: Extract<ServerMessage, { t: ServerMessageType.Rival }>): void {
-    this.applyRivalSnapshot(msg.snapshot, msg.nick);
+  private applyOthers(others: OtherMap[]): void {
+    for (const o of others) this.applyOther(o);
   }
 
-  private applyRivalSnapshot(snapshot: WorldSnapshot, nick = this.rivalNick): void {
-    this.ensureRivalPanel();
-    const first = !this.rivalWorld;
-    this.rivalWorld = restore(snapshot);
-    this.rivalNick = nick;
-    if (first) this.recenter();
-    this.updateRivalPanel();
+  /** Restaure la carte du siège, garde ses effets et sa vue, met à jour l'encart. */
+  private applyOther({ seat, nick, snapshot }: OtherMap): void {
+    this.ensureRivalPanel(seat);
+    const previous = this.others.get(seat);
+    this.others.set(seat, {
+      world: restore(snapshot),
+      fx: previous?.fx ?? new Effects(false),
+      view: previous?.view ?? { buildDef: null, ghost: null, previewRoute: null, selectedTower: null, selectedCreep: null, showRoute: false },
+      nick,
+    });
+    if (!previous) this.recenter();
+    this.updateRivalPanel(seat);
   }
 
-  private updateRivalPanel(): void {
-    if (!this.rivalWorld || !document.getElementById('rivalPanel')) return;
+  private updateRivalPanel(seat: number): void {
+    const other = this.others.get(seat);
+    if (!other || !document.getElementById(`rivalPanel${seat}`)) return;
     const set = (id: string, v: string) => {
       if (this.rivalHud[id] === v) return;
       this.rivalHud[id] = v;
       $(id).innerHTML = v;
     };
-    set('rivalHeadline', rivalHeadline(this.rivalNick, this.rivalWorld.lives));
-    set('rivalDetail', rivalDetail(this.rivalWorld));
+    set(`rivalHeadline${seat}`, rivalHeadline(other.nick, other.world.lives));
+    set(`rivalDetail${seat}`, rivalDetail(other.world));
   }
 
   private toast(msg: string, bad = false): void {
@@ -1510,6 +1565,7 @@ export class Game {
       return;
     }
     this.duelRole = 'host';
+    this.ownNick = nick;
     this.lobbyBuilderId = null;
     this.setDuelControlsHidden(true);
     link.onMessage((msg) => this.onLobbyMessage(msg));
@@ -1530,6 +1586,7 @@ export class Game {
       return;
     }
     this.duelRole = 'guest';
+    this.ownNick = nick;
     this.lobbyBuilderId = null;
     this.setDuelControlsHidden(true);
     link.onMessage((msg) => this.onLobbyMessage(msg));
@@ -1543,12 +1600,15 @@ export class Game {
     switch (msg.t) {
       case ServerMessageType.DuelStarted:
         this.saveSeat(DUEL_SEAT_KEY, msg.code, msg.token);
+        this.duelSeat = msg.seat;
         this.startDuelGame(msg.snapshot);
         break;
       case ServerMessageType.Thawed:
         this.duelRole = msg.seat === Seat.Host ? 'host' : 'guest';
+        this.duelSeat = msg.seat;
+        if (msg.others.length > 1) this.duelMode = Mode.Teams;
         this.startDuelGame(msg.snapshot);
-        this.applyRivalSnapshot(msg.rival);
+        this.applyOthers(msg.others);
         break;
       case ServerMessageType.Hosted:
         this.duelCode = msg.code;
@@ -1568,6 +1628,16 @@ export class Game {
         this.duelMap = msg.map;
         this.duelDifficulty = msg.difficulty;
         this.duelMode = msg.mode;
+        this.duelInRoom = true;
+        this.showLobby();
+        break;
+      case ServerMessageType.TeamRoom:
+        this.duelHostNick = msg.host;
+        this.duelMap = msg.map;
+        this.duelDifficulty = msg.difficulty;
+        this.duelMode = Mode.Teams;
+        this.duelTeams = msg.teams;
+        this.duelWaiting = msg.waiting;
         this.duelInRoom = true;
         this.showLobby();
         break;
@@ -1602,8 +1672,7 @@ export class Game {
     this.endShown = false;
     this.cardKey = '';
     this.hud = {};
-    this.rivalWorld = null;
-    this.rivalNick = '';
+    this.others.clear();
     this.rivalHud = {};
     this.resetLostState();
     this.resize();
@@ -1626,7 +1695,7 @@ export class Game {
         this.world = realign(msg.snapshot, this.world.log, this.world.tick);
         break;
       case ServerMessageType.Rival:
-        this.applyRival(msg);
+        this.applyOther(msg);
         break;
       case ServerMessageType.DuelOver:
         this.clearSeat(DUEL_SEAT_KEY);
@@ -1640,7 +1709,7 @@ export class Game {
         break;
       case ServerMessageType.Thawed:
         this.world = realign(msg.snapshot, this.world.log, this.world.tick);
-        this.applyRivalSnapshot(msg.rival);
+        this.applyOthers(msg.others);
         this.frozenMs = null;
         this.closeOverlay();
         break;
@@ -1677,31 +1746,44 @@ export class Game {
     }
   }
 
-  /** Écran de fin de duel : verdict, vies et vague des deux joueurs, puis le bilan solo existant par onglet de joueur. */
+  /** Écran de fin de duel : verdict, vies et vague, puis le bilan solo existant par onglet de joueur. En 2 contre 2, les réserves des deux équipes. */
   private showDuelEnd(msg: Extract<ServerMessage, { t: ServerMessageType.DuelOver }>): void {
     const own = restore(msg.snapshot);
-    const rival = restore(msg.rival);
+    const others = msg.others.map((o) => ({ seat: o.seat, world: restore(o.snapshot), nick: escapeHtml(o.nick) }));
+    const teams = others.length > 1;
     const coop = !own.duel;
-    const rivalNick = escapeHtml((this.duelRole === 'host' ? this.duelGuestNick : this.duelHostNick) ?? partnerLabel(coop));
+    const rivalNick = teams ? '' : escapeHtml((this.duelRole === 'host' ? this.duelGuestNick : this.duelHostNick) ?? partnerLabel(coop));
     const title = coop ? reachedTitle(own.wave) : duelVerdictLabel(msg.verdict);
-    // Réserve commune en coop : une seule fois, pas par joueur.
-    const rivalLives = coop ? '' : `<div><b>${fmt0(rival.lives)}</b><span>Vies — ${rivalNick}</span></div>`;
+    let stats: string;
+    if (teams) {
+      const opponent = others.find((o) => teamOf(this.duelMode, o.seat) !== teamOf(this.duelMode, this.duelSeat))!;
+      stats = `
+          <div><b>${fmt0(own.wave + 1)}</b><span>Vague</span></div>
+          <div><b>${fmt0(own.lives)}</b><span>Vies — Votre équipe</span></div>
+          <div><b>${fmt0(opponent.world.lives)}</b><span>Vies — Équipe adverse</span></div>`;
+    } else {
+      const rival = others[0];
+      // Réserve commune en coop : une seule fois, pas par joueur.
+      const rivalLives = coop ? '' : `<div><b>${fmt0(rival.world.lives)}</b><span>Vies — ${rivalNick}</span></div>`;
+      stats = `
+          <div><b>${fmt0(own.wave + 1)}</b><span>Vague</span></div>
+          <div><b>${fmt0(own.lives)}</b><span>Vies</span></div>
+          <div><b>${fmt0(rival.world.wave + 1)}</b><span>Vague — ${rivalNick}</span></div>
+          ${rivalLives}`;
+    }
+    const label = (nick: string) => (teams ? nick : rivalNick);
     this.world = own;
     this.openOverlay(Overlay.End, `
       <div class="sheet">
         <h2>${escapeHtml(title)}</h2>
-        <div class="endstats">
-          <div><b>${fmt0(own.wave + 1)}</b><span>Vague</span></div>
-          <div><b>${fmt0(own.lives)}</b><span>Vies</span></div>
-          <div><b>${fmt0(rival.wave + 1)}</b><span>Vague — ${rivalNick}</span></div>
-          ${rivalLives}
+        <div class="endstats">${stats}
         </div>
         <div class="duel-tabs" role="tablist">
           <button type="button" class="duel-tab active" data-player="own">Vous</button>
-          <button type="button" class="duel-tab" data-player="rival">${rivalNick}</button>
+          ${others.map((o) => `<button type="button" class="duel-tab" data-player="${o.seat}">${label(o.nick)}</button>`).join('')}
         </div>
         <div class="duel-panel" data-player="own">${this.debriefBlockHtml(own.stats, own.gold)}</div>
-        <div class="duel-panel" data-player="rival" hidden>${this.debriefBlockHtml(rival.stats, rival.gold)}</div>
+        ${others.map((o) => `<div class="duel-panel" data-player="${o.seat}" hidden>${this.debriefBlockHtml(o.world.stats, o.world.gold)}</div>`).join('')}
         <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="again">Nouvelle partie</button></div>
       </div>`);
     const el = $('overlay');
@@ -1714,8 +1796,7 @@ export class Game {
         }
       });
     }
-    this.bindDebriefTabs(el.querySelector<HTMLElement>('.duel-panel[data-player="own"]')!);
-    this.bindDebriefTabs(el.querySelector<HTMLElement>('.duel-panel[data-player="rival"]')!);
+    for (const panel of el.querySelectorAll<HTMLElement>('.duel-panel')) this.bindDebriefTabs(panel);
     $('again').addEventListener('click', () => {
       this.closeDuelLink();
       this.showStart();
@@ -1737,7 +1818,7 @@ export class Game {
       <div class="sheet wide" style="text-align:center">
         <h2>Partie à deux</h2>
         ${code}
-        <p>${host} ${pairingWord(this.duelMode)} ${guest}</p>
+        ${this.duelMode === Mode.Teams ? teamRoster(this.duelTeams, this.duelWaiting) : `<p>${host} ${pairingWord(this.duelMode)} ${guest}</p>`}
         <p>${modeLabel(this.duelMode)} · ${map} · ${diff}</p>
         <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.lobbyBuilderId)}</div>
         ${status}
@@ -1752,6 +1833,9 @@ export class Game {
       this.lobbyBuilderId = this.builderId;
       this.duelLink?.send({ t: ClientMessageType.ChooseBuilder, builder: this.builderId });
     });
+    $('overlay').querySelectorAll<HTMLButtonElement>('[data-team]').forEach((b) =>
+      b.addEventListener('click', () => this.duelLink?.send({ t: ClientMessageType.ChooseTeam, team: b.dataset.team as Team })),
+    );
     if (this.duelRole === 'host') {
       $('startDuel').addEventListener('click', () => this.duelLink?.send({ t: ClientMessageType.Start }));
     }
@@ -1774,7 +1858,8 @@ export class Game {
     this.duelInRoom = false;
     this.duelMode = Mode.Duel;
     this.setDuelControlsHidden(false);
-    this.rivalWorld = null;
+    this.others.clear();
+    this.duelSeat = 0;
     this.removeRivalPanel();
   }
 
@@ -1863,9 +1948,33 @@ export class Game {
       <div class="sheet" style="width:min(360px,100%);text-align:center">
         <h2>Pause</h2>
         <p class="lede">Le temps est suspendu. Vous pouvez encore consulter vos tours.</p>
-        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="resume">Reprendre</button></div>
+        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="resume">Reprendre</button><button type="button" class="btn" id="resignPause">Quitter la partie</button></div>
       </div>`);
     $('resume').addEventListener('click', () => this.togglePause());
+    $('resignPause').addEventListener('click', () => this.showResign());
+  }
+
+  /** Confirmation d'abandon. Le temps ne s'arrête qu'en solo : en ligne, la partie continue pour l'autre joueur. */
+  private showResign(): void {
+    if (this.overlay && this.overlay !== Overlay.Pause) return;
+    const p = resignPrompt();
+    const fromPause = this.overlay === Overlay.Pause;
+    this.pausedByOverlay = this.loop.paused;
+    if (!this.duelRole) {
+      this.setPaused(true);
+      this.sendPace();
+    }
+    this.openOverlay(Overlay.Resign, `
+      <div class="sheet" style="width:min(360px,100%);text-align:center">
+        <h2>${p.question}</h2>
+        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="resignConfirm">${p.confirm}</button><button type="button" class="btn" id="resignCancel">${p.cancel}</button></div>
+      </div>`);
+    $('resignConfirm').addEventListener('click', () => {
+      this.closeOverlay();
+      this.order({ c: CommandType.Resign });
+      this.drainNow();
+    });
+    $('resignCancel').addEventListener('click', () => (fromPause ? this.showPause() : this.escape()));
   }
 
   private showEnd(): void {

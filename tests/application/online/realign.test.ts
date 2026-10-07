@@ -96,7 +96,7 @@ describe('realign', () => {
     const server = newDuelWorld();
     run(server, 30 / 60);
     const s = server.tick;
-    expect(dispatch(server, { c: CommandType.Receive, creep: 'rat' }).ok).toBe(true);
+    expect(dispatch(server, { c: CommandType.Receive, creep: 'rat', from: 0 }).ok).toBe(true);
     const snap = snapshot(server);
     const build = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     const ownLog = [{ tick: s, cmd: build }];
@@ -112,7 +112,7 @@ describe('realign', () => {
     run(server, 30 / 60);
     const s = server.tick;
     const snap = snapshot(server);
-    const receive = { c: CommandType.Receive, creep: 'rat' } as const;
+    const receive = { c: CommandType.Receive, creep: 'rat', from: 0 } as const;
     const build = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
     const ownLog = [{ tick: s + 5, cmd: receive }, { tick: s + 6, cmd: build }];
 

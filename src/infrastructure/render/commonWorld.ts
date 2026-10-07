@@ -14,18 +14,24 @@ export function fittedView(map: MapPlacement, screen: { w: number; h: number }):
   };
 }
 
-export function layOutMaps(sizes: { w: number; h: number }[]): CommonWorld {
+export function layOutMaps(sizes: { w: number; h: number }[], columns = sizes.length): CommonWorld {
   let x = 0;
-  const maps = sizes.map(({ w, h }) => {
-    const placement = { x, y: 0, w, h };
-    x += w + MAP_GAP;
+  let y = 0;
+  let rowH = 0;
+  let w = 0;
+  const maps = sizes.map(({ w: mw, h }, i) => {
+    if (i > 0 && i % columns === 0) {
+      x = 0;
+      y += rowH + MAP_GAP;
+      rowH = 0;
+    }
+    const placement = { x, y, w: mw, h };
+    x += mw + MAP_GAP;
+    rowH = Math.max(rowH, h);
+    w = Math.max(w, x - MAP_GAP);
     return placement;
   });
-  return {
-    maps,
-    w: x > 0 ? x - MAP_GAP : 0,
-    h: Math.max(0, ...sizes.map((s) => s.h)),
-  };
+  return { maps, w, h: maps.length > 0 ? y + rowH : 0 };
 }
 
 export function toWorldPoint(view: WorldView, p: { x: number; y: number }): { x: number; y: number } {

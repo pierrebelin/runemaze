@@ -21,6 +21,7 @@ export interface WorldOptions {
   difficulty: Difficulty;
   seed: number;
   duel?: boolean;
+  rivals?: number;
   lives?: number;
   builder: string;
 }
@@ -51,6 +52,7 @@ export class World {
   readonly waypoints: { x: number; y: number }[];
 
   readonly duel: boolean;
+  readonly rivals: number;
   readonly builder: BuilderDef;
   income = 0;
   ether = 0;
@@ -65,10 +67,10 @@ export class World {
   wave = -1;
   nextWaveIn = FIRST_WAVE_DELAY;
   spawners: Spawner[] = [];
-  sends: string[] = [];
-  sent: string[] = [];
+  sends: { creep: string; from: number }[] = [];
+  sent: { creep: string; to: number }[] = [];
   /** Envois figés au lancement de la vague en cours : achetés et reçus. */
-  waveSends: { sent: string[]; received: string[] } = { sent: [], received: [] };
+  waveSends: { sent: { creep: string; to: number }[]; received: { creep: string; from: number }[] } = { sent: [], received: [] };
   /** Créatures restantes (vivantes ou pas encore apparues) par vague. */
   pending = new Map<number, number>();
 
@@ -93,6 +95,7 @@ export class World {
     this.rng = new Rng(opts.seed);
     this.difficulty = opts.difficulty;
     this.duel = opts.duel ?? false;
+    this.rivals = opts.rivals ?? 1;
     this.builder = builder(opts.builder);
     this.map = opts.map;
     const d = DIFFICULTY[opts.difficulty];

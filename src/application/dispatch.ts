@@ -6,6 +6,7 @@ import { gate } from './commands/gate';
 import { gleaner } from './commands/gleaner';
 import { receive } from './commands/receive';
 import { reserveLoss } from './commands/reserveLoss';
+import { resign } from './commands/resign';
 import { sell } from './commands/sell';
 import { send } from './commands/send';
 import { target } from './commands/target';
@@ -31,5 +32,6 @@ function execute(world: World, cmd: Command): Result {
     case CommandType.Gleaner: return gleaner(world);
     case CommandType.Gate: return gate(world, cmd);
     case CommandType.ReserveLoss: return reserveLoss(world, cmd);
+    case CommandType.Resign: return resign(world);
   }
 }

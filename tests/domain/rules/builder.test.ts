@@ -34,4 +34,8 @@ describe('builder', () => {
     expect([...upgradeOptions(tower('wall'), set)].sort()).toEqual(['anvil', 'cannon']);
     expect(buildMenu(forge)).toEqual(['wall', 'cannon', 'anvil']);
   });
+
+  it('[RM-02] propose mur, Foudre, Pylône et Dissipateur quand le bâtisseur est Arcanistes', () => {
+    expect(buildMenu(builder('arcanists'))).toEqual(['wall', 'storm', 'pylon', 'dispeller']);
+  });
 });

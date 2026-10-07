@@ -18,14 +18,15 @@ export interface WorldSnapshot {
   time: number;
   phase: Phase;
   duel: boolean;
+  rivals: number;
   builder: string;
   income: number;
   ether: number;
   gleaners: number[];
   gate: { shot: number; ramparts: number; cooldown: number };
-  sends: string[];
-  sent: string[];
-  waveSends: { sent: string[]; received: string[] };
+  sends: { creep: string; from: number }[];
+  sent: { creep: string; to: number }[];
+  waveSends: { sent: { creep: string; to: number }[]; received: { creep: string; from: number }[] };
   gold: number;
   lives: number;
   wave: number;
@@ -90,14 +91,15 @@ export function snapshot(world: World): WorldSnapshot {
     time: world.time,
     phase: world.phase,
     duel: world.duel,
+    rivals: world.rivals,
     builder: world.builder.id,
     income: world.income,
     ether: world.ether,
     gleaners: [...world.gleaners],
     gate: { ...world.gate },
-    sends: [...world.sends],
-    sent: [...world.sent],
-    waveSends: { sent: [...world.waveSends.sent], received: [...world.waveSends.received] },
+    sends: world.sends.map((s) => ({ ...s })),
+    sent: world.sent.map((s) => ({ ...s })),
+    waveSends: { sent: world.waveSends.sent.map((s) => ({ ...s })), received: world.waveSends.received.map((s) => ({ ...s })) },
     gold: world.gold,
     lives: world.lives,
     wave: world.wave,
@@ -122,7 +124,7 @@ export function snapshot(world: World): WorldSnapshot {
 }
 
 export function restore(snap: WorldSnapshot): World {
-  const world = new World({ map: snap.map, difficulty: snap.difficulty, seed: snap.rngState, duel: snap.duel, builder: snap.builder });
+  const world = new World({ map: snap.map, difficulty: snap.difficulty, seed: snap.rngState, duel: snap.duel, rivals: snap.rivals, builder: snap.builder });
 
   world.nextId = snap.nextId;
   world.tick = snap.tick;
@@ -132,9 +134,9 @@ export function restore(snap: WorldSnapshot): World {
   world.ether = snap.ether;
   world.gleaners = [...snap.gleaners];
   world.gate = { ...snap.gate };
-  world.sends = [...snap.sends];
-  world.sent = [...snap.sent];
-  world.waveSends = { sent: [...snap.waveSends.sent], received: [...snap.waveSends.received] };
+  world.sends = snap.sends.map((s) => ({ ...s }));
+  world.sent = snap.sent.map((s) => ({ ...s }));
+  world.waveSends = { sent: snap.waveSends.sent.map((s) => ({ ...s })), received: snap.waveSends.received.map((s) => ({ ...s })) };
   world.gold = snap.gold;
   world.lives = snap.lives;
   world.wave = snap.wave;

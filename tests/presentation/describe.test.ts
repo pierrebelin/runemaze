@@ -8,11 +8,14 @@ import { groupSends } from '../../src/application/queries/waveBriefing';
 import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   briefingChip, briefingInfo, builderCard,
-  creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, modeLabel, nextWaveInfo, pairingWord, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, towerSpecials, waveRecap,
+  counters, creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, matchupTags, modeLabel, nextWaveInfo, pairingWord, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, teamRoster, towerSpecials, waveRecap,
 } from '../../src/presentation/describe';
 import { GLEANER } from '../../src/domain/catalog/ether';
-import { Mode, Verdict } from '../../src/application/online/protocol';
+import { etherChip, goldForecastChip, goldForecastInfo, resignPrompt } from '../../src/presentation/describe';
+import { etherPerMinute } from '../../src/domain/rules/etherRate';
+import type { WaveReward } from '../../src/domain/rules/waveReward';
+import { Mode, Team, Verdict } from '../../src/application/online/protocol';
 import { TOWERS, tower } from '../../src/domain/catalog/towers';
 import { builder } from '../../src/domain/catalog/builders';
 import { familyDamage, towerRanking, towerYield } from '../../src/domain/rules/debrief';
@@ -190,7 +193,7 @@ describe('aperçu de la prochaine vague', () => {
   });
 
   it('[RM-03] détaille les PV et la prime de chaque groupe au survol', () => {
-    const html = briefingInfo(mixed);
+    const html = briefingInfo(mixed, builder('bastion'));
 
     expect(html).toContain(fmt0(437));
     expect(html).toContain('23 or');
@@ -199,7 +202,7 @@ describe('aperçu de la prochaine vague', () => {
   });
 
   it('[RM-03] liste chaque groupe dans la fiche de la prochaine vague quand la vague est mixte', () => {
-    const html = nextWaveInfo(mixed);
+    const html = nextWaveInfo(mixed, builder('bastion'));
 
     expect(html).toContain(CREEPS.wolf.plural);
     expect(html).toContain(CREEPS.rat.plural);
@@ -212,8 +215,8 @@ describe('aperçu de la prochaine vague', () => {
   const withAndWithoutSends = () => {
     const without = newDuelWorld();
     const received = newDuelWorld();
-    dispatch(received, { c: CommandType.Receive, creep: 'wolf' });
-    dispatch(received, { c: CommandType.Receive, creep: 'wolf' });
+    dispatch(received, { c: CommandType.Receive, creep: 'wolf', from: 0 });
+    dispatch(received, { c: CommandType.Receive, creep: 'wolf', from: 0 });
     expect(received.sends.length).toBe(2);
     return { without: waveBriefing(without), received: waveBriefing(received) };
   };
@@ -221,8 +224,8 @@ describe('aperçu de la prochaine vague', () => {
   it('[RM-04] ne mentionne aucun envoi dans la fiche de la prochaine vague quand des envois sont reçus', () => {
     const { without, received } = withAndWithoutSends();
 
-    expect(nextWaveInfo(received)).not.toContain('envoi');
-    expect(nextWaveInfo(received)).toBe(nextWaveInfo(without));
+    expect(nextWaveInfo(received, builder('bastion'))).not.toContain('envoi');
+    expect(nextWaveInfo(received, builder('bastion'))).toBe(nextWaveInfo(without, builder('bastion')));
   });
 
   it('[RM-04] ne mentionne aucun envoi dans le résumé du haut quand des envois sont reçus', () => {
@@ -395,8 +398,8 @@ describe('encart adverse replié', () => {
 });
 
 describe('fiche d’un bâtisseur', () => {
-  it('[CU-01] présente le nom, le style, la faiblesse et les deux tours de base d’un bâtisseur', () => {
-    const b = builder('forge');
+  it('[CU-01] présente le nom, le style, la faiblesse et les tours de base d’un bâtisseur', () => {
+    const b = builder('arcanists');
     const html = builderCard(b);
 
     expect(html).toContain(b.name);
@@ -442,6 +445,54 @@ describe('effets des tours signature', () => {
     const specials = towerSpecials(def).join(' · ');
     expect(specials).toContain('montée en puissance');
     expect(specials).toContain(`${Math.round(def.attack!.rampUp!.max * 100)} %`);
+  });
+});
+
+describe('Dissipateur contre les immunisés', () => {
+  it('[RM-03] la fiche du Dissipateur annonce 30 % des dégâts contre les immunisés', () => {
+    const def = tower('dispeller');
+    expect(def.attack!.dispel).toBe(0.3);
+    const specials = towerSpecials(def).join(' · ');
+    expect(specials).toContain('30 %');
+    expect(specials).toContain('immunisé');
+  });
+
+  it('[RM-03] le conseil contre les immunisés cite le Dissipateur quand le bâtisseur est Arcanistes', () => {
+    const immune = Object.values(CREEPS).find((c) => c.magicImmune)!;
+    expect(counters(immune, builder('arcanists'))).toContain('Dissipateur');
+  });
+
+  it('[RM-02] le conseil contre les immunisés ne cite pas le Dissipateur quand le bâtisseur n’est pas Arcanistes', () => {
+    const immune = Object.values(CREEPS).find((c) => c.magicImmune)!;
+    expect(counters(immune, builder('bastion'))).not.toContain('Dissipateur');
+  });
+
+  it('[RM-03] l’aperçu d’une vague d’immunisés annonce que le Dissipateur les entame quand le bâtisseur est Arcanistes', () => {
+    const immune = Object.values(CREEPS).find((c) => c.magicImmune)!;
+    const wave: WaveBriefing = { wave: 4, groups: [{ creep: immune, count: 3, hp: 100, bounty: 10 }] };
+
+    const arcanists = nextWaveInfo(wave, builder('arcanists'));
+    expect(arcanists.slice(arcanists.indexOf('Givre et foudre'))).toContain('Dissipateur');
+    expect(nextWaveInfo(wave, builder('bastion'))).not.toContain('Dissipateur');
+  });
+
+  it('[RM-02] l’aperçu d’une vague d’immunisés ne cite le Prisme du néant que si le bâtisseur peut le construire', () => {
+    const immune = Object.values(CREEPS).find((c) => c.magicImmune)!;
+    const wave: WaveBriefing = { wave: 4, groups: [{ creep: immune, count: 3, hp: 100, bounty: 10 }] };
+    const prism = tower('voidprism').name;
+
+    const bastion = nextWaveInfo(wave, builder('bastion'));
+    expect(bastion).not.toContain(prism);
+    expect(bastion).toContain('Givre et foudre ne leur font rien');
+    expect(nextWaveInfo(wave, builder('arcanists'))).toContain(prism);
+  });
+
+  it('[RM-03] l’étiquette d’efficacité d’une attaque magique dissipante affiche Immunisés ×0,3', () => {
+    const tags = matchupTags('magic', 0.3);
+
+    expect(tags).toContain('Immunisés ×0,3');
+    expect(tags).not.toContain('Immunisés ×0<');
+    expect(matchupTags('magic')).toContain('Immunisés ×0');
   });
 });
 
@@ -494,6 +545,58 @@ describe('mode de partie', () => {
   });
 });
 
+describe('salon 2 contre 2', () => {
+  it('[CU-01] nomme le mode « 2 contre 2 »', () => {
+    expect(modeLabel(Mode.Teams)).toBe('2 contre 2');
+  });
+
+  it('[CU-02] liste les deux équipes avec le pseudo et le choix de bâtisseur de chaque joueur placé', () => {
+    const html = teamRoster({
+      [Team.A]: [{ nick: 'Alice', picked: true }, { nick: 'Bob', picked: false }],
+      [Team.B]: [{ nick: 'Carl', picked: false }, { nick: 'Dana', picked: true }],
+    }, ['Eve']);
+
+    const a = html.indexOf('Alice');
+    const b = html.indexOf('Bob');
+    const c = html.indexOf('Carl');
+    const d = html.indexOf('Dana');
+    expect(a).toBeGreaterThanOrEqual(0);
+    expect(a).toBeLessThan(c);
+    expect(b).toBeLessThan(c);
+    expect(c).toBeLessThan(d);
+    expect(html).toContain('Eve');
+    expect(html.slice(a, b)).toContain('prêt');
+    expect(html.slice(b, c)).toContain('choisit…');
+    expect(html.slice(b, c)).not.toContain('prêt');
+    expect(html.slice(c, d)).toContain('choisit…');
+    expect(html.slice(d)).toContain('prêt');
+  });
+
+  it('[CU-02] marque « place libre » dans une équipe à moins de 2 joueurs', () => {
+    const html = teamRoster({
+      [Team.A]: [{ nick: 'Alice', picked: true }],
+      [Team.B]: [],
+    }, []);
+
+    expect(html.split('place libre')).toHaveLength(4);
+    const full = teamRoster({
+      [Team.A]: [{ nick: 'Alice', picked: true }, { nick: 'Bob', picked: true }],
+      [Team.B]: [{ nick: 'Carl', picked: true }, { nick: 'Dana', picked: true }],
+    }, []);
+    expect(full).not.toContain('place libre');
+  });
+
+  it('[CU-02] échappe le pseudo d’un joueur dans la liste des équipes', () => {
+    const html = teamRoster({
+      [Team.A]: [{ nick: '<b>x</b>', picked: false }],
+      [Team.B]: [],
+    }, []);
+
+    expect(html).not.toContain('<b>');
+    expect(html).toContain('&lt;b&gt;');
+  });
+});
+
 describe('titre de fin coopérative', () => {
   it('[RM-07] titre la fin coopérative « Vague 12 atteinte »', () => {
     expect(reachedTitle(11)).toBe('Vague 12 atteinte');
@@ -514,7 +617,7 @@ describe('message d’envoi', () => {
 
 describe('récapitulatif de vague', () => {
   it('[RM-07] liste « 12 Vouivres · air » et « 12 Maraudeurs · sol » pour la vague 12, sans répéter le titre de la bannière', () => {
-    const lines = waveRecap(waveBriefing(newWorld(), 11), [], 'Paul');
+    const lines = waveRecap(waveBriefing(newWorld(), 11), []);
 
     expect(lines).toContain('12 Vouivres · air');
     expect(lines).toContain('12 Maraudeurs · sol');
@@ -522,7 +625,7 @@ describe('récapitulatif de vague', () => {
   });
 
   it('[RM-07] place le chef en premier avec la mention « chef »', () => {
-    const lines = waveRecap(waveBriefing(newWorld(), 9), [], 'Paul');
+    const lines = waveRecap(waveBriefing(newWorld(), 9), []);
 
     expect(lines[0]).toBe('1 Ogre chef de guerre · sol · chef');
     expect(lines.findIndex((l) => l.includes('Maraudeurs'))).toBeGreaterThan(0);
@@ -531,20 +634,104 @@ describe('récapitulatif de vague', () => {
   it('[RM-07] accorde au singulier un groupe d’une seule créature', () => {
     const single: WaveBriefing = { wave: 4, groups: [{ creep: CREEPS.wolf, count: 1, hp: 437, bounty: 23 }] };
 
-    expect(waveRecap(single, [], 'Paul')).toEqual(['1 Loup gris · sol']);
+    expect(waveRecap(single, [])).toEqual(['1 Loup gris · sol']);
   });
 
-  it('[RM-08] liste « Envoyés par Paul » avec chaque créature reçue, son nombre et sol ou air', () => {
-    const lines = waveRecap(waveBriefing(newWorld(), 11), groupSends(['harpy', 'harpy', 'harpy', 'wolf']), 'Paul');
+  it('[CU-04] garde une seule ligne « Envoyés par » en duel', () => {
+    const lines = waveRecap(waveBriefing(newWorld(), 11), [{ nick: 'Paul', groups: groupSends(['harpy', 'harpy', 'harpy', 'wolf']) }]);
 
     const sent = lines.slice(lines.indexOf('Envoyés par Paul'));
     expect(sent).toEqual(['Envoyés par Paul', '3 Harpies · air', '1 Loup gris · sol']);
+    expect(lines.filter((l) => l.startsWith('Envoyés par'))).toHaveLength(1);
+  });
+
+  it('[CU-04] liste sous la bannière les envois reçus groupés par envoyeur, chacun sous son pseudo', () => {
+    const lines = waveRecap(waveBriefing(newWorld(), 11), [
+      { nick: 'Paul', groups: groupSends(['harpy', 'harpy', 'wolf']) },
+      { nick: 'Léa', groups: groupSends(['wolf']) },
+    ]);
+
+    const sent = lines.slice(lines.indexOf('Envoyés par Paul'));
+    expect(sent).toEqual(['Envoyés par Paul', '2 Harpies · air', '1 Loup gris · sol', 'Envoyés par Léa', '1 Loup gris · sol']);
+  });
+
+  it('[CU-04] n’affiche que les envoyeurs dont au moins une créature arrive', () => {
+    const lines = waveRecap(waveBriefing(newWorld(), 11), [
+      { nick: 'Paul', groups: [] },
+      { nick: 'Léa', groups: groupSends(['wolf']) },
+    ]);
+
+    expect(lines).not.toContain('Envoyés par Paul');
+    expect(lines.slice(lines.indexOf('Envoyés par Léa'))).toEqual(['Envoyés par Léa', '1 Loup gris · sol']);
   });
 
   it('[RM-08] omet la partie des envois quand aucun envoi n’est reçu', () => {
-    const lines = waveRecap(waveBriefing(newWorld(), 11), [], 'Paul');
+    const lines = waveRecap(waveBriefing(newWorld(), 11), []);
 
     expect(lines).toContain('12 Vouivres · air');
     expect(lines.join(' ')).not.toContain('Envoyés par');
+  });
+});
+
+describe('console : or et éther', () => {
+  const reward: WaveReward = { bonus: 30, interest: 12, income: 0, capped: false };
+
+  it('[RM-05] la pastille d’or affiche l’or et le gain prévu « +42 »', () => {
+    const html = goldForecastChip(250, reward);
+
+    expect(html).toContain('250');
+    expect(html).toContain('+42');
+  });
+
+  it('[RM-05] le détail du gain liste prime et intérêts, avec « plafond atteint » quand ils sont plafonnés', () => {
+    const capped = goldForecastInfo({ ...reward, capped: true }, false);
+
+    expect(capped).toContain('Prime');
+    expect(capped).toContain('30');
+    expect(capped).toContain('Intérêts');
+    expect(capped).toContain('12');
+    expect(capped).toContain('plafond atteint');
+    expect(goldForecastInfo(reward, false)).not.toContain('plafond atteint');
+  });
+
+  it('[RM-05] le détail du gain liste prime et revenu quand la partie est un duel', () => {
+    const html = goldForecastInfo({ bonus: 30, interest: 0, income: 7, capped: false }, true);
+
+    expect(html).toContain('Prime');
+    expect(html).toContain('30');
+    expect(html).toContain('Revenu');
+    expect(html).toContain('7');
+    expect(html).not.toContain('Intérêts');
+  });
+
+  it('[RM-05] le détail du gain parle de la fin de vague, pas de la prochaine vague', () => {
+    const html = goldForecastInfo({ bonus: 30, interest: 12, income: 0, capped: false }, false);
+
+    expect(html).toContain('Gain en fin de vague');
+    expect(html).not.toContain('prochaine vague');
+  });
+
+  it('[RM-07] la pastille d’éther affiche l’éther et « +12/min » quand le joueur a un glaneur', () => {
+    const html = etherChip(80, etherPerMinute(1, GLEANER.period));
+
+    expect(html).toContain('80');
+    expect(html).toContain('+12/min');
+  });
+
+  it('[RM-07] la pastille d’éther affiche « +0/min » quand le joueur n’a aucun glaneur', () => {
+    const html = etherChip(80, etherPerMinute(0, GLEANER.period));
+
+    expect(html).toContain('80');
+    expect(html).toContain('+0/min');
+  });
+});
+
+describe('confirmation d’abandon', () => {
+  it('[RM-09] la confirmation d’abandon demande « Quitter la partie ? Elle sera perdue. » avec Quitter et Annuler', () => {
+    expect(resignPrompt()).toEqual({
+      question: 'Quitter la partie ? Elle sera perdue.',
+      confirm: 'Quitter',
+      cancel: 'Annuler',
+    });
   });
 });

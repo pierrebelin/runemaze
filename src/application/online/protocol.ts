@@ -17,6 +17,7 @@ export enum ClientMessageType {
   Start = 'start',
   Rejoin = 'rejoin',
   ChooseBuilder = 'chooseBuilder',
+  ChooseTeam = 'chooseTeam',
 }
 
 export enum ServerMessageType {
@@ -28,6 +29,7 @@ export enum ServerMessageType {
   Ended = 'ended',
   Hosted = 'hosted',
   Room = 'room',
+  TeamRoom = 'teamRoom',
   Refused = 'refused',
   Cancelled = 'cancelled',
   DuelStarted = 'duelStarted',
@@ -40,6 +42,12 @@ export enum ServerMessageType {
 export enum Mode {
   Duel = 'duel',
   Coop = 'coop',
+  Teams = 'teams',
+}
+
+export enum Team {
+  A = 'a',
+  B = 'b',
 }
 
 export enum Verdict {
@@ -62,7 +70,8 @@ export type ClientMessage =
   | { t: ClientMessageType.Leave }
   | { t: ClientMessageType.Start }
   | { t: ClientMessageType.Rejoin; code: string; token: string }
-  | { t: ClientMessageType.ChooseBuilder; builder: string };
+  | { t: ClientMessageType.ChooseBuilder; builder: string }
+  | { t: ClientMessageType.ChooseTeam; team: Team };
 
 const TARGET_MODES: TargetMode[] = ['first', 'last', 'strong', 'weak', 'close'];
 const DIFFICULTIES: Difficulty[] = ['easy', 'normal', 'hard'];
@@ -139,6 +148,8 @@ function readCommand(cmd: unknown): Command | null {
       return null;
     case CommandType.Gleaner:
       return { c: CommandType.Gleaner };
+    case CommandType.Resign:
+      return { c: CommandType.Resign };
     case CommandType.Gate:
       if (c.upgrade === 'shot' || c.upgrade === 'ramparts') {
         return { c: CommandType.Gate, upgrade: c.upgrade };
@@ -209,7 +220,7 @@ export function readClientMessage(raw: string): ClientMessage | null {
         isMapDef(m.map) &&
         isString(m.difficulty) &&
         DIFFICULTIES.includes(m.difficulty as Difficulty) &&
-        (m.mode === undefined || m.mode === Mode.Duel || m.mode === Mode.Coop)
+        (m.mode === undefined || m.mode === Mode.Duel || m.mode === Mode.Coop || m.mode === Mode.Teams)
       ) {
         return {
           t: ClientMessageType.Host,
@@ -239,10 +250,17 @@ export function readClientMessage(raw: string): ClientMessage | null {
         return { t: ClientMessageType.ChooseBuilder, builder: m.builder };
       }
       return null;
+    case ClientMessageType.ChooseTeam:
+      if (m.team === Team.A || m.team === Team.B) {
+        return { t: ClientMessageType.ChooseTeam, team: m.team };
+      }
+      return null;
     default:
       return null;
   }
 }
+
+export interface OtherMap { seat: number; nick: string; snapshot: WorldSnapshot }
 
 export type ServerMessage =
   | { t: ServerMessageType.Opened; id: string; token: string; snapshot: WorldSnapshot }
@@ -253,6 +271,7 @@ export type ServerMessage =
   | { t: ServerMessageType.Ended }
   | { t: ServerMessageType.Hosted; code: string; host: string; map: MapDef; difficulty: Difficulty; mode: Mode }
   | { t: ServerMessageType.Room; host: string; guest: string | null; map: MapDef; difficulty: Difficulty; mode: Mode; picked: { host: boolean; guest: boolean } }
+  | { t: ServerMessageType.TeamRoom; host: string; map: MapDef; difficulty: Difficulty; teams: Record<Team, { nick: string; picked: boolean }[]>; waiting: string[] }
   | { t: ServerMessageType.Refused; reason: string }
   | { t: ServerMessageType.Cancelled }
   | {
@@ -261,9 +280,9 @@ export type ServerMessage =
       seat: Seat;
       token: string;
       snapshot: WorldSnapshot;
-      rival: { nick: string; snapshot: WorldSnapshot };
+      others: OtherMap[];
     }
-  | { t: ServerMessageType.DuelOver; verdict: Verdict; snapshot: WorldSnapshot; rival: WorldSnapshot }
-  | { t: ServerMessageType.Rival; nick: string; snapshot: WorldSnapshot }
+  | { t: ServerMessageType.DuelOver; verdict: Verdict; snapshot: WorldSnapshot; others: OtherMap[] }
+  | { t: ServerMessageType.Rival; seat: number; nick: string; snapshot: WorldSnapshot }
   | { t: ServerMessageType.Frozen; remainingMs: number }
-  | { t: ServerMessageType.Thawed; seat: Seat; snapshot: WorldSnapshot; rival: WorldSnapshot };
+  | { t: ServerMessageType.Thawed; seat: Seat; snapshot: WorldSnapshot; others: OtherMap[] };

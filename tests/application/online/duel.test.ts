@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Duel, Seat } from '../../../src/application/online/duel';
+import { Duel, Seat, rivalSeats, teamOf } from '../../../src/application/online/duel';
+import { DIFFICULTY } from '../../../src/domain/catalog/creeps';
+import { Team } from '../../../src/application/online/protocol';
 import { World } from '../../../src/domain/model/World';
 import { dispatch } from '../../../src/application/dispatch';
 import { fingerprint } from '../../../src/domain/rules/fingerprint';
@@ -7,7 +9,7 @@ import { snapshot } from '../../../src/domain/model/snapshot';
 import { MAP_SPIRAL } from '../../../src/domain/catalog/map';
 import { CommandType, Phase } from '../../../src/domain/model/types';
 import type { Command } from '../../../src/domain/model/types';
-import { ServerMessageType, Verdict } from '../../../src/application/online/protocol';
+import { ServerMessageType, Verdict, readClientMessage } from '../../../src/application/online/protocol';
 import type { ServerMessage } from '../../../src/application/online/protocol';
 import { LOST_LIMIT_MS } from '../../../src/application/online/heldGame';
 import { Mode } from '../../../src/application/online/protocol';
@@ -151,9 +153,9 @@ describe('Duel', () => {
     const host = messages.find((m) => m.seat === Seat.Host)?.msg;
     const guest = messages.find((m) => m.seat === Seat.Guest)?.msg;
     expect(host && 'snapshot' in host && host.snapshot).toEqual(snapshot(duel.worlds[Seat.Host]));
-    expect(host && 'rival' in host && host.rival).toEqual({ ...snapshot(duel.worlds[Seat.Guest]), ether: 0 });
+    expect(host && 'others' in host && host.others).toEqual([{ seat: Seat.Guest, nick: 'B', snapshot: { ...snapshot(duel.worlds[Seat.Guest]), ether: 0 } }]);
     expect(guest && 'snapshot' in guest && guest.snapshot).toEqual(snapshot(duel.worlds[Seat.Guest]));
-    expect(guest && 'rival' in guest && guest.rival).toEqual({ ...snapshot(duel.worlds[Seat.Host]), ether: 0 });
+    expect(guest && 'others' in guest && guest.others).toEqual([{ seat: Seat.Host, nick: 'A', snapshot: { ...snapshot(duel.worlds[Seat.Host]), ether: 0 } }]);
   });
 
   it('[RM-07] ne garde pas les événements de rendu du serveur d\'un pas à l\'autre', () => {
@@ -214,6 +216,7 @@ describe('Duel', () => {
     const host = messages.find((m) => m.seat === Seat.Host && m.msg.t === ServerMessageType.Rival)?.msg;
     const guest = messages.find((m) => m.seat === Seat.Guest && m.msg.t === ServerMessageType.Rival)?.msg;
 
+    expect(host && 'seat' in host && host.seat).toBe(Seat.Guest);
     expect(host && 'nick' in host && host.nick).toBe('Bob');
     expect(guest && 'nick' in guest && guest.nick).toBe('Alice');
     expect(host && 'snapshot' in host && host.snapshot.lives).toBe(duel.worlds[Seat.Guest].lives);
@@ -234,6 +237,18 @@ describe('Duel', () => {
 
     const troisieme = duel.advance(1200);
     expect(troisieme.some((m) => m.seat === Seat.Host && m.msg.t === ServerMessageType.Rival)).toBe(true);
+  });
+
+  it('[RM-11] envoie au duel une seule vue, celle de l\'adversaire', () => {
+    const duel = new Duel(config, 0);
+    duel.advance(1000);
+
+    const messages = duel.advance(1200).filter((m) => m.msg.t === ServerMessageType.Rival);
+
+    expect(messages.filter((m) => m.seat === Seat.Host)).toHaveLength(1);
+    expect(messages.filter((m) => m.seat === Seat.Guest)).toHaveLength(1);
+    expect(messages.find((m) => m.seat === Seat.Host)?.msg).toMatchObject({ seat: Seat.Guest, nick: 'B' });
+    expect(messages.find((m) => m.seat === Seat.Guest)?.msg).toMatchObject({ seat: Seat.Host, nick: 'A' });
   });
 
   it('[RM-12] n\'avance plus aucune des deux cartes pendant la coupure d\'un joueur', () => {
@@ -309,7 +324,7 @@ describe('Duel', () => {
         t: ServerMessageType.DuelOver,
         verdict: Verdict.Forfeit,
         snapshot: snapshot(duel.worlds[Seat.Host]),
-        rival: { ...snapshot(duel.worlds[Seat.Guest]), ether: 0 },
+        others: [{ seat: Seat.Guest, nick: 'B', snapshot: { ...snapshot(duel.worlds[Seat.Guest]), ether: 0 } }],
       },
     });
     expect(messages.some((m) => m.seat === Seat.Guest)).toBe(false);
@@ -350,7 +365,7 @@ describe('Duel', () => {
     expect(duel.worlds[Seat.Guest].tick).toBe(guestTick);
   });
 
-  it('[RM-12] ignore une seconde coupure pendant le gel : le délai reste celui de la première', () => {
+  it('[RM-12] garde le délai de la première coupure quand une seconde survient pendant le gel', () => {
     const duel = new Duel(
       { map: MAP_SPIRAL, difficulty: 'normal', seed: 7, nicks: ['A', 'B'], tokens: ['th', 'tg'], builders: ['bastion', 'bastion'] },
       0,
@@ -364,11 +379,13 @@ describe('Duel', () => {
     const seconde = duel.lose(Seat.Host, t + 1_000);
     expect(seconde).toEqual([]);
 
+    duel.advance(t + LOST_LIMIT_MS);
+    expect(duel.isOver()).toBe(false);
+
     const messages = duel.advance(t + LOST_LIMIT_MS + 1);
 
-    expect(messages).toHaveLength(1);
-    expect(messages[0].seat).toBe(Seat.Host);
-    expect(messages[0].msg).toMatchObject({ t: ServerMessageType.DuelOver, verdict: Verdict.Forfeit });
+    expect(duel.isOver()).toBe(true);
+    expect(messages).toEqual([]);
   });
 
   const config = {
@@ -401,7 +418,7 @@ describe('Duel', () => {
 
     expect(res).toBeNull();
     expect(duel.worlds[Seat.Host].ether).toBe(witness.ether);
-    expect(duel.worlds[Seat.Guest].sends).toEqual(['wolf']);
+    expect(duel.worlds[Seat.Guest].sends).toEqual([{ creep: 'wolf', from: 0 }]);
     expect(duel.worlds[Seat.Guest].log.some((e) => e.cmd.c === CommandType.Receive)).toBe(true);
   });
 
@@ -432,7 +449,7 @@ describe('Duel', () => {
     duel.order(Seat.Host, { tick: 57, cmd: sendWolf, fingerprint: fingerprint(duel.worlds[Seat.Host]) }, 1200);
     const messages = duel.advance(1400);
 
-    expect(duel.worlds[Seat.Guest].sends).toEqual(['wolf']);
+    expect(duel.worlds[Seat.Guest].sends).toEqual([{ creep: 'wolf', from: 0 }]);
     expect(duel.worlds[Seat.Guest].log).toHaveLength(logBefore);
     expect(messages.some((m) => m.seat === Seat.Guest && m.msg.t === ServerMessageType.Drift)).toBe(false);
   });
@@ -507,7 +524,7 @@ describe('Duel', () => {
 
     for (const m of thawed) {
       expect(m.msg.t).toBe(ServerMessageType.Thawed);
-      expect(m.msg).toMatchObject({ rival: { ether: 0 } });
+      expect(m.msg).toMatchObject({ others: [{ snapshot: { ether: 0 } }] });
     }
     expect(duel.worlds[Seat.Host].ether).toBeGreaterThan(0);
 
@@ -518,7 +535,7 @@ describe('Duel', () => {
     expect(over).toHaveLength(2);
     for (const m of over) {
       expect(m.msg.t).toBe(ServerMessageType.DuelOver);
-      expect(m.msg).toMatchObject({ rival: { ether: 0 } });
+      expect(m.msg).toMatchObject({ others: [{ snapshot: { ether: 0 } }] });
     }
   });
 
@@ -759,5 +776,482 @@ describe('Duel', () => {
     expect(messages[0].seat).toBe(Seat.Host);
     expect(messages[0].msg).toMatchObject({ t: ServerMessageType.DuelOver, verdict: Verdict.Defeat });
     expect(duel.isOver()).toBe(true);
+  });
+
+  /** L'ordre d'abandon suit le chemin réseau réel : lu par `readClientMessage`, puis appliqué par le duel. */
+  const resignFrom = (duel: Duel, seat: Seat) => {
+    const raw = JSON.stringify({ t: 'order', tick: 45, cmd: { c: 'resign' }, fingerprint: 'quelconque' });
+    const read = readClientMessage(raw);
+    expect(read).not.toBeNull();
+    const { tick, cmd, fingerprint: fp } = read as { tick: number; cmd: Command; fingerprint: string };
+    duel.order(seat, { tick, cmd, fingerprint: fp }, 1000);
+  };
+
+  it('[RM-08] annonce la défaite du joueur qui abandonne et la victoire de son adversaire en duel', () => {
+    const duel = new Duel(config, 0);
+    duel.advance(1000);
+
+    resignFrom(duel, Seat.Host);
+    const messages = duel.advance(1200);
+
+    const host = messages.find((m) => m.seat === Seat.Host && m.msg.t === ServerMessageType.DuelOver)?.msg;
+    const guest = messages.find((m) => m.seat === Seat.Guest && m.msg.t === ServerMessageType.DuelOver)?.msg;
+    expect(host).toMatchObject({ verdict: Verdict.Defeat });
+    expect(guest).toMatchObject({ verdict: Verdict.Victory });
+    expect(duel.isOver()).toBe(true);
+  });
+
+  it('[RM-08] annonce la défaite aux deux joueurs quand l\'un abandonne en coop', () => {
+    const duel = new Duel(coop, 0);
+    duel.advance(1000);
+
+    resignFrom(duel, Seat.Guest);
+    const messages = duel.advance(1200);
+
+    const over = messages.filter((m) => m.msg.t === ServerMessageType.DuelOver);
+    expect(over.map((m) => m.seat).sort()).toEqual([Seat.Host, Seat.Guest]);
+    for (const m of over) expect(m.msg).toMatchObject({ verdict: Verdict.Defeat });
+    expect(duel.isOver()).toBe(true);
+  });
+
+  describe('2 contre 2', () => {
+    it('[CU-04] donne les sièges adverses dans l’ordre des sièges en 2 contre 2', () => {
+      expect(rivalSeats(Mode.Teams, 0)).toEqual([2, 3]);
+      expect(rivalSeats(Mode.Teams, 3)).toEqual([0, 1]);
+    });
+
+    it('[CU-04] donne le seul siège adverse en duel', () => {
+      expect(rivalSeats(Mode.Duel, 0)).toEqual([1]);
+      expect(rivalSeats(Mode.Duel, 1)).toEqual([0]);
+    });
+
+    const teams = {
+      map: MAP_SPIRAL,
+      difficulty: 'normal' as const,
+      seed: 7,
+      nicks: ['A', 'B', 'C', 'D'],
+      tokens: ['t0', 't1', 't2', 't3'],
+      builders: ['bastion', 'forge', 'sylve', 'bastion'],
+      mode: Mode.Teams,
+    };
+
+    it('[RM-04] crée quatre cartes de même empreinte quand le mode est 2 contre 2', () => {
+      const duel = new Duel({ ...teams, builders: ['bastion', 'bastion', 'bastion', 'bastion'] }, 0);
+
+      expect(duel.worlds).toHaveLength(4);
+      const prints = duel.worlds.map((w) => fingerprint(w));
+      expect(new Set(prints).size).toBe(1);
+    });
+
+    it('[RM-03] donne à chacun des quatre sièges le bâtisseur de son joueur', () => {
+      const duel = new Duel(teams, 0);
+
+      expect(duel.worlds.map((w) => w.builder.id)).toEqual(['bastion', 'forge', 'sylve', 'bastion']);
+    });
+
+    it('[RM-04] avance les quatre cartes au même tick à chaque annonce', () => {
+      const duel = new Duel(teams, 0);
+
+      duel.advance(1000);
+      expect(duel.worlds.map((w) => w.tick)).toEqual([45, 45, 45, 45]);
+
+      duel.advance(2000);
+      expect(duel.worlds.map((w) => w.tick)).toEqual([105, 105, 105, 105]);
+    });
+
+    it.each([
+      ['easy', 30],
+      ['normal', 21],
+      ['hard', 10],
+    ] as const)('[RM-06] démarre chaque carte avec les vies solo de la difficulté (30 / 21 / 10) en 2 contre 2 : %s', (difficulty, lives) => {
+      const duel = new Duel({ ...teams, difficulty }, 0);
+
+      expect(DIFFICULTY[difficulty].lives).toBe(lives);
+      expect(duel.worlds.map((w) => w.lives)).toEqual([lives, lives, lives, lives]);
+    });
+
+    it('[RM-03] laisse la carte du coéquipier intacte quand un joueur construit', () => {
+      const duel = new Duel(teams, 0);
+      expect(duel.worlds).toHaveLength(4);
+      duel.advance(1000);
+      const goldBefore = duel.worlds[1].gold;
+      const cmd = { c: CommandType.Build, def: 'wall', x: 10, y: 1 } as const;
+
+      duel.order(0, { tick: 45, cmd, fingerprint: 'quelconque' }, 1000);
+
+      expect(duel.worlds[0].towers).toHaveLength(1);
+      expect(duel.worlds[1].towers).toHaveLength(0);
+      expect(duel.worlds[1].gold).toBe(goldBefore);
+    });
+
+    it('[RM-01] range les sièges 0 et 1 dans l\'équipe A et 2 et 3 dans l\'équipe B en 2 contre 2', () => {
+      expect([0, 1, 2, 3].map((seat) => teamOf(Mode.Teams, seat))).toEqual([Team.A, Team.A, Team.B, Team.B]);
+    });
+
+    /** Avance jusqu'à la première fuite du siège 0 ; les créatures des trois autres cartes sont retirées pour qu'elles ne fuient pas. */
+    const leakAtSeatZero = (duel: Duel) => {
+      const messages: { seat: number; msg: ServerMessage }[] = [];
+      let now = 0;
+      while (now < 300_000 && duel.worlds[0].stats.leaked === 0) {
+        now += 100;
+        messages.push(...duel.advance(now));
+        for (const seat of [1, 2, 3]) killAllCreeps(duel.worlds[seat]);
+      }
+      expect(duel.worlds[0].stats.leaked).toBeGreaterThan(0);
+      const start = DIFFICULTY.normal.lives;
+      return { messages, loss: start - duel.worlds[0].lives, start };
+    };
+
+    it('[RM-06] baisse la réserve du coéquipier de la même perte quand une créature fuit chez un joueur', () => {
+      const duel = new Duel(teams, 0);
+
+      const { loss, start } = leakAtSeatZero(duel);
+
+      expect(loss).toBeGreaterThan(0);
+      expect(duel.worlds[1].lives).toBe(start - loss);
+      expect(duel.worlds[1].log.some((e) => e.cmd.c === CommandType.ReserveLoss)).toBe(true);
+    });
+
+    it('[RM-06] laisse les vies des deux adversaires intactes quand une équipe subit une fuite', () => {
+      const duel = new Duel(teams, 0);
+
+      const { loss, start } = leakAtSeatZero(duel);
+
+      // la fuite est partagée au coéquipier seulement
+      expect(duel.worlds[1].lives).toBe(start - loss);
+      expect(duel.worlds[2].lives).toBe(start);
+      expect(duel.worlds[3].lives).toBe(start);
+      expect(duel.worlds[2].log.some((e) => e.cmd.c === CommandType.ReserveLoss)).toBe(false);
+      expect(duel.worlds[3].log.some((e) => e.cmd.c === CommandType.ReserveLoss)).toBe(false);
+    });
+
+    it('[RM-07] n\'ajoute aucune créature aux autres cartes quand une créature fuit', () => {
+      const duel = new Duel(teams, 0);
+
+      const { loss, start } = leakAtSeatZero(duel);
+
+      // la fuite a bien été partagée au coéquipier, sans rien lui envoyer
+      expect(duel.worlds[1].lives).toBe(start - loss);
+      for (const seat of [1, 2, 3]) {
+        expect(duel.worlds[seat].sends).toEqual([]);
+        expect(duel.worlds[seat].log.some((e) => e.cmd.c === CommandType.Receive)).toBe(false);
+      }
+    });
+
+    it('[RM-06] recale la carte du coéquipier, et elle seule, après une fuite', () => {
+      const duel = new Duel(teams, 0);
+
+      const { messages, loss, start } = leakAtSeatZero(duel);
+
+      const drifts = messages.filter((m) => m.msg.t === ServerMessageType.Drift);
+      expect(drifts.length).toBeGreaterThan(0);
+      expect(drifts.every((m) => m.seat === 1)).toBe(true);
+      const last = drifts[drifts.length - 1].msg;
+      expect(last.t === ServerMessageType.Drift && last.snapshot.lives).toBe(start - loss);
+    });
+
+    const ADVERSAIRES_DE_0 = [2, 3];
+
+    /** Le siège `seat` envoie un loup avec assez d'éther ; renvoie la réponse du serveur. */
+    const sendFrom = (duel: Duel, seat: number, ether = 1000) => {
+      duel.worlds[seat].ether = ether;
+      return duel.order(seat, { tick: 45, cmd: sendWolf, fingerprint: 'quelconque' }, 1000);
+    };
+
+    it('[CU-04] met la créature en attente chez l\'adversaire tiré, et chez lui seul, en 2 contre 2', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      expect(duel.worlds.map((w) => w.rivals)).toEqual([2, 2, 2, 2]);
+
+      sendFrom(duel, 0);
+
+      expect(duel.worlds[0].sent).toHaveLength(1);
+      const drawn = ADVERSAIRES_DE_0[duel.worlds[0].sent.at(-1)!.to];
+      expect(duel.worlds[drawn].sends).toEqual([{ creep: 'wolf', from: 0 }]);
+      for (const seat of [1, 2, 3].filter((s) => s !== drawn)) expect(duel.worlds[seat].sends).toEqual([]);
+    });
+
+    it('[RM-05] n\'envoie jamais chez le coéquipier sur 20 envois', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+
+      for (let i = 0; i < 20; i++) sendFrom(duel, 0);
+
+      expect(duel.worlds[0].sent).toHaveLength(20);
+      expect(duel.worlds[1].sends).toEqual([]);
+      expect(duel.worlds[1].log.some((e) => e.cmd.c === CommandType.Receive)).toBe(false);
+      const received = [2, 3].map((seat) => duel.worlds[seat].sends.length);
+      expect(received[0] + received[1]).toBe(20);
+      // graine 7 : si un adversaire ne reçoit rien, le routage est figé
+      expect(received[0]).toBeGreaterThan(0);
+      expect(received[1]).toBeGreaterThan(0);
+    });
+
+    it('[CU-04] fait apparaître la créature reçue chez l\'adversaire à la vague suivante', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      sendFrom(duel, 0);
+      const drawn = ADVERSAIRES_DE_0[duel.worlds[0].sent.at(-1)!.to];
+      const other = drawn === 2 ? 3 : 2;
+      expect(duel.worlds[drawn].sends).toHaveLength(1);
+
+      // la vague qui consomme l'envoi remplace `waveSends` : on l'observe au premier pas où `sends` se vide
+      let now = 1000;
+      while (now < 120_000 && duel.worlds[drawn].sends.length > 0) {
+        now += 100;
+        duel.advance(now);
+      }
+      expect(duel.worlds[drawn].sends).toEqual([]);
+      expect(duel.worlds[drawn].waveSends.received).toEqual([{ creep: 'wolf', from: 0 }]);
+      expect(duel.worlds[other].waveSends.received).toEqual([]);
+      expect(duel.worlds[1].waveSends.received).toEqual([]);
+
+      let wolfSeen = false;
+      while (now < 180_000 && !wolfSeen) {
+        now += 100;
+        duel.advance(now);
+        wolfSeen = duel.worlds[drawn].creeps.some((c) => c.def.id === 'wolf');
+      }
+      expect(wolfSeen).toBe(true);
+    });
+
+    it('[RM-12] rejoue chacune des quatre cartes à l\'identique depuis son journal, envois compris', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      sendFrom(duel, 0);
+      sendFrom(duel, 2);
+      duel.advance(3000);
+      expect(duel.worlds.some((w) => w.log.some((e) => e.cmd.c === CommandType.Receive))).toBe(true);
+
+      duel.worlds.forEach((original, seat) => {
+        const replay = new World({
+          map: MAP_SPIRAL, difficulty: 'normal', seed: 7, duel: true, rivals: 2, builder: teams.builders[seat],
+        });
+        replay.ether = seat === 0 || seat === 2 ? 1000 : 0;
+        for (const entry of original.log) {
+          while (replay.tick < entry.tick) replay.step();
+          expect(dispatch(replay, entry.cmd).ok).toBe(true);
+        }
+        while (replay.tick < original.tick) replay.step();
+
+        expect(fingerprint(replay)).toBe(fingerprint(original));
+      });
+    });
+
+    /** Réserve d'une équipe à 0 : une seule carte de l'équipe suffit (réserve partagée). */
+    const defeatSeats = (duel: Duel, seats: number[]) => {
+      for (const seat of seats) {
+        duel.worlds[seat].lives = 0;
+        duel.worlds[seat].phase = Phase.Defeat;
+      }
+    };
+
+    const verdictsOf = (messages: { seat: number; msg: ServerMessage }[]) =>
+      [0, 1, 2, 3].map((seat) => {
+        const msg = messages.find((m) => m.seat === seat && m.msg.t === ServerMessageType.DuelOver)?.msg;
+        return msg && 'verdict' in msg ? msg.verdict : undefined;
+      });
+
+    it('[CU-05] annonce « Victoire » aux deux joueurs de l\'équipe restante et « Défaite » aux deux autres quand une réserve tombe à 0', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      defeatSeats(duel, [0]);
+
+      const messages = duel.advance(2000);
+
+      expect(verdictsOf(messages)).toEqual([Verdict.Defeat, Verdict.Defeat, Verdict.Victory, Verdict.Victory]);
+      expect(duel.isOver()).toBe(true);
+    });
+
+    it('[RM-08] arrête les quatre cartes au même tick quand une réserve tombe à 0', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      defeatSeats(duel, [2]);
+
+      duel.advance(2000);
+
+      const tick = duel.worlds[0].tick;
+      expect(duel.worlds.map((w) => w.tick)).toEqual([tick, tick, tick, tick]);
+
+      duel.advance(5000);
+
+      expect(duel.worlds.map((w) => w.tick)).toEqual([tick, tick, tick, tick]);
+    });
+
+    it('[RM-08] annonce une égalité aux quatre joueurs quand les deux réserves tombent à 0 au même pas', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      defeatSeats(duel, [0, 2]);
+
+      const messages = duel.advance(2000);
+
+      expect(verdictsOf(messages)).toEqual([Verdict.Draw, Verdict.Draw, Verdict.Draw, Verdict.Draw]);
+    });
+
+    it('[CU-05] n\'annonce la fin qu\'une fois à chacun des quatre sièges', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      defeatSeats(duel, [0]);
+
+      const messages = [...duel.advance(2000), ...duel.advance(3000), ...duel.advance(6000)];
+
+      for (const seat of [0, 1, 2, 3]) {
+        expect(messages.filter((m) => m.seat === seat && m.msg.t === ServerMessageType.DuelOver)).toHaveLength(1);
+      }
+    });
+
+    const rivalViews = (messages: { seat: number; msg: ServerMessage }[], seat: number) =>
+      messages.filter((m) => m.seat === seat && m.msg.t === ServerMessageType.Rival).map((m) => m.msg as Extract<ServerMessage, { t: ServerMessageType.Rival }>);
+
+    it('[RM-11] envoie à chaque siège une vue des trois autres cartes, avec siège et pseudo, toutes les 200 ms', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+
+      expect(rivalViews(duel.advance(1150), 0)).toHaveLength(0);
+      const messages = duel.advance(1200);
+
+      for (const seat of [0, 1, 2, 3]) {
+        const views = rivalViews(messages, seat);
+        const others = [0, 1, 2, 3].filter((s) => s !== seat);
+        expect(views.map((v) => v.seat)).toEqual(others);
+        expect(views.map((v) => v.nick)).toEqual(others.map((s) => teams.nicks[s]));
+        views.forEach((v) => expect(v.snapshot.lives).toBe(duel.worlds[v.seat].lives));
+      }
+    });
+
+    it('[RM-11] met l\'éther à 0 dans la vue des autres cartes, coéquipier compris', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      for (const world of duel.worlds) world.ether = 40;
+
+      const messages = duel.advance(1200);
+
+      const views = rivalViews(messages, 0);
+      expect(views).toHaveLength(3);
+      expect(views.map((v) => v.snapshot.ether)).toEqual([0, 0, 0]);
+      expect(views.map((v) => v.seat)).toContain(1);
+      expect(duel.worlds[1].ether).toBe(40);
+    });
+
+    it('[RM-11] joint au verdict sa carte et les trois autres', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      for (const world of duel.worlds) world.ether = 40;
+      defeatSeats(duel, [0]);
+
+      const messages = duel.advance(2000);
+
+      const over = messages.find((m) => m.seat === 1 && m.msg.t === ServerMessageType.DuelOver)?.msg;
+      expect(over && 'snapshot' in over && over.snapshot).toEqual(snapshot(duel.worlds[1]));
+      expect(over && 'others' in over && over.others).toEqual(
+        [0, 2, 3].map((s) => ({ seat: s, nick: teams.nicks[s], snapshot: { ...snapshot(duel.worlds[s]), ether: 0 } })),
+      );
+    });
+
+    it('[CU-06] gèle les quatre cartes et prévient les trois joueurs restés quand un joueur se coupe', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+
+      const messages = duel.lose(2, 1000);
+
+      expect(messages).toEqual(
+        [0, 1, 3].map((seat) => ({ seat, msg: { t: ServerMessageType.Frozen, remainingMs: LOST_LIMIT_MS } })),
+      );
+      const ticks = duel.worlds.map((w) => w.tick);
+
+      duel.advance(11_000);
+
+      expect(duel.worlds.map((w) => w.tick)).toEqual(ticks);
+    });
+
+    it('[CU-06] relance les quatre cartes et recale chacun quand le joueur revient dans les 30 s', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      duel.lose(1, 1000);
+      const ticks = duel.worlds.map((w) => w.tick);
+
+      const thawed = duel.back(1, 't1', 11_000) as { seat: number; msg: ServerMessage }[];
+
+      expect(thawed.map((m) => m.seat)).toEqual([0, 1, 2, 3]);
+      for (const m of thawed) {
+        expect(m.msg).toMatchObject({ t: ServerMessageType.Thawed, seat: m.seat });
+        expect(m.msg && 'snapshot' in m.msg && m.msg.snapshot).toEqual(snapshot(duel.worlds[m.seat]));
+        expect(m.msg && 'others' in m.msg && m.msg.others.map((o) => o.seat)).toEqual([0, 1, 2, 3].filter((s) => s !== m.seat));
+      }
+      expect(duel.lostAt).toBeUndefined();
+      expect(duel.lostSeats).toEqual([]);
+
+      duel.advance(12_000);
+
+      expect(duel.worlds.map((w) => w.tick)).toEqual(ticks.map((t) => t + 60));
+    });
+
+    it('[CU-06] ajoute un second absent sans relancer le délai de la première coupure', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      duel.lose(0, 1000);
+
+      const second = duel.lose(3, 6000);
+
+      expect(second).toEqual([]);
+      expect(duel.lostAt).toBe(1000);
+      expect(duel.lostSeats).toEqual([0, 3]);
+    });
+
+    it('[CU-06] rend sa carte au premier absent revenu mais garde la partie gelée tant que l\'autre manque', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      duel.lose(0, 1000);
+      duel.lose(3, 2000);
+      const ticks = duel.worlds.map((w) => w.tick);
+
+      const back = duel.back(0, 't0', 5000) as { seat: number; msg: ServerMessage }[];
+
+      expect(back.map((m) => m.seat)).toEqual([0, 0]);
+      expect(back[0].msg).toMatchObject({ t: ServerMessageType.Thawed, seat: 0, snapshot: snapshot(duel.worlds[0]) });
+      expect(back[0].msg && 'others' in back[0].msg && back[0].msg.others.map((o) => o.seat)).toEqual([1, 2, 3]);
+      expect(back[1].msg).toEqual({ t: ServerMessageType.Frozen, remainingMs: LOST_LIMIT_MS - 4000 });
+      expect(duel.lostAt).toBe(1000);
+      expect(duel.lostSeats).toEqual([3]);
+
+      duel.advance(9000);
+
+      expect(duel.worlds.map((w) => w.tick)).toEqual(ticks);
+    });
+
+    it('[RM-10] donne « Victoire par forfait » aux deux adversaires du premier absent après 30 s', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      duel.lose(0, 1000);
+
+      const messages = duel.advance(1000 + LOST_LIMIT_MS + 1);
+
+      const verdicts = verdictsOf(messages);
+      expect(verdicts[2]).toBe(Verdict.Forfeit);
+      expect(verdicts[3]).toBe(Verdict.Forfeit);
+    });
+
+    it('[RM-10] annonce « Défaite » au coéquipier resté du premier absent', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      duel.lose(0, 1000);
+
+      const messages = duel.advance(1000 + LOST_LIMIT_MS + 1);
+
+      expect(verdictsOf(messages)).toEqual([undefined, Verdict.Defeat, Verdict.Forfeit, Verdict.Forfeit]);
+      expect(messages.some((m) => m.seat === 0)).toBe(false);
+    });
+
+    it('[RM-10] fait perdre l\'équipe du premier absent quand un joueur de chaque équipe est coupé', () => {
+      const duel = new Duel(teams, 0);
+      duel.advance(1000);
+      duel.lose(1, 1000);
+      duel.lose(2, 2000);
+
+      const messages = duel.advance(1000 + LOST_LIMIT_MS + 1);
+
+      expect(verdictsOf(messages)).toEqual([Verdict.Defeat, undefined, undefined, Verdict.Forfeit]);
+      expect(messages.some((m) => m.seat === 1 || m.seat === 2)).toBe(false);
+    });
   });
 });

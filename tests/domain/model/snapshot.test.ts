@@ -194,13 +194,13 @@ describe('snapshot', () => {
 
   it('[RM-08] garde les envois en attente quand la partie est restaurée après un passage par JSON', () => {
     const w = newDuelWorld('normal', 42);
-    dispatch(w, { c: CommandType.Receive, creep: 'wolf' });
-    dispatch(w, { c: CommandType.Receive, creep: 'rat' });
-    expect(w.sends).toEqual(['wolf', 'rat']);
+    dispatch(w, { c: CommandType.Receive, creep: 'wolf', from: 0 });
+    dispatch(w, { c: CommandType.Receive, creep: 'rat', from: 0 });
+    expect(w.sends).toEqual([{ creep: 'wolf', from: 0 }, { creep: 'rat', from: 0 }]);
 
     const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
 
-    expect(restored.sends).toEqual(['wolf', 'rat']);
+    expect(restored.sends).toEqual([{ creep: 'wolf', from: 0 }, { creep: 'rat', from: 0 }]);
 
     launchWave(w);
     launchWave(restored);
@@ -262,21 +262,44 @@ describe('snapshot', () => {
 
   it('[RM-05] conserve les envois achetés et ceux de la vague à travers un instantané', () => {
     const w = newDuelWorld('normal', 42);
-    w.sent = ['wolf', 'rat'];
-    w.waveSends = { sent: ['wolf'], received: ['rat', 'rat'] };
+    w.sent = [{ creep: 'wolf', to: 0 }, { creep: 'rat', to: 0 }];
+    w.waveSends = { sent: [{ creep: 'wolf', to: 0 }], received: [{ creep: 'rat', from: 0 }, { creep: 'rat', from: 0 }] };
 
     const snap = snapshot(w);
     const restored = restore(JSON.parse(JSON.stringify(snap)));
     const restoredDirect = restore(snap);
 
-    w.sent.push('bat');
-    w.waveSends.sent.push('bat');
-    w.waveSends.received.push('bat');
+    w.sent.push({ creep: 'bat', to: 0 });
+    w.waveSends.sent.push({ creep: 'bat', to: 0 });
+    w.waveSends.received.push({ creep: 'bat', from: 0 });
 
-    expect(restored.sent).toEqual(['wolf', 'rat']);
-    expect(restored.waveSends).toEqual({ sent: ['wolf'], received: ['rat', 'rat'] });
-    expect(restoredDirect.sent).toEqual(['wolf', 'rat']);
-    expect(restoredDirect.waveSends).toEqual({ sent: ['wolf'], received: ['rat', 'rat'] });
+    expect(restored.sent).toEqual([{ creep: 'wolf', to: 0 }, { creep: 'rat', to: 0 }]);
+    expect(restored.waveSends).toEqual({ sent: [{ creep: 'wolf', to: 0 }], received: [{ creep: 'rat', from: 0 }, { creep: 'rat', from: 0 }] });
+    expect(restoredDirect.sent).toEqual([{ creep: 'wolf', to: 0 }, { creep: 'rat', to: 0 }]);
+    expect(restoredDirect.waveSends).toEqual({ sent: [{ creep: 'wolf', to: 0 }], received: [{ creep: 'rat', from: 0 }, { creep: 'rat', from: 0 }] });
+  });
+
+  it('[RM-12] garde le nombre d\'adversaires quand la partie est restaurée après un passage par JSON', () => {
+    const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 42, duel: true, rivals: 2, builder: 'bastion' });
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+
+    expect(restored.rivals).toBe(2);
+  });
+
+  it('[RM-12] tire le même adversaire que l\'original sur le même envoi après restauration', () => {
+    const w = new World({ map: MAP_CROSSING, difficulty: 'normal', seed: 42, duel: true, rivals: 2, builder: 'bastion' });
+    w.ether = 1000;
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+
+    for (let i = 0; i < 5; i++) {
+      dispatch(w, { c: CommandType.Send, creep: 'rat' });
+      dispatch(restored, { c: CommandType.Send, creep: 'rat' });
+    }
+
+    expect(restored.sent).toEqual(w.sent);
+    expect(restored.rng.state).toBe(w.rng.state);
+    expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
   });
 
   it('garde le cap retenu d’une créature, sans partager l’objet', () => {

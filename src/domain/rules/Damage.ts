@@ -33,9 +33,11 @@ export function damageMultiplier(
   creep: Pick<CreepDef, 'armorType' | 'armor' | 'magicImmune'>,
   shred = 0,
   ignoreArmorValue = false,
+  dispel = 0,
 ): number {
-  if (attack === 'magic' && creep.magicImmune) return 0;
+  const immune = attack === 'magic' && creep.magicImmune;
+  if (immune && dispel <= 0) return 0;
   const typeMult = ATTACK_TABLE[attack][creep.armorType];
   const valueMult = ignoreArmorValue ? 1 : armorValueMultiplier(creep.armor - shred);
-  return typeMult * valueMult;
+  return (immune ? dispel : 1) * typeMult * valueMult;
 }

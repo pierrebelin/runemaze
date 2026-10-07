@@ -157,12 +157,12 @@ export function hitCreep(world: World, towerId: number, defId: string, a: Attack
   }
   applyOnHit(world, c, a, towerId, defId);
   if (c.def.sprint && c.frozen <= 0 && c.sprint <= 0 && c.sprintCooldown <= 0) c.sprint = c.def.sprint.duration;
-  applyDamage(world, c, raw, a.type, towerId, false);
+  applyDamage(world, c, raw, a.type, towerId, false, a.dispel);
 }
 
-export function applyDamage(world: World, c: Creep, raw: number, type: AttackType, towerId: number, ignoreArmorValue: boolean): number {
+export function applyDamage(world: World, c: Creep, raw: number, type: AttackType, towerId: number, ignoreArmorValue: boolean, dispel = 0): number {
   if (!c.alive) return 0;
-  const dmg = raw * damageMultiplier(type, c.def, c.shred, ignoreArmorValue);
+  const dmg = raw * damageMultiplier(type, c.def, c.shred, ignoreArmorValue, dispel);
   if (dmg <= 0) return 0;
   c.hp -= dmg;
   if (!ignoreArmorValue) c.hitFlash = 0.08;

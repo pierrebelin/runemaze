@@ -226,19 +226,19 @@ describe('waves', () => {
 
   it('[RM-05] fige au lancement les envois achetés et reçus, puis vide les files', () => {
     const w = newWorld();
-    w.sent = ['rat', 'wolf'];
-    w.sends = ['wolf', 'slime', 'rat'];
+    w.sent = [{ creep: 'rat', to: 0 }, { creep: 'wolf', to: 0 }];
+    w.sends = [{ creep: 'wolf', from: 0 }, { creep: 'slime', from: 0 }, { creep: 'rat', from: 0 }];
 
     launchWave(w);
 
-    expect(w.waveSends).toEqual({ sent: ['rat', 'wolf'], received: ['wolf', 'slime', 'rat'] });
+    expect(w.waveSends).toEqual({ sent: [{ creep: 'rat', to: 0 }, { creep: 'wolf', to: 0 }], received: [{ creep: 'wolf', from: 0 }, { creep: 'slime', from: 0 }, { creep: 'rat', from: 0 }] });
     expect(w.sent).toEqual([]);
     expect(w.sends).toEqual([]);
   });
 
   it('[RM-05] laisse vides les envois de la vague quand le joueur n’a rien envoyé ni reçu', () => {
     const w = newWorld();
-    w.waveSends = { sent: ['rat'], received: ['wolf'] }; // vague précédente
+    w.waveSends = { sent: [{ creep: 'rat', to: 0 }], received: [{ creep: 'wolf', from: 0 }] }; // vague précédente
 
     launchWave(w);
 

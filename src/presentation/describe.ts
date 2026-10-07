@@ -4,16 +4,19 @@ import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage'
 import type { AuraKind, BuilderDef, ArmorType, AttackType, Creep, CreepDef, Result, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
 import type { breakerLosses, familyDamage, waveCurve } from '../domain/rules/debrief';
 import { towerYield } from '../domain/rules/debrief';
+import { builderTowers } from '../domain/rules/builder';
 import { CREEPS } from '../domain/catalog/creeps';
-import { tower } from '../domain/catalog/towers';
+import { TOWERS, tower } from '../domain/catalog/towers';
 import { GATE, GLEANER } from '../domain/catalog/ether';
 import { gateLevelCost, gateLevelIncome, refundValue } from '../domain/rules/pricing';
 import { creepSpeed } from '../domain/rules/speed';
-import { Mode, Verdict } from '../application/online/protocol';
+import { Mode, Team, Verdict } from '../application/online/protocol';
+import type { WaveReward } from '../domain/rules/waveReward';
 
 const MODE_LABEL: Record<Mode, string> = {
   [Mode.Duel]: 'Duel',
   [Mode.Coop]: 'Coopération',
+  [Mode.Teams]: '2 contre 2',
 };
 
 export function modeLabel(mode: Mode): string {
@@ -66,7 +69,7 @@ function stat(label: string, value: string): string {
   return `<span><em>${label}</em>${value}</span>`;
 }
 
-export function matchupTags(type: AttackType): string {
+export function matchupTags(type: AttackType, dispel = 0): string {
   const row = ATTACK_TABLE[type];
   const good: string[] = [];
   const bad: string[] = [];
@@ -74,7 +77,7 @@ export function matchupTags(type: AttackType): string {
     if (row[k] >= 1.25) good.push(`${ARMOR_LABEL[k]} ×${fmtM(row[k])}`);
     if (row[k] <= 0.75) bad.push(`${ARMOR_LABEL[k]} ×${fmtM(row[k])}`);
   }
-  if (type === 'magic') bad.push('Immunisés ×0');
+  if (type === 'magic') bad.push(`Immunisés ×${fmtM(dispel)}`);
   return [...good.map((g) => `<span class="tag good">${g}</span>`), ...bad.map((b) => `<span class="tag bad">${b}</span>`)].join('');
 }
 
@@ -95,6 +98,7 @@ export function towerSpecials(def: TowerDef): string[] {
   if (a.multishot) s.push(`${a.multishot} cibles par salve`);
   if (a.crit) s.push(`${Math.round(a.crit.chance * 100)} % de critiques ×${fmt1(a.crit.mult)}`);
   if (a.armorShred) s.push(`−${a.armorShred.amount} armure`);
+  if (a.dispel) s.push(`${Math.round(a.dispel * 100)} % des dégâts contre les immunisés à la magie`);
   if (a.freeze) s.push(`gèle ${Math.round(a.freeze.chance * 100)} % des touches pendant ${fmt1(a.freeze.duration)} s (répit ${fmt1(a.freeze.guard)} s)`);
   return s;
 }
@@ -119,7 +123,7 @@ export function towerInfo(def: TowerDef, cost: number | null, heading = def.name
       ${stat('DPS', `≈ ${fmt0(dps)}`)}
     </div>
     <p>${esc(def.desc)}${specials.length ? ' ' + esc(cap(specials.join(' · '))) + '.' : ''}</p>
-    <div>${matchupTags(a.type)}</div>`;
+    <div>${matchupTags(a.type, a.dispel)}</div>`;
 }
 
 /** Fiche d'une tour posée ; l'invitation à transformer n'a de sens que pour ses propres murs. */
@@ -139,21 +143,40 @@ export function creepTags(def: CreepDef): string {
   return tags.join('');
 }
 
+function builderTowerWhere(b: BuilderDef, match: (t: TowerDef) => unknown): TowerDef | undefined {
+  const own = builderTowers(b, TOWERS);
+  return Object.values(TOWERS).find((t) => own.has(t.id) && match(t));
+}
+
+/** Tour dissipante accessible au bâtisseur, s'il en a une. */
+const dispellerOf = (b: BuilderDef) => builderTowerWhere(b, (t) => t.attack?.dispel);
+
+/** Tour de chaos (seule à toucher les immunisés de plein fouet) accessible au bâtisseur, s'il en a une. */
+const chaosTowerOf = (b: BuilderDef) => builderTowerWhere(b, (t) => t.attack?.type === 'chaos');
+
 /** Types d'attaque les plus efficaces contre une armure donnée. */
-export function counters(def: CreepDef): string {
+export function counters(def: CreepDef, b: BuilderDef): string {
   const types = (Object.keys(ATTACK_TABLE) as AttackType[])
     .filter((t) => t !== 'chaos' && !(t === 'magic' && def.magicImmune))
     .map((t) => [t, ATTACK_TABLE[t][def.armorType]] as const)
     .sort((a, b) => b[1] - a[1]);
   const best = types.filter(([, m]) => m >= 1.25);
   const pick = best.length ? best : types.slice(0, 1);
-  return pick.map(([t, m]) => `${ATTACK_LABEL[t]} ×${fmtM(m)}`).join(', ');
+  const list = pick.map(([t, m]) => `${ATTACK_LABEL[t]} ×${fmtM(m)}`).join(', ');
+  const dispeller = def.magicImmune && dispellerOf(b);
+  return dispeller ? `${list} ou ${dispeller.name}` : list;
 }
 
-function waveHint(def: CreepDef): string {
-  let hint = `Le plus efficace : ${counters(def)}.`;
+function waveHint(def: CreepDef, b: BuilderDef): string {
+  let hint = `Le plus efficace : ${counters(def, b)}.`;
   if (def.air) hint += ' Ils survolent le labyrinthe en ligne droite : seules les tours qui visent l’air les touchent.';
-  if (def.magicImmune) hint += ' Givre et foudre ne leur font rien, sauf le Prisme du néant.';
+  if (def.magicImmune) {
+    const dispeller = dispellerOf(b);
+    const chaos = chaosTowerOf(b);
+    const except = chaos ? `, sauf le ${chaos.name}` : '';
+    const part = dispeller ? ` ; le ${dispeller.name} les entame à ${Math.round(dispeller.attack!.dispel! * 100)} %` : '';
+    hint += ` Givre et foudre ne leur font rien${except}${part}.`;
+  }
   return hint;
 }
 
@@ -166,10 +189,10 @@ function nextWaveGroup(g: WaveBriefingGroup): string {
       <div>${creepTags(g.creep)}</div>`;
 }
 
-export function nextWaveInfo(b: WaveBriefing): string {
+export function nextWaveInfo(b: WaveBriefing, builder: BuilderDef): string {
   return `<h3>Prochaine vague ${b.wave + 1}</h3>
       ${b.groups.map(nextWaveGroup).join('')}
-      <p>${esc(waveHint(b.groups[0].creep))}</p>`;
+      <p>${esc(waveHint(b.groups[0].creep, builder))}</p>`;
 }
 
 function briefingEntry(g: WaveBriefingGroup): string {
@@ -183,18 +206,18 @@ export function briefingChip(b: WaveBriefing): string {
   return b.groups.map(briefingEntry).join(' · ');
 }
 
-function briefingGroupInfo(g: WaveBriefingGroup): string {
+function briefingGroupInfo(g: WaveBriefingGroup, builder: BuilderDef): string {
   const who = g.creep.boss ? `Chef : ${g.creep.name}` : g.count > 1 ? `${g.count} ${g.creep.plural}` : g.creep.name;
   const hp = g.count > 1 ? `${fmt0(g.hp)} PV chacun · ${fmt0(g.hp * g.count)} au total` : `${fmt0(g.hp)} PV`;
   return `<h3>${esc(who)}</h3>
     <div>${creepTags(g.creep)}</div>
     <p class="facts">${hp} · vitesse ${fmt1(g.creep.speed)} · butin ${g.bounty} or</p>
-    <p>${esc(waveHint(g.creep))}</p>`;
+    <p>${esc(waveHint(g.creep, builder))}</p>`;
 }
 
 /** Détail de la prochaine vague, déroulé au survol du résumé. Une section par groupe. */
-export function briefingInfo(b: WaveBriefing): string {
-  return `<div class="when">Vague ${b.wave + 1}</div>${b.groups.map(briefingGroupInfo).join('')}`;
+export function briefingInfo(b: WaveBriefing, builder: BuilderDef): string {
+  return `<div class="when">Vague ${b.wave + 1}</div>${b.groups.map((g) => briefingGroupInfo(g, builder)).join('')}`;
 }
 
 /** Effets en cours sur une créature (ralentissement, corrosion, poison). */
@@ -313,13 +336,13 @@ export function rivalDetail(rival: World): string {
     </div>`;
 }
 
-export function creepInfo(c: Creep): string {
+export function creepInfo(c: Creep, builder: BuilderDef): string {
   const effects = creepEffects(c).map((e) => `<span class="tag good">${esc(e)}</span>`).join('');
   return `<h3>${esc(c.def.name)} · vague ${c.wave + 1}</h3>
     <div class="stats">${stat('PV', `${fmt0(c.hp)} / ${fmt0(c.maxHp)}`)}${stat('Vitesse', fmt1(creepSpeed(c)))}${stat('Armure', fmt0(c.def.armor - c.shred))}</div>
     <div>${creepTags(c.def)}</div>
     ${effects ? `<div>${effects}</div>` : ''}
-    <p>${esc(`Le plus efficace : ${counters(c.def)}.`)}</p>`;
+    <p>${esc(`Le plus efficace : ${counters(c.def, builder)}.`)}</p>`;
 }
 
 /** Annonce à l'envoyeur : « Vos 3 Harpies et 2 Loups gris attaquent Paul ». */
@@ -341,12 +364,47 @@ export function builderCard(b: BuilderDef): string {
 const recapLine = (g: SendGroup, extra = '') =>
   `${g.count} ${g.count > 1 ? g.creep.plural : g.creep.name} · ${g.creep.air ? 'air' : 'sol'}${extra}`;
 
-/** Lignes affichées sous la bannière de vague : ses groupes, puis les envois reçus de l'adversaire (texte brut, dessiné sur le canvas). */
-export function waveRecap(b: WaveBriefing, received: SendGroup[], nick: string): string[] {
-  const sent = received.length ? [`Envoyés par ${nick}`, ...received.map((g) => recapLine(g))] : [];
-  return [...b.groups.map((g) => recapLine(g, g.creep.boss ? ' · chef' : '')), ...sent];
+/** Lignes affichées sous la bannière de vague : ses groupes, puis les envois reçus, par envoyeur (texte brut, dessiné sur le canvas). */
+export function waveRecap(b: WaveBriefing, received: { nick: string; groups: SendGroup[] }[]): string[] {
+  const lines = b.groups.map((g) => recapLine(g, g.creep.boss ? ' · chef' : ''));
+  for (const r of received) {
+    if (r.groups.length) lines.push(`Envoyés par ${r.nick}`, ...r.groups.map((g) => recapLine(g)));
+  }
+  return lines;
 }
 
 export function rivalHeadline(nick: string, lives: number): string {
   return `<span class="rv-nick">${esc(nick)}</span><span class="rv-lives" title="${lives > 1 ? 'Vies' : 'Vie'}">${RIVAL_ICON.lives}<strong>${fmt0(lives)}</strong></span>`;
+}
+
+const TEAM_LABEL: Record<Team, string> = { [Team.A]: 'Équipe A', [Team.B]: 'Équipe B' };
+const TEAM_SIZE = 2;
+
+/** Les deux équipes du salon 2 contre 2 ; chaque colonne est un bouton `data-team` pour la rejoindre. */
+export function teamRoster(teams: Record<Team, { nick: string; picked: boolean }[]>, waiting: string[]): string {
+  const column = (team: Team) => {
+    const players = teams[team].map((p) => `<li>${esc(p.nick)} · ${p.picked ? 'prêt' : 'choisit…'}</li>`);
+    const free = Array.from({ length: Math.max(0, TEAM_SIZE - players.length) }, () => '<li>place libre</li>');
+    return `<button type="button" class="diff" data-team="${team}"><strong>${TEAM_LABEL[team]}</strong><ul>${[...players, ...free].join('')}</ul></button>`;
+  };
+  const wait = waiting.length ? `<p>En attente : ${waiting.map(esc).join(', ')}</p>` : '';
+  return `<div class="modes">${column(Team.A)}${column(Team.B)}</div>${wait}`;
+}
+
+export function goldForecastChip(gold: number, r: WaveReward): string {
+  return `<b>${fmt0(gold)}</b> or · +${fmt0(r.bonus + r.interest + r.income)}`;
+}
+
+export function goldForecastInfo(r: WaveReward, duel: boolean): string {
+  const line = (label: string, n: number) => `<p class="facts">${label} : +${fmt0(n)}</p>`;
+  const rest = duel ? line('Revenu', r.income) : line('Intérêts', r.interest) + (r.capped ? '<p>plafond atteint</p>' : '');
+  return `<h3>Gain en fin de vague</h3>${line('Prime', r.bonus)}${rest}`;
+}
+
+export function etherChip(ether: number, perMinute: number): string {
+  return `<b>${fmt0(ether)}</b> éther · +${fmt0(perMinute)}/min`;
+}
+
+export function resignPrompt(): { question: string; confirm: string; cancel: string } {
+  return { question: 'Quitter la partie ? Elle sera perdue.', confirm: 'Quitter', cancel: 'Annuler' };
 }

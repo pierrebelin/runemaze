@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClientMessageType, Mode, readClientMessage } from '../../../src/application/online/protocol';
+import { ClientMessageType, Mode, Team, readClientMessage } from '../../../src/application/online/protocol';
 import { MAP_TWO_STONES } from '../../support/maps';
 
 describe('readClientMessage', () => {
@@ -73,6 +73,17 @@ describe('readClientMessage', () => {
     const raw = JSON.stringify({ t: 'order', tick: 5, cmd: { c: 'reserveLoss', lives: 3 }, fingerprint: 'abc' });
 
     expect(readClientMessage(raw)).toBeNull();
+  });
+
+  it('[RM-08] accepte l\'ordre d\'abandon reçu du client', () => {
+    const raw = JSON.stringify({ t: 'order', tick: 5, cmd: { c: 'resign' }, fingerprint: 'abc' });
+
+    expect(readClientMessage(raw)).toEqual({
+      t: 'order',
+      tick: 5,
+      cmd: { c: 'resign' },
+      fingerprint: 'abc',
+    });
   });
 
   it('[RM-04] ignore l\'ordre de mode infini venu du réseau', () => {
@@ -280,6 +291,41 @@ describe('readClientMessage — salon', () => {
     const raw = JSON.stringify({ t: 'host', nick: 'Ada', map: MAP_TWO_STONES, difficulty: 'hard', mode: 'battle' });
 
     expect(readClientMessage(raw)).toBeNull();
+  });
+
+  it('[CU-01] lit le mode 2 contre 2 dans la demande de création de salon', () => {
+    const raw = JSON.stringify({ t: 'host', nick: 'Ada', map: MAP_TWO_STONES, difficulty: 'hard', mode: 'teams' });
+
+    expect(readClientMessage(raw)).toEqual({
+      t: ClientMessageType.Host,
+      nick: 'Ada',
+      map: MAP_TWO_STONES,
+      difficulty: 'hard',
+      mode: Mode.Teams,
+    });
+  });
+
+  it('[RM-09] ignore un ordre de don d\'or ou d\'éther', () => {
+    const order = (cmd: unknown) => JSON.stringify({ t: 'order', tick: 5, cmd, fingerprint: 'abc' });
+
+    expect(readClientMessage(JSON.stringify({ t: 'gift', to: 2, gold: 10 }))).toBeNull();
+    expect(readClientMessage(JSON.stringify({ t: 'gift', to: 2, ether: 5 }))).toBeNull();
+    expect(readClientMessage(order({ c: 'give', to: 2, gold: 10 }))).toBeNull();
+    expect(readClientMessage(order({ c: 'gift', to: 2, ether: 5 }))).toBeNull();
+  });
+
+  it('[CU-02] lit le choix d\'équipe A ou B et rejette toute autre valeur', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'chooseTeam', team: 'a' }))).toEqual({
+      t: ClientMessageType.ChooseTeam,
+      team: Team.A,
+    });
+    expect(readClientMessage(JSON.stringify({ t: 'chooseTeam', team: 'b' }))).toEqual({
+      t: ClientMessageType.ChooseTeam,
+      team: Team.B,
+    });
+    expect(readClientMessage(JSON.stringify({ t: 'chooseTeam', team: 'c' }))).toBeNull();
+    expect(readClientMessage(JSON.stringify({ t: 'chooseTeam' }))).toBeNull();
+    expect(readClientMessage(JSON.stringify({ t: 'chooseTeam', team: 1 }))).toBeNull();
   });
 
   it('[RM-16] lit la demande de rejoindre avec pseudo et code', () => {

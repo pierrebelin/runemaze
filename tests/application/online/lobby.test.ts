@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DUEL_CODE_ALPHABET, duelCode, nickname, Lobby } from '../../../src/application/online/lobby';
-import { Mode, ServerMessageType } from '../../../src/application/online/protocol';
-import { Seat } from '../../../src/application/online/duel';
+import { Mode, ServerMessageType, Team } from '../../../src/application/online/protocol';
+import { CODE_TAKEN_MSG, Seat } from '../../../src/application/online/duel';
 import { LOST_LIMIT_MS } from '../../../src/application/online/heldGame';
 import { MAP_SPIRAL } from '../../../src/domain/catalog/map';
 import { snapshot } from '../../../src/domain/model/snapshot';
@@ -326,17 +326,17 @@ describe('lobby', () => {
     expect(forHost?.t).toBe(ServerMessageType.DuelStarted);
     expect(forGuest?.t).toBe(ServerMessageType.DuelStarted);
 
-    const host = forHost as { t: ServerMessageType.DuelStarted; seat: Seat; token: string; snapshot: { gold: number; lives: number; map: unknown; nextWaveIn: number }; rival: { nick: string; snapshot: { gold: number; lives: number; map: unknown; nextWaveIn: number } } };
+    const host = forHost as { t: ServerMessageType.DuelStarted; seat: Seat; token: string; snapshot: { gold: number; lives: number; map: unknown; nextWaveIn: number }; others: { seat: number; nick: string; snapshot: { gold: number; lives: number; map: unknown; nextWaveIn: number } }[] };
     const guest = forGuest as typeof host;
 
     expect(host.seat).toBe(Seat.Host);
     expect(host.token).toBe('th');
-    expect(host.rival.nick).toBe('Bob');
+    expect(host.others[0].nick).toBe('Bob');
     expect(guest.seat).toBe(Seat.Guest);
     expect(guest.token).toBe('tg');
-    expect(guest.rival.nick).toBe('Ada');
+    expect(guest.others[0].nick).toBe('Ada');
 
-    for (const snap of [host.snapshot, host.rival.snapshot, guest.snapshot, guest.rival.snapshot]) {
+    for (const snap of [host.snapshot, host.others[0].snapshot, guest.snapshot, guest.others[0].snapshot]) {
       expect(snap.gold).toBe(host.snapshot.gold);
       expect(snap.lives).toBe(host.snapshot.lives);
       expect(snap.map).toEqual(MAP_SPIRAL);
@@ -438,7 +438,7 @@ describe('lobby', () => {
     const addressed = lobby.rejoin({ code, token: 'tg', key: 'g2' }, t + 5_000);
 
     expect(addressed.filter((a) => a.key === 'g2').map((a) => a.msg)).toEqual([
-      { t: ServerMessageType.Thawed, seat: Seat.Guest, snapshot: guestSnap, rival: hostSnap },
+      { t: ServerMessageType.Thawed, seat: Seat.Guest, snapshot: guestSnap, others: [{ seat: Seat.Host, nick: expect.any(String), snapshot: hostSnap }] },
     ]);
   });
 
@@ -451,7 +451,7 @@ describe('lobby', () => {
 
     expect(addressed).toContainEqual({
       key: 'h',
-      msg: { t: ServerMessageType.Thawed, seat: Seat.Host, snapshot: hostSnap, rival: guestSnap },
+      msg: { t: ServerMessageType.Thawed, seat: Seat.Host, snapshot: hostSnap, others: [{ seat: Seat.Guest, nick: expect.any(String), snapshot: guestSnap }] },
     });
 
     const before = duel.worlds.map((w) => w.tick);
@@ -546,6 +546,7 @@ describe('lobby', () => {
 
     expect(addressed.filter((a) => a.key === 'g2').map((a) => a.msg)).toEqual([
       expect.objectContaining({ t: ServerMessageType.Thawed, seat: Seat.Guest }),
+      { t: ServerMessageType.Frozen, remainingMs: expect.any(Number) },
     ]);
   });
 
@@ -556,7 +557,7 @@ describe('lobby', () => {
     return lobby;
   }
 
-  const EN_ATTENTE = 'En attente du choix des bâtisseurs.';
+  const WAITING_BUILDERS_MSG = 'En attente du choix des bâtisseurs.';
 
   it('[CU-02] annonce aux deux joueurs qu\'un joueur a choisi sans dire lequel', () => {
     const lobby = salonPret();
@@ -596,10 +597,10 @@ describe('lobby', () => {
 
     const addressed = lobby.start('h', 7, ['th', 'tg'], 0);
 
-    const forHost = addressed.find((a) => a.key === 'h')!.msg as { rival: { snapshot: { builder: string } } };
-    const forGuest = addressed.find((a) => a.key === 'g')!.msg as { rival: { snapshot: { builder: string } } };
-    expect(forHost.rival.snapshot.builder).toBe('sylve');
-    expect(forGuest.rival.snapshot.builder).toBe('forge');
+    const forHost = addressed.find((a) => a.key === 'h')!.msg as { others: { snapshot: { builder: string } }[] };
+    const forGuest = addressed.find((a) => a.key === 'g')!.msg as { others: { snapshot: { builder: string } }[] };
+    expect(forHost.others[0].snapshot.builder).toBe('sylve');
+    expect(forGuest.others[0].snapshot.builder).toBe('forge');
   });
 
   it('[CU-02] lance le duel quand les deux joueurs ont choisi le même bâtisseur', () => {
@@ -623,7 +624,7 @@ describe('lobby', () => {
 
     const addressed = lobby.start('h', 7, ['th', 'tg'], 0);
 
-    expect(addressed).toEqual([{ key: 'h', msg: { t: ServerMessageType.Refused, reason: EN_ATTENTE } }]);
+    expect(addressed).toEqual([{ key: 'h', msg: { t: ServerMessageType.Refused, reason: WAITING_BUILDERS_MSG } }]);
     expect(lobby.duel('ABCDEF')).toBeUndefined();
   });
 
@@ -651,7 +652,7 @@ describe('lobby', () => {
     });
     lobby.choose('h', 'forge');
     expect(lobby.start('h', 7, ['th', 'tg'], 0)).toEqual([
-      { key: 'h', msg: { t: ServerMessageType.Refused, reason: EN_ATTENTE } },
+      { key: 'h', msg: { t: ServerMessageType.Refused, reason: WAITING_BUILDERS_MSG } },
     ]);
   });
 
@@ -667,5 +668,279 @@ describe('lobby', () => {
     const duel = lobby.duel('ABCDEF')!;
     expect(duel.worlds.map((w) => w.duel)).toEqual([false, false]);
     expect(duel.worlds.map((w) => w.lives)).toEqual([20, 20]);
+  });
+
+  it('[CU-01] place l\'hôte dans l\'équipe A quand il crée un salon 2 contre 2', () => {
+    const lobby = new Lobby();
+
+    const addressed = lobby.host({ code: 'ABCDEF', nick: 'Ada', map: MAP_SPIRAL, difficulty: 'hard', key: 'h', mode: Mode.Teams });
+
+    expect(addressed).toEqual([
+      { key: 'h', msg: { t: ServerMessageType.Hosted, code: 'ABCDEF', host: 'Ada', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Teams } },
+      {
+        key: 'h',
+        msg: {
+          t: ServerMessageType.TeamRoom,
+          host: 'Ada',
+          map: MAP_SPIRAL,
+          difficulty: 'hard',
+          teams: { a: [{ nick: 'Ada', picked: false }], b: [] },
+          waiting: [],
+        },
+      },
+    ]);
+  });
+
+  function teamsRoom() {
+    const lobby = new Lobby();
+    lobby.host({ code: 'ABCDEF', nick: 'Ada', map: MAP_SPIRAL, difficulty: 'hard', key: 'h', mode: Mode.Teams });
+    return lobby;
+  }
+
+  function teamRoom(a: string[], b: string[], waiting: string[]) {
+    return {
+      t: ServerMessageType.TeamRoom,
+      host: 'Ada',
+      map: MAP_SPIRAL,
+      difficulty: 'hard',
+      teams: { a: a.map((nick) => ({ nick, picked: false })), b: b.map((nick) => ({ nick, picked: false })) },
+      waiting,
+    };
+  }
+
+  it('[CU-02] montre à tout le salon les deux équipes et le joueur arrivé, encore sans équipe', () => {
+    const lobby = teamsRoom();
+
+    const addressed = lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+
+    const msg = teamRoom(['Ada'], [], ['Bob']);
+    expect(addressed).toHaveLength(2);
+    expect(addressed).toContainEqual({ key: 'h', msg });
+    expect(addressed).toContainEqual({ key: 'g', msg });
+  });
+
+  it('[CU-02] place le joueur dans l\'équipe choisie et l\'annonce à tout le salon', () => {
+    const lobby = teamsRoom();
+    lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+
+    const addressed = lobby.pickTeam('g', Team.B);
+
+    const msg = teamRoom(['Ada'], ['Bob'], []);
+    expect(addressed).toHaveLength(2);
+    expect(addressed).toContainEqual({ key: 'h', msg });
+    expect(addressed).toContainEqual({ key: 'g', msg });
+  });
+
+  it('[CU-02] fait changer d\'équipe un joueur déjà placé quand l\'autre a une place libre', () => {
+    const lobby = teamsRoom();
+    lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+    lobby.pickTeam('g', Team.B);
+
+    const addressed = lobby.pickTeam('g', Team.A);
+
+    const msg = teamRoom(['Ada', 'Bob'], [], []);
+    expect(addressed).toContainEqual({ key: 'h', msg });
+    expect(addressed).toContainEqual({ key: 'g', msg });
+  });
+
+  it('[CU-02] refuse l\'équipe déjà à 2 joueurs et laisse le joueur où il était', () => {
+    const lobby = teamsRoom();
+    lobby.join({ code: 'ABCDEF', nick: 'Cy', key: 'c' });
+    lobby.pickTeam('c', Team.A);
+    lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+    lobby.pickTeam('g', Team.B);
+
+    const addressed = lobby.pickTeam('g', Team.A);
+
+    expect(addressed).toEqual([{ key: 'g', msg: { t: ServerMessageType.Refused, reason: 'Cette équipe est complète.' } }]);
+    const after = lobby.leave('c', 0);
+    expect(after).toContainEqual({ key: 'h', msg: teamRoom(['Ada'], ['Bob'], []) });
+  });
+
+  it('[RM-01] refuse un cinquième joueur avec « Code invalide ou partie déjà commencée. »', () => {
+    const lobby = teamsRoom();
+    lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+    lobby.join({ code: 'ABCDEF', nick: 'Cy', key: 'c' });
+    const fourth = lobby.join({ code: 'ABCDEF', nick: 'Di', key: 'd' });
+    expect(fourth).toContainEqual({ key: 'd', msg: teamRoom(['Ada'], [], ['Bob', 'Cy', 'Di']) });
+
+    const addressed = lobby.join({ code: 'ABCDEF', nick: 'Eve', key: 'e' });
+
+    expect(addressed).toEqual([
+      { key: 'e', msg: { t: ServerMessageType.Refused, reason: CODE_TAKEN_MSG } },
+    ]);
+  });
+
+  it('[CU-02] libère la place du joueur qui quitte le salon et l\'annonce aux autres', () => {
+    const lobby = teamsRoom();
+    lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+    lobby.pickTeam('g', Team.B);
+
+    const addressed = lobby.leave('g', 0);
+
+    expect(addressed).toEqual([{ key: 'h', msg: teamRoom(['Ada'], [], []) }]);
+  });
+
+  it('[CU-02] annule le salon chez les trois autres quand l\'hôte le quitte', () => {
+    const lobby = teamsRoom();
+    for (const [nick, key] of [['Bob', 'g'], ['Cy', 'c'], ['Di', 'd']]) {
+      lobby.join({ code: 'ABCDEF', nick, key });
+    }
+
+    const addressed = lobby.leave('h', 0);
+
+    expect(addressed).toHaveLength(3);
+    for (const key of ['g', 'c', 'd']) {
+      expect(addressed).toContainEqual({ key, msg: { t: ServerMessageType.Cancelled } });
+    }
+  });
+
+  /** Arrivée : Ada (h, A), Bob (g, B), Cy (c, A), Di (d, B) ; sièges : Ada, Cy, Bob, Di. */
+  function fourPlayerRoom() {
+    const lobby = teamsRoom();
+    lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+    lobby.pickTeam('g', Team.B);
+    lobby.join({ code: 'ABCDEF', nick: 'Cy', key: 'c' });
+    lobby.pickTeam('c', Team.A);
+    lobby.join({ code: 'ABCDEF', nick: 'Di', key: 'd' });
+    lobby.pickTeam('d', Team.B);
+    return lobby;
+  }
+
+  const TOKENS = ['t0', 't1', 't2', 't3'];
+  const WAITING_TEAMS_MSG = 'En attente de deux joueurs par équipe.';
+
+  function chooseAll(lobby: Lobby) {
+    lobby.choose('h', 'forge');
+    lobby.choose('c', 'sylve');
+    lobby.choose('g', 'bastion');
+    lobby.choose('d', 'forge');
+  }
+
+  it('[CU-03] lance une partie à quatre sièges, équipe A puis équipe B, quand les équipes sont complètes et les bâtisseurs choisis', () => {
+    const lobby = fourPlayerRoom();
+    chooseAll(lobby);
+
+    lobby.start('h', 7, TOKENS, 0);
+
+    const duel = lobby.duel('ABCDEF')!;
+    expect(duel.worlds).toHaveLength(4);
+    expect(duel.worlds.map((w) => w.builder.id)).toEqual(['forge', 'sylve', 'bastion', 'forge']);
+  });
+
+  it('[CU-03] donne à chaque joueur son siège, son jeton et les trois autres cartes au lancement', () => {
+    const lobby = fourPlayerRoom();
+    chooseAll(lobby);
+
+    const addressed = lobby.start('h', 7, TOKENS, 0);
+
+    const duel = lobby.duel('ABCDEF')!;
+    const nicks = ['Ada', 'Cy', 'Bob', 'Di'];
+    expect(addressed).toHaveLength(4);
+    ['h', 'c', 'g', 'd'].forEach((key, seat) => {
+      const msg = addressed.find((a) => a.key === key)!.msg as {
+        t: ServerMessageType; seat: number; token: string; snapshot: unknown; others: { seat: number; nick: string }[];
+      };
+      expect(msg.t).toBe(ServerMessageType.DuelStarted);
+      expect(msg.seat).toBe(seat);
+      expect(msg.token).toBe(TOKENS[seat]);
+      expect(msg.snapshot).toEqual(snapshot(duel.worlds[seat]));
+      const otherSeats = [0, 1, 2, 3].filter((s) => s !== seat);
+      expect(msg.others.map((o) => [o.seat, o.nick])).toEqual(otherSeats.map((s) => [s, nicks[s]]));
+    });
+  });
+
+  it('[RM-02] refuse le lancement tant qu\'une équipe a moins de 2 joueurs', () => {
+    const lobby = teamsRoom();
+    lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+    lobby.pickTeam('g', Team.B);
+    lobby.join({ code: 'ABCDEF', nick: 'Cy', key: 'c' });
+    lobby.pickTeam('c', Team.A);
+    lobby.join({ code: 'ABCDEF', nick: 'Di', key: 'd' });
+    chooseAll(lobby);
+
+    const addressed = lobby.start('h', 7, TOKENS, 0);
+
+    expect(addressed).toEqual([{ key: 'h', msg: { t: ServerMessageType.Refused, reason: WAITING_TEAMS_MSG } }]);
+    expect(lobby.duel('ABCDEF')).toBeUndefined();
+  });
+
+  it('[RM-02] refuse le lancement tant qu\'un des quatre joueurs n\'a pas choisi son bâtisseur', () => {
+    const lobby = fourPlayerRoom();
+    lobby.choose('h', 'forge');
+    lobby.choose('c', 'sylve');
+    lobby.choose('g', 'bastion');
+
+    const addressed = lobby.start('h', 7, TOKENS, 0);
+
+    expect(addressed).toEqual([{ key: 'h', msg: { t: ServerMessageType.Refused, reason: WAITING_BUILDERS_MSG } }]);
+    expect(lobby.duel('ABCDEF')).toBeUndefined();
+  });
+
+  it('[CU-03] annonce à tout le salon qui a choisi son bâtisseur, sans dire lequel', () => {
+    const lobby = fourPlayerRoom();
+
+    const addressed = lobby.choose('c', 'sylve');
+
+    const msg = {
+      t: ServerMessageType.TeamRoom,
+      host: 'Ada',
+      map: MAP_SPIRAL,
+      difficulty: 'hard',
+      teams: {
+        a: [{ nick: 'Ada', picked: false }, { nick: 'Cy', picked: true }],
+        b: [{ nick: 'Bob', picked: false }, { nick: 'Di', picked: false }],
+      },
+      waiting: [],
+    };
+    expect(addressed).toHaveLength(4);
+    for (const key of ['h', 'g', 'c', 'd']) {
+      expect(addressed).toContainEqual({ key, msg });
+    }
+    expect(JSON.stringify(addressed)).not.toContain('sylve');
+  });
+
+  it('[CU-06] laisse chacun des deux absents reprendre sa place avec son jeton', () => {
+    const lobby = fourPlayerRoom();
+    chooseAll(lobby);
+    lobby.start('h', 7, TOKENS, 0);
+    lobby.duel('ABCDEF')!.advance(5_000);
+    lobby.leave('c', 6_000);
+    lobby.leave('d', 7_000);
+
+    const second = lobby.rejoin({ code: 'ABCDEF', token: 't3', key: 'd2' }, 8_000);
+
+    expect(second.some((a) => a.msg.t === ServerMessageType.Refused)).toBe(false);
+    expect(second.filter((a) => a.key === 'd2').map((a) => a.msg)).toContainEqual(
+      expect.objectContaining({ t: ServerMessageType.Thawed, seat: 3 }),
+    );
+
+    const first = lobby.rejoin({ code: 'ABCDEF', token: 't1', key: 'c2' }, 9_000);
+
+    expect(first.some((a) => a.msg.t === ServerMessageType.Refused)).toBe(false);
+    expect(first.filter((a) => a.key === 'c2').map((a) => a.msg)).toContainEqual(
+      expect.objectContaining({ t: ServerMessageType.Thawed, seat: 1 }),
+    );
+    for (const key of ['h', 'c2', 'g', 'd2']) {
+      expect(first.filter((a) => a.key === key).map((a) => a.msg.t)).toContain(ServerMessageType.Thawed);
+    }
+  });
+
+  it('[CU-02] laisse l\'hôte passer en équipe B et lui donne le siège de son rang d\'arrivée au lancement', () => {
+    const lobby = teamsRoom();
+    lobby.join({ code: 'ABCDEF', nick: 'Bob', key: 'g' });
+    lobby.pickTeam('g', Team.A);
+    lobby.pickTeam('h', Team.B);
+    lobby.join({ code: 'ABCDEF', nick: 'Cy', key: 'c' });
+    lobby.pickTeam('c', Team.A);
+    lobby.join({ code: 'ABCDEF', nick: 'Di', key: 'd' });
+    lobby.pickTeam('d', Team.B);
+    chooseAll(lobby);
+
+    const addressed = lobby.start('h', 7, TOKENS, 0);
+
+    const seatOf = (key: string) => (addressed.find((a) => a.key === key)!.msg as { seat: number }).seat;
+    expect(addressed).toHaveLength(4);
+    expect(['g', 'c', 'h', 'd'].map(seatOf)).toEqual([0, 1, 2, 3]);
   });
 });

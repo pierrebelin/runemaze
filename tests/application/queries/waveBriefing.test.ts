@@ -66,8 +66,8 @@ describe('waveBriefing', () => {
     const w = newDuelWorld();
     const without = waveBriefing(w);
 
-    dispatch(w, { c: CommandType.Receive, creep: 'wolf' });
-    dispatch(w, { c: CommandType.Receive, creep: 'rat' });
+    dispatch(w, { c: CommandType.Receive, creep: 'wolf', from: 0 });
+    dispatch(w, { c: CommandType.Receive, creep: 'rat', from: 0 });
 
     expect(w.sends).toHaveLength(2);
     expect(waveBriefing(w)).toEqual(without);

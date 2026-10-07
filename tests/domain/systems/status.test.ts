@@ -250,4 +250,25 @@ describe('status', () => {
 
     expect(c.sprint).toBe(1);
   });
+
+  it('[RM-01] l\'Hydre regagne 0,5 % de ses PV max en une seconde quand elle est blessée', () => {
+    const w = newWorld();
+    const c = spawnCreep(w, 'hydra', 0);
+    c.hp = c.maxHp / 2;
+    const hp0 = c.hp;
+
+    advance(w, 1);
+
+    expect((c.hp - hp0) / c.maxHp).toBeCloseTo(0.005, 5);
+  });
+
+  it('[RM-01] l\'Hydre ne dépasse jamais ses PV max quand elle régénère à pleine vie', () => {
+    const w = newWorld();
+    const c = spawnCreep(w, 'hydra', 0);
+    c.hp = c.maxHp;
+
+    advance(w, 1);
+
+    expect(c.hp).toBe(c.maxHp);
+  });
 });

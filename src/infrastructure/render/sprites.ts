@@ -797,6 +797,26 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
     bolt(p.ctx, p.cx - 0.35, p.top - 0.15, p.cx + 0.35, p.top + 0.1, STORM.glow, p.time);
   },
 
+  dispeller: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.4, STORM.dark);
+    p.ctx.strokeStyle = STORM.glow;
+    p.ctx.lineWidth = 0.06;
+    circle(p.ctx, p.cx, p.top, 0.3 + 0.05 * pulse(p, 3));
+    p.ctx.stroke();
+    disc(p.ctx, p.cx, p.top, 0.1, STORM.glow);
+  },
+  greatdispeller: (p) => {
+    aura(p, '169, 140, 240', 0.8);
+    disc(p.ctx, p.cx, p.top, 0.5, STORM.dark);
+    p.ctx.strokeStyle = PAL.gold;
+    p.ctx.lineWidth = 0.06;
+    for (const r of [0.2, 0.34 + 0.05 * pulse(p, 3)]) {
+      circle(p.ctx, p.cx, p.top, r);
+      p.ctx.stroke();
+    }
+    disc(p.ctx, p.cx, p.top, 0.1, STORM.glow);
+  },
+
   // Venin
   venom: (p) => {
     cauldron(p, VENOM.main);

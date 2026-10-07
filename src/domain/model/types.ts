@@ -35,6 +35,8 @@ export interface AttackDef {
   stun?: { duration: number };
   /** Montée en puissance : bonus de vitesse d'attaque plafonné à `max`. */
   rampUp?: { max: number };
+  /** Part des dégâts magiques infligée quand même aux immunisés à la magie. */
+  dispel?: number;
 }
 
 export interface TowerDef {
@@ -242,6 +244,7 @@ export enum CommandType {
   Gleaner = 'gleaner',
   Gate = 'gate',
   ReserveLoss = 'reserveLoss',
+  Resign = 'resign',
 }
 
 export type Command =
@@ -250,10 +253,11 @@ export type Command =
   | { c: CommandType.Sell; tower: number }
   | { c: CommandType.Target; tower: number; mode: TargetMode }
   | { c: CommandType.Send; creep: string }
-  | { c: CommandType.Receive; creep: string }
+  | { c: CommandType.Receive; creep: string; from: number }
   | { c: CommandType.Gleaner }
   | { c: CommandType.Gate; upgrade: GateUpgrade }
-  | { c: CommandType.ReserveLoss; lives: number };
+  | { c: CommandType.ReserveLoss; lives: number }
+  | { c: CommandType.Resign };
 
 export type Result = { ok: true; id?: number } | { ok: false; reason: string };
 
@@ -262,6 +266,6 @@ export interface BuilderDef {
   name: string;
   style: string;
   weakness: string;
-  roots: [string, string];
+  roots: string[];
   hybrids: [string, string];
 }

@@ -1,6 +1,6 @@
 import type { Difficulty, MapDef } from '../../domain/model/types';
 import { snapshot } from '../../domain/model/snapshot';
-import { DUEL_CODE_ALPHABET, Mode, ServerMessage, ServerMessageType } from './protocol';
+import { DUEL_CODE_ALPHABET, Mode, ServerMessage, ServerMessageType, Team } from './protocol';
 import { CODE_TAKEN_MSG, Duel, GAME_OVER_MSG, Seat } from './duel';
 
 export { DUEL_CODE_ALPHABET };
@@ -14,9 +14,16 @@ export function nickname(raw: string, fallback: string): string {
   return trimmed === '' ? fallback : trimmed.slice(0, 12);
 }
 
+interface Member {
+  nick: string;
+  key: string;
+  builder?: string;
+  team?: Team;
+}
+
+/** `members[0]` est l'hôte, dans l'ordre d'arrivée. */
 interface Room {
-  host: { nick: string; key: string; builder?: string };
-  guest?: { nick: string; key: string; builder?: string };
+  members: Member[];
   map: MapDef;
   difficulty: Difficulty;
   mode: Mode;
@@ -29,22 +36,45 @@ export interface Addressed {
 
 /** `picked` dit qui a choisi, jamais quoi : le choix reste caché jusqu'au lancement. */
 function roomMessage(room: Room): ServerMessage {
+  const [host, guest] = room.members;
   return {
     t: ServerMessageType.Room,
-    host: room.host.nick,
-    guest: room.guest?.nick ?? null,
+    host: host.nick,
+    guest: guest?.nick ?? null,
     map: room.map,
     difficulty: room.difficulty,
     mode: room.mode,
-    picked: { host: room.host.builder !== undefined, guest: room.guest?.builder !== undefined },
+    picked: { host: host.builder !== undefined, guest: guest?.builder !== undefined },
   };
+}
+
+function teamRoomMessage(room: Room): ServerMessage {
+  const team = (t: Team) => room.members.filter((m) => m.team === t).map((m) => ({ nick: m.nick, picked: m.builder !== undefined }));
+  return {
+    t: ServerMessageType.TeamRoom,
+    host: room.members[0].nick,
+    map: room.map,
+    difficulty: room.difficulty,
+    teams: { [Team.A]: team(Team.A), [Team.B]: team(Team.B) },
+    waiting: room.members.filter((m) => m.team === undefined).map((m) => m.nick),
+  };
+}
+
+function capacity(room: Room): number {
+  return room.mode === Mode.Teams ? 4 : 2;
+}
+
+/** Le salon à deux équipes diffuse sa composition, les autres modes leur message à deux places. */
+function broadcast(room: Room): Addressed[] {
+  const msg = room.mode === Mode.Teams ? teamRoomMessage(room) : roomMessage(room);
+  return room.members.map((m) => ({ key: m.key, msg }));
 }
 
 export class Lobby {
   private readonly rooms = new Map<string, Room>();
   private readonly duels = new Map<string, Duel>();
   /** Clés de connexion des sièges de chaque duel : le salon disparaît au lancement. */
-  private readonly seatKeys = new Map<string, [string, string]>();
+  private readonly seatKeys = new Map<string, string[]>();
 
   taken(code: string): boolean {
     return this.rooms.has(code) || this.duels.has(code);
@@ -54,66 +84,64 @@ export class Lobby {
     const freed = this.leaveRoom(req.key);
     const host = nickname(req.nick, 'Hôte');
     const mode = req.mode ?? Mode.Duel;
-    this.rooms.set(req.code, {
-      host: { nick: host, key: req.key },
+    const room: Room = {
+      members: [{ nick: host, key: req.key, ...(mode === Mode.Teams ? { team: Team.A } : {}) }],
       map: req.map,
       difficulty: req.difficulty,
       mode,
-    });
+    };
+    this.rooms.set(req.code, room);
     return [
       ...freed,
       { key: req.key, msg: { t: ServerMessageType.Hosted, code: req.code, host, map: req.map, difficulty: req.difficulty, mode } },
+      ...(mode === Mode.Teams ? [{ key: req.key, msg: teamRoomMessage(room) }] : []),
     ];
   }
 
   join(req: { code: string; nick: string; key: string }): Addressed[] {
     const room = this.rooms.get(req.code);
-    if (!room || room.guest || room.host.key === req.key) {
+    if (!room || room.members.length >= capacity(room) || room.members.some((m) => m.key === req.key)) {
       return [{ key: req.key, msg: { t: ServerMessageType.Refused, reason: CODE_TAKEN_MSG } }];
     }
     const freed = this.leaveRoom(req.key);
     const guest = nickname(req.nick, 'Invité');
-    room.guest = { nick: guest, key: req.key };
-    const msg = roomMessage(room);
-    return [
-      ...freed,
-      { key: room.host.key, msg },
-      { key: room.guest.key, msg },
-    ];
+    room.members.push({ nick: guest, key: req.key });
+    return [...freed, ...broadcast(room)];
   }
 
-  start(key: string, seed: number, tokens: [string, string], now: number): Addressed[] {
+  start(key: string, seed: number, tokens: string[], now: number): Addressed[] {
     for (const [code, room] of this.rooms) {
-      if (room.host.key !== key && room.guest?.key !== key) continue;
-      if (room.host.key !== key) {
+      const [host, guest] = room.members;
+      if (!room.members.some((m) => m.key === key)) continue;
+      if (host.key !== key) {
         return [{ key, msg: { t: ServerMessageType.Refused, reason: "Seul l'hôte peut lancer la partie." } }];
       }
-      if (!room.guest) {
+      if (room.mode === Mode.Teams) return this.startTeams(code, room, seed, tokens, now);
+      if (!guest) {
         return [{ key, msg: { t: ServerMessageType.Refused, reason: "En attente d'un adversaire." } }];
       }
-      const guest = room.guest;
-      if (!room.host.builder || !guest.builder) {
+      if (!host.builder || !guest.builder) {
         return [{ key, msg: { t: ServerMessageType.Refused, reason: 'En attente du choix des bâtisseurs.' } }];
       }
       const duel = new Duel(
-        { map: room.map, difficulty: room.difficulty, seed, nicks: [room.host.nick, guest.nick], tokens, builders: [room.host.builder, guest.builder], mode: room.mode },
+        { map: room.map, difficulty: room.difficulty, seed, nicks: [host.nick, guest.nick], tokens, builders: [host.builder, guest.builder], mode: room.mode },
         now,
       );
       this.rooms.delete(code);
       this.duels.set(code, duel);
-      this.seatKeys.set(code, [room.host.key, guest.key]);
+      this.seatKeys.set(code, [host.key, guest.key]);
       const hostSnap = snapshot(duel.worlds[Seat.Host]);
       const guestSnap = snapshot(duel.worlds[Seat.Guest]);
       return [
         {
-          key: room.host.key,
+          key: host.key,
           msg: {
             t: ServerMessageType.DuelStarted,
             code,
             seat: Seat.Host,
             token: tokens[Seat.Host],
             snapshot: hostSnap,
-            rival: { nick: guest.nick, snapshot: guestSnap },
+            others: [{ seat: Seat.Guest, nick: guest.nick, snapshot: guestSnap }],
           },
         },
         {
@@ -124,7 +152,7 @@ export class Lobby {
             seat: Seat.Guest,
             token: tokens[Seat.Guest],
             snapshot: guestSnap,
-            rival: { nick: room.host.nick, snapshot: hostSnap },
+            others: [{ seat: Seat.Host, nick: host.nick, snapshot: hostSnap }],
           },
         },
       ];
@@ -132,13 +160,56 @@ export class Lobby {
     return [{ key, msg: { t: ServerMessageType.Refused, reason: CODE_TAKEN_MSG } }];
   }
 
+  /** Sièges : équipe A dans l'ordre des membres (hôte d'abord), puis équipe B. */
+  private startTeams(code: string, room: Room, seed: number, tokens: string[], now: number): Addressed[] {
+    const key = room.members[0].key;
+    const seated = [Team.A, Team.B].flatMap((t) => room.members.filter((m) => m.team === t));
+    if (seated.length < 4) {
+      return [{ key, msg: { t: ServerMessageType.Refused, reason: 'En attente de deux joueurs par équipe.' } }];
+    }
+    if (seated.some((m) => !m.builder)) {
+      return [{ key, msg: { t: ServerMessageType.Refused, reason: 'En attente du choix des bâtisseurs.' } }];
+    }
+    const duel = new Duel(
+      { map: room.map, difficulty: room.difficulty, seed, nicks: seated.map((m) => m.nick), tokens, builders: seated.map((m) => m.builder!), mode: room.mode },
+      now,
+    );
+    this.rooms.delete(code);
+    this.duels.set(code, duel);
+    this.seatKeys.set(code, seated.map((m) => m.key));
+    const snaps = duel.worlds.map((w) => snapshot(w));
+    return seated.map((m, seat) => ({
+      key: m.key,
+      msg: {
+        t: ServerMessageType.DuelStarted,
+        code,
+        seat,
+        token: tokens[seat],
+        snapshot: snaps[seat],
+        others: seated.flatMap((o, s) => (s === seat ? [] : [{ seat: s, nick: o.nick, snapshot: snaps[s] }])),
+      },
+    }));
+  }
+
   choose(key: string, builder: string): Addressed[] {
     for (const room of this.rooms.values()) {
-      const seat = room.host.key === key ? room.host : room.guest?.key === key ? room.guest : undefined;
-      if (!seat) continue;
-      seat.builder = builder;
-      const msg = roomMessage(room);
-      return [room.host, ...(room.guest ? [room.guest] : [])].map((p) => ({ key: p.key, msg }));
+      const member = room.members.find((m) => m.key === key);
+      if (!member) continue;
+      member.builder = builder;
+      return broadcast(room);
+    }
+    return [];
+  }
+
+  pickTeam(key: string, team: Team): Addressed[] {
+    for (const room of this.rooms.values()) {
+      const member = room.members.find((m) => m.key === key);
+      if (!member || room.mode !== Mode.Teams) continue;
+      if (room.members.filter((m) => m !== member && m.team === team).length >= 2) {
+        return [{ key, msg: { t: ServerMessageType.Refused, reason: 'Cette équipe est complète.' } }];
+      }
+      member.team = team;
+      return broadcast(room);
     }
     return [];
   }
@@ -170,12 +241,12 @@ export class Lobby {
   rejoin(req: { code: string; token: string; key: string }, now: number): Addressed[] {
     const duel = this.duels.get(req.code);
     if (!duel) return [{ key: req.key, msg: { t: ServerMessageType.Refused, reason: GAME_OVER_MSG } }];
-    const seat = duel.lostSeat;
+    const seat = duel.lostSeatOf(req.token);
     const refused = [{ key: req.key, msg: { t: ServerMessageType.Refused, reason: CODE_TAKEN_MSG } as ServerMessage }];
     if (seat === undefined) return refused;
     const result = duel.back(seat, req.token, now);
     if (!Array.isArray(result)) return [{ key: req.key, msg: result }];
-    const keys: [string, string] = [...this.seatKeys.get(req.code)!];
+    const keys = [...this.seatKeys.get(req.code)!];
     keys[seat] = req.key;
     this.seatKeys.set(req.code, keys);
     return result.map((m) => ({ key: keys[m.seat], msg: m.msg }));
@@ -183,16 +254,14 @@ export class Lobby {
 
   private leaveRoom(key: string): Addressed[] {
     for (const [code, room] of this.rooms) {
-      if (room.host.key === key) {
+      const index = room.members.findIndex((m) => m.key === key);
+      if (index === -1) continue;
+      if (index === 0) {
         this.rooms.delete(code);
-        return room.guest ? [{ key: room.guest.key, msg: { t: ServerMessageType.Cancelled } }] : [];
+        return room.members.slice(1).map((m) => ({ key: m.key, msg: { t: ServerMessageType.Cancelled } }));
       }
-      if (room.guest?.key === key) {
-        room.guest = undefined;
-        return [
-          { key: room.host.key, msg: roomMessage(room) },
-        ];
-      }
+      room.members.splice(index, 1);
+      return broadcast(room);
     }
     return [];
   }

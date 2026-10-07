@@ -209,6 +209,11 @@ function handleMessage(ws: WebSocket, msg: NonNullable<ReturnType<typeof readCli
       dispatchAddressed(lobby.choose(key, msg.builder));
       break;
     }
+    case ClientMessageType.ChooseTeam: {
+      const key = keyBySocket.get(ws)!;
+      dispatchAddressed(lobby.pickTeam(key, msg.team));
+      break;
+    }
     case ClientMessageType.Leave: {
       const key = keyBySocket.get(ws)!;
       duelSeats.delete(ws);
@@ -228,7 +233,7 @@ function handleMessage(ws: WebSocket, msg: NonNullable<ReturnType<typeof readCli
     }
     case ClientMessageType.Start: {
       const key = keyBySocket.get(ws)!;
-      const addressed = lobby.start(key, seed(), [drawToken(), drawToken()], now);
+      const addressed = lobby.start(key, seed(), Array.from({ length: 4 }, drawToken), now);
       for (const a of addressed) {
         if (a.msg.t === ServerMessageType.DuelStarted) {
           const target = socketByKey.get(a.key);

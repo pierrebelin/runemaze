@@ -43,6 +43,47 @@ describe('upgrade — Garde', () => {
   });
 });
 
+describe('upgrade — Dissipateur', () => {
+  it('[RM-02] améliore le Dissipateur en Grand dissipateur pour 70 or', () => {
+    const w = newWorld('normal', 42, undefined, 'arcanists');
+    w.gold = 1000;
+    const d = dispatch(w, { c: CommandType.Build, def: 'dispeller', x: 10, y: 8 }) as { ok: true; id: number };
+    expect(d.ok).toBe(true);
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Upgrade, tower: d.id, def: 'greatdispeller' });
+
+    expect(r.ok).toBe(true);
+    expect(w.towerById.get(d.id)!.def.id).toBe('greatdispeller');
+    expect(gold - w.gold).toBe(70);
+  });
+
+  it('[RM-02] transforme un mur en Dissipateur quand le bâtisseur est Arcanistes', () => {
+    const w = newWorld('normal', 42, undefined, 'arcanists');
+    const wall = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y: 8 }) as { ok: true; id: number };
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Upgrade, tower: wall.id, def: 'dispeller' });
+
+    expect(r.ok).toBe(true);
+    expect(w.towerById.get(wall.id)!.def.id).toBe('dispeller');
+    expect(gold - w.gold).toBe(22);
+  });
+
+  it('[RM-02] refuse de transformer un mur en Dissipateur quand le bâtisseur n\'est pas Arcanistes', () => {
+    const w = newWorld('normal', 42, undefined, 'forge');
+    w.gold = 1000;
+    const wall = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y: 8 }) as { ok: true; id: number };
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Upgrade, tower: wall.id, def: 'dispeller' });
+
+    expect(r).toEqual({ ok: false, reason: 'Amélioration indisponible.' });
+    expect(w.gold).toBe(gold);
+    expect(w.towerById.get(wall.id)!.def.id).toBe('wall');
+  });
+});
+
 describe('upgrade — infusion', () => {
   it("[RM-05] propose le Dard corrosif depuis une tour acide", () => {
     const w = newWorld('normal', 42, undefined, 'sylve');

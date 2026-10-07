@@ -178,6 +178,28 @@ describe('combat', () => {
     expect(w.offspring).toHaveLength(0);
   });
 
+  it('[RM-03] un coup de 20 du Dissipateur inflige environ 4 dégâts à un Spectre', () => {
+    const w = newWorld();
+    const c = spawnCreep(w, 'wraith', 0);
+    const hp0 = c.hp;
+
+    hitCreep(w, 1, 'dispeller', TOWERS.dispeller.attack!, c, 20);
+
+    expect(hp0 - c.hp).toBeCloseTo(20 * 0.3 * damageMultiplier('magic', { ...c.def, magicImmune: false }), 6);
+    expect(hp0 - c.hp).toBeGreaterThan(3.9);
+    expect(hp0 - c.hp).toBeLessThan(4.1);
+  });
+
+  it('[RM-04] une Tour de foudre ne retire aucun PV à un Spectre quand elle tire sur lui', () => {
+    const w = newWorld();
+    const c = spawnCreep(w, 'wraith', 0);
+    const hp0 = c.hp;
+
+    hitCreep(w, 1, 'storm', TOWERS.storm.attack!, c, 20);
+
+    expect(c.hp).toBe(hp0);
+  });
+
   it('[RM-14] fait naître 2 têtes quand l\'Hydre passe sous 75 % de ses PV max', () => {
     const w = newWorld();
     const hydra = spawnCreep(w, 'hydra', 0);

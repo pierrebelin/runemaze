@@ -1,6 +1,7 @@
 import { baseHp, bountyFor, CAMPAIGN_LENGTH, clearBonus, CREEPS, DIFFICULTY, waveAt } from '../catalog/creeps';
 import type { World } from '../model/World';
 import { SEND_GAP, sendDelay } from '../rules/sendTiming';
+import { waveReward } from '../rules/waveReward';
 import type { Creep, CreepDef } from '../model/types';
 import { BreakerPhase, GameEventType, Phase } from '../model/types';
 
@@ -31,7 +32,7 @@ export function launchWave(world: World): void {
     pending += g.count;
   }
   // Les envois reçus sortent répartis sur la durée de la vague, dans l'ordre d'achat.
-  world.sends.forEach((creep, k) => {
+  world.sends.forEach(({ creep }, k) => {
     const timer = sendDelay(k, world.sends.length, waveDuration(index));
     world.spawners.push({ wave: index, creep, left: 1, interval: SEND_GAP, timer });
   });
@@ -109,9 +110,7 @@ export function updateWaves(world: World, dt: number): void {
     if (left > 0) continue;
     world.pending.delete(wave);
     if (world.phase === Phase.Defeat) continue;
-    const bonus = clearBonus(wave);
-    const interest = world.duel ? 0 : Math.min(Math.floor(world.gold * 0.04), 20 + wave * 2);
-    const income = world.duel ? world.income : 0;
+    const { bonus, interest, income } = waveReward(clearBonus(wave), wave, world.gold, world.income, world.duel);
     world.addGold(bonus + interest + income);
     // Remparts : vies rendues, jamais au-delà des vies de départ.
     if (world.gate.ramparts > 0) {

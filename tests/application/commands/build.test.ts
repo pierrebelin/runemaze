@@ -113,6 +113,29 @@ describe('build', () => {
     expect(w.towers).toHaveLength(0);
   });
 
+  it('[RM-02] construit un Dissipateur pour 25 or quand le bâtisseur est Arcanistes', () => {
+    const w = newWorld('normal', 42, MAP_CROSSING, 'arcanists');
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'dispeller', x: 10, y: 8 }) as { ok: true; id: number };
+
+    expect(r.ok).toBe(true);
+    expect(w.towers).toHaveLength(1);
+    expect(w.towerById.get(r.id)!.def.id).toBe('dispeller');
+    expect(gold - w.gold).toBe(25);
+  });
+
+  it('[RM-02] refuse de construire un Dissipateur quand le bâtisseur n\'est pas Arcanistes', () => {
+    const w = newWorld('normal', 42, MAP_CROSSING, 'bastion');
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'dispeller', x: 10, y: 8 });
+
+    expect(r).toEqual({ ok: false, reason: 'Construction inconnue.' });
+    expect(w.gold).toBe(gold);
+    expect(w.towers).toHaveLength(0);
+  });
+
   it('[RM-10] refuse une Garde qui fermerait le passage', () => {
     const w = newWorld('normal', 42, MAP_GATED_STONES, 'bastion');
     w.gold = 10_000;

@@ -11,7 +11,7 @@ const C: CreepDef[] = [
   { id: 'wyvern', name: 'Vouivre', plural: 'Vouivres', hpFactor: 1.05, speed: 1.9, armorType: 'medium', armor: 3, air: true, leak: 1, radius: 0.38, bountyFactor: 1.2 },
   { id: 'wraith', name: 'Spectre', plural: 'Spectres', hpFactor: 0.95, speed: 2.1, armorType: 'medium', armor: 2, magicImmune: true, leak: 1, radius: 0.33, bountyFactor: 1.1, send: { cost: 60, income: 12 } },
   { id: 'ogre', name: 'Ogre chef de guerre', plural: 'Ogre chef de guerre', hpFactor: 22, speed: 1.35, armorType: 'hero', armor: 4, boss: true, leak: 5, radius: 0.6, bountyFactor: 18, fury: { below: 0.5, mult: 1.5 } },
-  { id: 'hydra', name: 'Hydre des marais', plural: 'Hydre des marais', hpFactor: 24, speed: 1.3, armorType: 'hero', armor: 6, regen: 0.012, boss: true, leak: 5, radius: 0.65, bountyFactor: 22, brood: { creep: 'hydrahead', count: 2, below: [0.75, 0.5, 0.25] } },
+  { id: 'hydra', name: 'Hydre des marais', plural: 'Hydre des marais', hpFactor: 24, speed: 1.3, armorType: 'hero', armor: 6, regen: 0.005, boss: true, leak: 5, radius: 0.65, bountyFactor: 22, brood: { creep: 'hydrahead', count: 2, below: [0.75, 0.5, 0.25] } },
   { id: 'hydrahead', name: 'Tête d\'Hydre', plural: 'Têtes d\'Hydre', hpFactor: 1.5, speed: 2, armorType: 'medium', armor: 3, leak: 1, radius: 0.3, bountyFactor: 0.5 },
   { id: 'ashlord', name: 'Seigneur des cendres', plural: 'Seigneur des cendres', hpFactor: 30, speed: 1.25, armorType: 'hero', armor: 8, boss: true, leak: 10, radius: 0.72, bountyFactor: 30, breaker: { charge: 2, armed: 5, cooldown: 12, range: 4 } },
   { id: 'runeguard', name: 'Garde runique', plural: 'Gardes runiques', hpFactor: 1, speed: 1.9, armorType: 'heavy', armor: 3, leak: 1, radius: 0.38, bountyFactor: 1.2, shield: 4 },

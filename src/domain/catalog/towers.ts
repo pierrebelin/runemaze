@@ -9,7 +9,7 @@ const T: TowerDef[] = [
   {
     id: 'wall', name: 'Mur de pierre', family: 'wall', tier: 0, cost: 3,
     desc: "Bloc de labyrinthe bon marché. N'attaque pas, mais peut devenir n'importe quelle tour de base.",
-    upgrades: ['archer', 'cannon', 'frost', 'storm', 'venom', 'pylon', 'guard', 'bramble', 'gong', 'anvil'],
+    upgrades: ['archer', 'cannon', 'frost', 'storm', 'venom', 'pylon', 'guard', 'bramble', 'gong', 'anvil', 'dispeller'],
   },
 
   // Garde et Ronces : attaque de zone instantanée, frappe tout le sol à portée.
@@ -238,6 +238,20 @@ const T: TowerDef[] = [
     id: 'volatileprism', name: 'Prisme volatil', family: 'storm', tier: 3, cost: 55,
     desc: "Éclair qui rebondit sur 3 cibles ; tire plus vite tant qu'une cible reste à portée, jusqu'à +100 %.",
     attack: { type: 'magic', dmg: [20, 24], cooldown: 0.8, range: 4.5, projectileSpeed: 0, targets: 'both', chain: { bounces: 3, range: 2.5, decay: 0.8 }, rampUp: { max: 1 } },
+    upgrades: [],
+  },
+
+  // Dissipateur : magie qui blesse un peu les immunisés à la magie.
+  {
+    id: 'dispeller', name: 'Dissipateur', family: 'storm', tier: 1, cost: 25,
+    desc: 'Décharge magique instantanée. Blesse un peu les immunisés à la magie.',
+    attack: { type: 'magic', dmg: [20, 24], cooldown: 1, range: 5, projectileSpeed: 0, targets: 'both', dispel: 0.3 },
+    upgrades: ['greatdispeller'],
+  },
+  {
+    id: 'greatdispeller', name: 'Grand dissipateur', family: 'storm', tier: 2, cost: 70,
+    desc: 'Décharge magique instantanée, bien plus forte. Blesse un peu les immunisés à la magie.',
+    attack: { type: 'magic', dmg: [70, 80], cooldown: 1, range: 5, projectileSpeed: 0, targets: 'both', dispel: 0.3 },
     upgrades: [],
   },
 

@@ -107,7 +107,7 @@
   .rival-panel .rv-nick { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rival-panel .rv-lives { display: inline-flex; align-items: center; gap: 4px; }
   .rival-panel svg { width: 18px; height: 18px; flex: none; }
-  .rival-panel #rivalDetail { margin: 8px 0; color: var(--text-dim); }
+  .rival-panel [id^="rivalDetail"] { margin: 8px 0; color: var(--text-dim); }
   .rv-builder { margin: 0 0 8px; color: var(--text); }
   .rv-builder span { font: 500 12px var(--caps); color: var(--text-dim); letter-spacing: 0.03em; margin-right: 4px; }
   .rv-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -142,7 +142,7 @@
     position: absolute; z-index: 6; left: 50%; bottom: 20px; transform: translateX(-50%);
     background: rgba(20, 16, 11, 0.92); border: 1px solid var(--line); border-radius: 4px;
     padding: 6px 14px; font-size: 15px; pointer-events: none; opacity: 0; transition: opacity 0.2s;
-    max-width: calc(100% - 32px); text-align: center;
+    max-width: calc(100% - 32px); text-align: center; white-space: pre-line;
   }
   .toast.show { opacity: 1; }
   .toast.bad { border-color: var(--bad); color: #ffd2c8; }
@@ -173,6 +173,9 @@
   .tag.bad { border-color: #7a3a2c; color: #f0a594; }
   .tag.air { border-color: #3c6f8c; color: var(--frost); }
 
+  .cardcol { display: flex; flex-direction: column; gap: 6px; }
+  .wallet { display: flex; gap: 8px; flex-wrap: wrap; }
+  .wallet .detail { right: auto; left: 0; top: auto; bottom: calc(100% + 6px); }
   .card { display: grid; grid-template-columns: repeat(4, 56px); grid-auto-rows: 56px; gap: 5px; }
   .slot {
     position: relative; background: var(--slot); border: 1px solid var(--line); border-radius: 3px; padding: 0; cursor: pointer;
@@ -312,14 +315,6 @@
 <div id="app">
   <header class="bar" id="bar">
     <span class="brand">Tower Defense</span>
-    <span class="res" title="Or">
-      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="#e9b949" stroke="#8a6320" stroke-width="1.5"/><path d="M10 5.5v9M7.5 7.5h4a1.6 1.6 0 010 3.2h-3a1.6 1.6 0 000 3.2h4" fill="none" stroke="#8a6320" stroke-width="1.4"/></svg>
-      <b id="gold">0</b>
-    </span>
-    <span class="res" id="etherRes" title="Éther" hidden>
-      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2l6 8-6 8-6-8z" fill="#a98bf0" stroke="#4b3487" stroke-width="1.4"/><path d="M10 2v16M4 10h12" fill="none" stroke="#4b3487" stroke-width="0.9"/></svg>
-      <b id="ether">0</b>
-    </span>
     <span class="res" title="Vies">
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17s-7-4.3-7-9.2A3.8 3.8 0 0110 5.6a3.8 3.8 0 017 2.2C17 12.7 10 17 10 17z" fill="#d8553f" stroke="#6e2419" stroke-width="1.2"/></svg>
       <b id="lives">0</b>
@@ -341,6 +336,7 @@
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10L5 10H2z" fill="currentColor"/><path id="muteWave" d="M11 5.5a3.5 3.5 0 010 5M12.8 3.5a6 6 0 010 9" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
     </button>
     <button class="btn icon-btn" id="helpBtn" type="button" aria-label="Aide" title="Aide (H)">?</button>
+    <button class="btn" id="resignBtn" type="button">Quitter la partie</button>
   </header>
 
   <main class="stage" id="stage">
@@ -358,7 +354,19 @@
       <div id="unitText"></div>
     </section>
     <section class="info" id="info"></section>
-    <section class="card" id="card" aria-label="Commandes"></section>
+    <div class="cardcol">
+      <div class="wallet">
+        <span class="briefing" id="goldPouch" tabindex="0">
+          <span class="chip" id="goldChip"></span>
+          <span class="detail" id="goldDetail"></span>
+        </span>
+        <span class="briefing" id="etherPouch" tabindex="0" hidden>
+          <span class="chip" id="etherChip"></span>
+          <span class="detail" id="etherDetail">Éther produit par les glaneurs, dépensé en envois et en niveaux de porte.</span>
+        </span>
+      </div>
+      <section class="card" id="card" aria-label="Commandes"></section>
+    </div>
   </footer>
 </div>
 <script type="module" src="/src/main.ts"></script>
