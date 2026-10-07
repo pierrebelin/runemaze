@@ -11,6 +11,7 @@ import { GATE, GLEANER } from '../domain/catalog/ether';
 import { gateLevelCost, gateLevelIncome, refundValue } from '../domain/rules/pricing';
 import { creepSpeed } from '../domain/rules/speed';
 import { Mode, Team, Verdict } from '../application/online/protocol';
+import type { Biome } from '../domain/model/types';
 import type { WaveReward } from '../domain/rules/waveReward';
 
 const MODE_LABEL: Record<Mode, string> = {
@@ -18,6 +19,12 @@ const MODE_LABEL: Record<Mode, string> = {
   [Mode.Coop]: 'Coopération',
   [Mode.Teams]: '2 contre 2',
 };
+
+const BIOME_LABEL: Record<Biome, string> = { earth: 'Terre', snow: 'Neige', space: 'Espace' };
+
+export function biomeLabel(biome: Biome): string {
+  return BIOME_LABEL[biome];
+}
 
 export function modeLabel(mode: Mode): string {
   return MODE_LABEL[mode];

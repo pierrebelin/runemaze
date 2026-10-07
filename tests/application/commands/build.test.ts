@@ -3,7 +3,7 @@ import { dispatch } from '../../../src/application/dispatch';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { newWorld } from '../../support/helpers';
 import { MAP_GATED_STONES, MAP_LOOP, MAP_TWO_STONES } from '../../support/maps';
-import { MAP_CROSSING } from '../../../src/domain/catalog/map';
+import { MAP_CROSSING } from '../../support/maps';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('build', () => {

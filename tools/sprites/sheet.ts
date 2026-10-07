@@ -3,7 +3,8 @@
 import { TOWERS } from '../../src/domain/catalog/towers';
 import { CREEPS } from '../../src/domain/catalog/creeps';
 import { BUILDERS } from '../../src/domain/catalog/builders';
-import { MAPS, MAP_CROSSING } from '../../src/domain/catalog/map';
+import { BIOMES, MAP_RECIPE } from '../../src/domain/catalog/map';
+import { drawMap } from '../../src/domain/rules/mapDraw';
 import { builderTowers } from '../../src/domain/rules/builder';
 import { World } from '../../src/domain/model/World';
 import { spawnCreep } from '../../src/domain/systems/waves';
@@ -13,6 +14,7 @@ import { Effects } from '../../src/infrastructure/render/Effects';
 import { fittedView } from '../../src/infrastructure/render/commonWorld';
 import { drawTower, drawCreep, type CreepLike } from '../../src/infrastructure/render/sprites';
 import { PAL, FAMILY_COLOR, CREEP_STYLE } from '../../src/infrastructure/render/palette';
+import { biomeLabel } from '../../src/presentation/describe';
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = (sel: string) => document.querySelector(sel) as HTMLElement;
@@ -45,8 +47,8 @@ function cellCanvas(wCells: number, hCells: number, px: number): { canvas: HTMLC
 
 // ─── Palette ────────────────────────────────────────────────────────────────
 const UI = {
-  ground: '#14110d', panel: '#1d1914', 'panel-2': '#262019', slot: '#211c16', line: '#4a3d29', 'line-soft': '#342c20',
-  bronze: '#b98d4c', gold: '#e9b949', text: '#efe3c4', 'text-dim': '#b3a78b', 'text-faint': '#857a63',
+  ground: '#111214', panel: '#1a1b1e', 'panel-2': '#222428', slot: '#1e1f23', line: '#3d4047', 'line-soft': '#2b2d32',
+  accent: '#d9dce1', 'accent-dim': '#8d939c', gold: '#e9b949', text: '#e7e8ea', 'text-dim': '#a8acb3', 'text-faint': '#777c84',
   good: '#8cc464', bad: '#e0664f', frost: '#8fd3f2',
 };
 const FAMILY_LABEL: Record<string, string> = { wall: 'Mur', archer: 'Archer', cannon: 'Canon', frost: 'Givre', storm: 'Foudre', venom: 'Venin' };
@@ -111,12 +113,13 @@ function mapBoard(host: HTMLElement, world: World, fx: Effects, width: number, v
 
 {
   const host = $('#maps');
-  for (const map of MAPS) {
+  for (const biome of BIOMES) {
+    const map = drawMap(7, biome, MAP_RECIPE);
     const fig = el('figure', 'map');
     const frame = el('div', 'mapframe');
     fig.append(frame);
     const cap = el('figcaption');
-    cap.append(el('strong', '', map.name), el('span', '', `${map.width} × ${map.height} cases`));
+    cap.append(el('strong', '', biomeLabel(biome)), el('span', '', `${map.width} × ${map.height} cases`));
     fig.append(cap);
     host.append(fig);
     const world = new World({ map, difficulty: 'normal', seed: 7, builder: 'bastion' });
@@ -270,7 +273,7 @@ function creepTile(c: CreepLike, label: string, meta: string, px = 52, cells = 2
 
 // ─── Scène vivante : projectiles et effets ──────────────────────────────────
 {
-  const world = new World({ map: MAP_CROSSING, difficulty: 'easy', seed: 42, builder: 'bastion', lives: 1e9 });
+  const world = new World({ map: drawMap(7, 'earth', MAP_RECIPE), difficulty: 'easy', seed: 42, builder: 'bastion', lives: 1e9 });
   world.nextWaveIn = 1e9;
   const place = (def: string, x: number, y: number) => {
     const d = TOWERS[def];

@@ -1,11 +1,11 @@
 import { Rng } from '../../domain/Rng';
 import { TOWERS } from '../../domain/catalog/towers';
 import type { World } from '../../domain/model/World';
-import type { Projectile } from '../../domain/model/types';
+import type { Biome, Projectile } from '../../domain/model/types';
 import { fittedView, MAX_ZOOM, type MapPlacement, type WorldView } from './commonWorld';
 import { BANNER_LIFE, type Effects } from './Effects';
-import { FAMILY_COLOR, PAL } from './palette';
-import { drawCreep, drawTower } from './sprites';
+import { BIOME_PALETTE, FAMILY_COLOR, PAL, type TerrainPalette } from './palette';
+import { decorSeed, drawCreep, drawTower } from './sprites';
 
 export interface ViewState {
   buildDef: string | null;
@@ -22,7 +22,7 @@ const BODY_FONT = '"Alegreya Sans", "Gill Sans", "Trebuchet MS", sans-serif';
 /** Une carte de la partie : son monde, sa place dans le monde commun, ses effets et son aperçu. */
 export interface Board { world: World; place: MapPlacement; fx: Effects; view: ViewState; nick: string }
 
-interface Terrain { canvas: HTMLCanvasElement; mapId: string; scale: number; dpr: number }
+interface Terrain { canvas: HTMLCanvasElement; mapId: string; biome: Biome; scale: number; dpr: number }
 interface Trail { canvas: HTMLCanvasElement; key: string }
 interface Facing { x: number; y: number; dx: number; dy: number }
 
@@ -68,9 +68,10 @@ export class Renderer {
   /** Terrain construit une fois à la résolution du zoom maximal ; le zoom courant le réduit au dessin. */
   private terrainOf(index: number, world: World, place: MapPlacement): Terrain {
     const scale = MAX_ZOOM * fittedView(place, { w: this.cssW, h: this.cssH }).scale;
+    const biome = world.map.biome ?? 'earth';
     let t = this.terrains[index];
-    if (!t || t.mapId !== world.map.id || t.scale !== scale || t.dpr !== this.dpr) {
-      t = { canvas: this.buildTerrain(world, scale), mapId: world.map.id, scale, dpr: this.dpr };
+    if (!t || t.mapId !== world.map.id || t.biome !== biome || t.scale !== scale || t.dpr !== this.dpr) {
+      t = { canvas: this.buildTerrain(world, scale), mapId: world.map.id, biome, scale, dpr: this.dpr };
       this.terrains[index] = t;
     }
     return t;
@@ -78,7 +79,7 @@ export class Renderer {
 
   private trailOf(index: number, world: World, terrain: Terrain): HTMLCanvasElement {
     const route = world.groundRoute();
-    const key = `${terrain.mapId}|${terrain.scale}|${terrain.dpr}|${route.map((leg) => leg.join(',')).join(';')}`;
+    const key = `${terrain.mapId}|${terrain.biome}|${terrain.scale}|${terrain.dpr}|${route.map((leg) => leg.join(',')).join(';')}`;
     let t = this.trails[index];
     if (!t || t.key !== key) {
       t = { canvas: this.buildTrail(world, route, terrain.scale), key };
@@ -153,16 +154,17 @@ export class Renderer {
     const ctx = c.getContext('2d')!;
     const s = this.dpr * scale;
     ctx.setTransform(s, 0, 0, s, 0, 0);
-    const rng = new Rng(20240611);
+    const rng = new Rng(decorSeed(world.map));
+    const pal = BIOME_PALETTE[world.map.biome ?? 'earth'];
 
     // Herbe : fond uni, puis taches douces pour casser la grille.
-    ctx.fillStyle = PAL.grassB;
+    ctx.fillStyle = pal.ground;
     ctx.fillRect(0, 0, g.w, g.h);
     for (let i = 0; i < 220; i++) {
       const x = rng.next() * g.w;
       const y = rng.next() * g.h;
       const r = 0.8 + rng.next() * 2.6;
-      ctx.fillStyle = rng.next() < 0.5 ? 'rgba(78, 100, 56, 0.22)' : 'rgba(34, 46, 26, 0.25)';
+      ctx.fillStyle = rng.next() < 0.5 ? pal.groundSpots[0] : pal.groundSpots[1];
       ctx.beginPath();
       ctx.ellipse(x, y, r, r * (0.6 + rng.next() * 0.4), rng.next() * 3, 0, Math.PI * 2);
       ctx.fill();
@@ -173,7 +175,7 @@ export class Renderer {
         const k = g.kind[g.idx(x, y)];
         if (k !== 'road' && k !== 'spawn' && k !== 'exit' && k !== 'checkpoint') continue;
         for (let j = 0; j < 3; j++) {
-          ctx.fillStyle = rng.next() < 0.5 ? PAL.dirt : PAL.dirtDark;
+          ctx.fillStyle = rng.next() < 0.5 ? pal.dirt : pal.dirtDark;
           ctx.beginPath();
           ctx.ellipse(x + 0.5 + (rng.next() - 0.5) * 0.5, y + 0.5 + (rng.next() - 0.5) * 0.5, 0.75, 0.6, rng.next() * 3, 0, Math.PI * 2);
           ctx.fill();
@@ -187,7 +189,7 @@ export class Renderer {
       const k = g.kind[g.idx(Math.floor(x), Math.floor(y))];
       if (k !== 'build') continue;
       if (rng.next() < 0.85) {
-        ctx.strokeStyle = rng.next() < 0.5 ? PAL.tuft : '#2f3f25';
+        ctx.strokeStyle = rng.next() < 0.5 ? pal.tuft : pal.tuftDark;
         ctx.lineWidth = 0.04;
         ctx.beginPath();
         ctx.moveTo(x, y);
@@ -207,18 +209,18 @@ export class Renderer {
       for (let x = 0; x < g.w; x++) {
         if (g.kind[g.idx(x, y)] !== 'rock') continue;
         const border = x === 0 || y === 0 || x === g.w - 1 || y === g.h - 1;
-        ctx.fillStyle = border ? PAL.cliff : PAL.rockDark;
+        ctx.fillStyle = border ? pal.cliff : pal.rockDark;
         ctx.fillRect(x - 0.02, y - 0.02, 1.04, 1.04);
         const n = 2 + rng.int(2);
         for (let k = 0; k < n; k++) {
           const rx = x + 0.2 + rng.next() * 0.6;
           const ry = y + 0.2 + rng.next() * 0.6;
           const rr = 0.25 + rng.next() * 0.25;
-          ctx.fillStyle = border ? '#3a352c' : PAL.rock;
+          ctx.fillStyle = border ? '#353437' : pal.rock;
           ctx.beginPath();
           ctx.ellipse(rx, ry, rr, rr * 0.8, rng.next(), 0, Math.PI * 2);
           ctx.fill();
-          ctx.fillStyle = border ? 'rgba(120,110,90,0.25)' : PAL.rockLight;
+          ctx.fillStyle = border ? 'rgba(120,110,90,0.25)' : pal.rockLight;
           ctx.beginPath();
           ctx.ellipse(rx - rr * 0.25, ry - rr * 0.3, rr * 0.45, rr * 0.25, 0, 0, Math.PI * 2);
           ctx.fill();
@@ -261,7 +263,7 @@ export class Renderer {
     ctx.drawImage(this.trailOf(index, w, terrain), ...rect);
     cellSpace();
 
-    this.drawLandmarks(g, realTime);
+    this.drawLandmarks(g, BIOME_PALETTE[w.map.biome ?? 'earth'], realTime);
 
     if (view.buildDef) {
       ctx.strokeStyle = 'rgba(239, 227, 196, 0.07)';
@@ -405,7 +407,7 @@ export class Renderer {
     }
   }
 
-  private drawLandmarks(g: World['grid'], t: number): void {
+  private drawLandmarks(g: World['grid'], pal: TerrainPalette, t: number): void {
     const ctx = this.ctx;
     // Portail d'apparition : faille violacée tourbillonnante.
     const sp = g.regionCenter(g.spawnCells);
@@ -441,7 +443,7 @@ export class Renderer {
         ctx.fillStyle = PAL.gold;
         ctx.fillRect(rx - 0.07, ry - 0.12, 0.14, 0.24);
       }
-      ctx.fillStyle = PAL.stone;
+      ctx.fillStyle = pal.stone;
       ctx.beginPath();
       ctx.moveTo(cp.x - 0.35, cp.y + 0.5);
       ctx.lineTo(cp.x - 0.25, cp.y - 0.6);
@@ -472,13 +474,13 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(ex.x, ex.y, 1.5, 1.8, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = PAL.stoneDark;
+    ctx.fillStyle = pal.stoneDark;
     ctx.fillRect(ex.x - 1.3, ex.y - 1.4, 0.4, 2.6);
     ctx.fillRect(ex.x + 0.9, ex.y - 1.4, 0.4, 2.6);
     ctx.beginPath();
     ctx.arc(ex.x, ex.y - 1.3, 1.3, Math.PI, 0);
     ctx.lineWidth = 0.35;
-    ctx.strokeStyle = PAL.stoneDark;
+    ctx.strokeStyle = pal.stoneDark;
     ctx.stroke();
     ctx.fillStyle = 'rgba(25, 10, 8, 0.7)';
     ctx.beginPath();
@@ -560,13 +562,13 @@ export class Renderer {
     const ang = Math.atan2(p.ty - p.y, p.tx - p.x);
     switch (p.family) {
       case 'archer': {
-        ctx.strokeStyle = '#e8d6b0';
+        ctx.strokeStyle = '#dedfe2';
         ctx.lineWidth = 0.05;
         ctx.beginPath();
         ctx.moveTo(p.x - Math.cos(ang) * 0.35, p.y - Math.sin(ang) * 0.35);
         ctx.lineTo(p.x, p.y);
         ctx.stroke();
-        ctx.fillStyle = p.crit ? PAL.gold : '#cfc6b5';
+        ctx.fillStyle = p.crit ? PAL.gold : '#c9c9cb';
         ctx.beginPath();
         ctx.arc(p.x, p.y, 0.05, 0, Math.PI * 2);
         ctx.fill();

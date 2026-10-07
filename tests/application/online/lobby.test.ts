@@ -3,7 +3,8 @@ import { DUEL_CODE_ALPHABET, duelCode, nickname, Lobby } from '../../../src/appl
 import { Mode, ServerMessageType, Team } from '../../../src/application/online/protocol';
 import { CODE_TAKEN_MSG, Seat } from '../../../src/application/online/duel';
 import { LOST_LIMIT_MS } from '../../../src/application/online/heldGame';
-import { MAP_SPIRAL } from '../../../src/domain/catalog/map';
+import { BIOMES } from '../../../src/domain/catalog/map';
+import { MAP_SPIRAL } from '../../support/maps';
 import { snapshot } from '../../../src/domain/model/snapshot';
 
 describe('lobby', () => {
@@ -942,5 +943,87 @@ describe('lobby', () => {
     const seatOf = (key: string) => (addressed.find((a) => a.key === key)!.msg as { seat: number }).seat;
     expect(addressed).toHaveLength(4);
     expect(['g', 'c', 'h', 'd'].map(seatOf)).toEqual([0, 1, 2, 3]);
+  });
+
+  const AUTRE_CARTE = { ...MAP_SPIRAL, id: 'tirage-1', name: 'Carte tirée', biome: BIOMES[0] };
+
+  it('[CU-02] diffuse la nouvelle carte à tout le salon quand l\'hôte retire', () => {
+    const lobby = salonPret();
+
+    const addressed = lobby.chooseMap('h', AUTRE_CARTE);
+
+    expect(addressed).toHaveLength(2);
+    for (const key of ['h', 'g']) {
+      expect(addressed).toContainEqual({
+        key,
+        msg: expect.objectContaining({ t: ServerMessageType.Room, map: AUTRE_CARTE }),
+      });
+    }
+    expect(AUTRE_CARTE.biome).toBeDefined();
+  });
+
+  it('[CU-02] diffuse la nouvelle carte aux deux équipes quand l\'hôte d\'un 2 contre 2 retire', () => {
+    const lobby = fourPlayerRoom();
+
+    const addressed = lobby.chooseMap('h', AUTRE_CARTE);
+
+    expect(addressed).toHaveLength(4);
+    for (const key of ['h', 'g', 'c', 'd']) {
+      expect(addressed).toContainEqual({
+        key,
+        msg: expect.objectContaining({ t: ServerMessageType.TeamRoom, map: AUTRE_CARTE }),
+      });
+    }
+  });
+
+  it('[CU-02] refuse le changement de carte quand il vient d\'un invité', () => {
+    const lobby = salonPret();
+
+    const addressed = lobby.chooseMap('g', AUTRE_CARTE);
+
+    expect(addressed).toEqual([
+      { key: 'g', msg: { t: ServerMessageType.Refused, reason: 'Seul l\'hôte peut changer la carte.' } },
+    ]);
+    const after = lobby.choose('h', 'forge');
+    expect(after).toContainEqual({ key: 'g', msg: expect.objectContaining({ t: ServerMessageType.Room, map: MAP_SPIRAL }) });
+  });
+
+  type Started = { t: ServerMessageType; snapshot: { map: unknown }; others: { snapshot: { map: unknown } }[] };
+
+  it('[RM-07] lance chaque siège sur la carte et le biome choisis en dernier par l\'hôte', () => {
+    const lobby = salonPret();
+    const carteB = { ...MAP_SPIRAL, id: 'tirage-2', name: 'Carte B', biome: BIOMES[1] };
+    lobby.chooseMap('h', AUTRE_CARTE);
+    lobby.chooseMap('h', carteB);
+    lobby.choose('h', 'forge');
+    lobby.choose('g', 'sylve');
+
+    const addressed = lobby.start('h', 7, ['th', 'tg'], 0);
+
+    expect(carteB.biome).not.toBe('earth');
+    expect(addressed).toHaveLength(2);
+    for (const { msg } of addressed) {
+      const started = msg as Started;
+      expect(started.t).toBe(ServerMessageType.DuelStarted);
+      expect(started.snapshot.map).toEqual(carteB);
+      expect(started.others[0].snapshot.map).toEqual(carteB);
+    }
+  });
+
+  it('[RM-07] lance les quatre sièges d\'un 2 contre 2 sur la même carte et le même biome', () => {
+    const lobby = fourPlayerRoom();
+    const carteB = { ...MAP_SPIRAL, id: 'tirage-2', name: 'Carte B', biome: BIOMES[2] };
+    lobby.chooseMap('h', carteB);
+    chooseAll(lobby);
+
+    const addressed = lobby.start('h', 7, TOKENS, 0);
+
+    expect(addressed).toHaveLength(4);
+    for (const { msg } of addressed) {
+      const started = msg as Started;
+      expect(started.t).toBe(ServerMessageType.DuelStarted);
+      expect(started.snapshot.map).toEqual(carteB);
+      for (const other of started.others) expect(other.snapshot.map).toEqual(carteB);
+    }
   });
 });

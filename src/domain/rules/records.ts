@@ -17,14 +17,3 @@ export function withRecord(
     [mapId]: { ...book[mapId], [difficulty]: reached },
   };
 }
-
-export function importLegacyRecords(
-  book: RecordBook,
-  legacy: Partial<Record<Difficulty, number>>,
-  mapId: string
-): RecordBook {
-  return (Object.keys(legacy) as Difficulty[]).reduce(
-    (acc, difficulty) => withRecord(acc, mapId, difficulty, legacy[difficulty]!),
-    book
-  );
-}

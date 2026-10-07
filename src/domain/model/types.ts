@@ -106,12 +106,27 @@ export interface WaveDef {
 
 export type CellKind = 'build' | 'rock' | 'spawn' | 'checkpoint' | 'exit' | 'road';
 
+export type Biome = 'earth' | 'snow' | 'space';
+
 export interface MapDef {
   id: string;
   name: string;
   width: number;
   height: number;
   rows: string[];
+  /** Absent = 'earth'. */
+  biome?: Biome;
+}
+
+export interface MapRecipe {
+  width: number;
+  height: number;
+  landmark: number;
+  landmarkGap: number;
+  rocks: { min: number; max: number };
+  rockMargin: number;
+  minLeg: number;
+  route: { min: number; max: number };
 }
 
 export interface Creep {

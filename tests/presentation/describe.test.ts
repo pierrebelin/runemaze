@@ -23,6 +23,8 @@ import { dispatch } from '../../src/application/dispatch';
 import { waveBriefing } from '../../src/application/queries/waveBriefing';
 import { CommandType } from '../../src/domain/model/types';
 import { newDuelWorld, newWorld } from '../support/helpers';
+import { BIOMES } from '../../src/domain/catalog/map';
+import { biomeLabel } from '../../src/presentation/describe';
 
 const attack = (extra: Partial<AttackDef>): AttackDef => ({
   type: 'normal', dmg: [1, 1], cooldown: 1, range: 4, projectileSpeed: 10, targets: 'both', ...extra,
@@ -733,5 +735,11 @@ describe('confirmation d’abandon', () => {
       confirm: 'Quitter',
       cancel: 'Annuler',
     });
+  });
+});
+
+describe('choix du biome', () => {
+  it('[CU-01] nomme les biomes Terre, Neige et Espace', () => {
+    expect(BIOMES.map(biomeLabel)).toEqual(['Terre', 'Neige', 'Espace']);
   });
 });

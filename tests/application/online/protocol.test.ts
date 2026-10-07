@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ClientMessageType, Mode, Team, readClientMessage } from '../../../src/application/online/protocol';
+import { MAP_RECIPE } from '../../../src/domain/catalog/map';
+import { drawMap } from '../../../src/domain/rules/mapDraw';
 import { MAP_TWO_STONES } from '../../support/maps';
 
 describe('readClientMessage', () => {
@@ -181,6 +183,29 @@ describe('readClientMessage', () => {
     });
   });
 
+  it('[CU-01] accepte l\'ouverture d\'une partie sur une carte tirée avec son biome', () => {
+    const map = drawMap(7, 'snow', MAP_RECIPE);
+
+    const read = readClientMessage(JSON.stringify({ t: 'open', map, difficulty: 'easy', builder: 'bastion' }));
+
+    expect(read).not.toBeNull();
+    expect(read).toMatchObject({ t: 'open', map: { biome: 'snow' } });
+  });
+
+  it('[RM-08] refuse une carte dont le biome est inconnu', () => {
+    const map = { ...drawMap(7, 'snow', MAP_RECIPE), biome: 'lave' };
+
+    expect(
+      readClientMessage(JSON.stringify({ t: 'open', map, difficulty: 'easy', builder: 'bastion' })),
+    ).toBeNull();
+  });
+
+  it('[RM-08] accepte une carte sans biome', () => {
+    expect(
+      readClientMessage(JSON.stringify({ t: 'open', map: MAP_TWO_STONES, difficulty: 'easy', builder: 'bastion' })),
+    ).not.toBeNull();
+  });
+
   it('[RM-01] lit une ouverture qui porte un bâtisseur connu', () => {
     const raw = JSON.stringify({ t: 'open', map: MAP_TWO_STONES, difficulty: 'easy', builder: 'sylve' });
 
@@ -326,6 +351,25 @@ describe('readClientMessage — salon', () => {
     expect(readClientMessage(JSON.stringify({ t: 'chooseTeam', team: 'c' }))).toBeNull();
     expect(readClientMessage(JSON.stringify({ t: 'chooseTeam' }))).toBeNull();
     expect(readClientMessage(JSON.stringify({ t: 'chooseTeam', team: 1 }))).toBeNull();
+  });
+
+  it('[CU-02] lit le changement de carte de l\'hôte avec son biome', () => {
+    const map = drawMap(7, 'snow', MAP_RECIPE);
+
+    const read = readClientMessage(JSON.stringify({ t: 'chooseMap', map }));
+
+    expect(read).toEqual({ t: ClientMessageType.ChooseMap, map });
+    expect(read).toMatchObject({ map: { biome: 'snow' } });
+  });
+
+  it('[CU-02] refuse un changement de carte sans carte valide', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'chooseMap', map: MAP_TWO_STONES }))).not.toBeNull();
+    expect(readClientMessage(JSON.stringify({ t: 'chooseMap' }))).toBeNull();
+    expect(
+      readClientMessage(JSON.stringify({ t: 'chooseMap', map: { ...MAP_TWO_STONES, biome: 'lave' } })),
+    ).toBeNull();
+    expect(readClientMessage(JSON.stringify({ t: 'chooseMap', map: {} }))).toBeNull();
+    expect(readClientMessage(JSON.stringify({ t: 'chooseMap', map: null }))).toBeNull();
   });
 
   it('[RM-16] lit la demande de rejoindre avec pseudo et code', () => {

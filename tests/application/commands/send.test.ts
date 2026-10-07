@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { newDuelWorld, newWorld } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
-import { MAP_CROSSING } from '../../../src/domain/catalog/map';
+import { MAP_CROSSING } from '../../support/maps';
 import { Rng } from '../../../src/domain/Rng';
 import { World } from '../../../src/domain/model/World';
 

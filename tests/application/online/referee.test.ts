@@ -6,7 +6,7 @@ import { DIFFICULTY } from '../../../src/domain/catalog/creeps';
 import { World } from '../../../src/domain/model/World';
 import { CommandType, Phase } from '../../../src/domain/model/types';
 import { fingerprint } from '../../../src/domain/rules/fingerprint';
-import { MAP_CROSSING } from '../../../src/domain/catalog/map';
+import { MAP_CROSSING } from '../../support/maps';
 import { snapshot } from '../../../src/domain/model/snapshot';
 
 describe('Referee', () => {

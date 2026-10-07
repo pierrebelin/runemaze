@@ -1,7 +1,8 @@
 import { Sfx } from '../infrastructure/audio/Sfx';
 import { GameLoop } from '../infrastructure/GameLoop';
 import { CREEPS, DIFFICULTY, waveAt } from '../domain/catalog/creeps';
-import { MAPS } from '../domain/catalog/map';
+import { BIOMES, MAP_RECIPE } from '../domain/catalog/map';
+import { drawMap } from '../domain/rules/mapDraw';
 import { BUILDERS } from '../domain/catalog/builders';
 import { TOWERS } from '../domain/catalog/towers';
 import { GLEANER } from '../domain/catalog/ether';
@@ -28,11 +29,11 @@ import { refundValue, upgradeCost } from '../domain/rules/pricing';
 import { World, type Stats } from '../domain/model/World';
 import { restore, type WorldSnapshot } from '../domain/model/snapshot';
 import { fingerprint } from '../domain/rules/fingerprint';
-import type { ArmorType, AttackType, Command, Creep, Difficulty, GameEvent, GateUpgrade, MapDef, Result, TargetMode, Tower } from '../domain/model/types';
+import type { ArmorType, AttackType, Biome, Command, Creep, Difficulty, GameEvent, GateUpgrade, MapDef, Result, TargetMode, Tower } from '../domain/model/types';
 import { CommandType, GameEventType } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
-import { importLegacyRecords, withRecord, type RecordBook } from '../domain/rules/records';
-import { resignPrompt, etherChip,goldForecastChip, goldForecastInfo, briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeLabel, pairingWord, teamRoster, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
+import { withRecord, type RecordBook } from '../domain/rules/records';
+import { biomeLabel, resignPrompt, etherChip,goldForecastChip, goldForecastInfo, briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeLabel, pairingWord, teamRoster, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -43,15 +44,16 @@ function escapeHtml(raw: string): string {
 const KEYS = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'z', 'x', 'c', 'v'];
 const TARGET_ORDER: TargetMode[] = ['first', 'last', 'strong', 'weak', 'close'];
 const BEST_KEY = 'dedale.best.v2';
-const LEGACY_BEST_KEY = 'dedale.best.v1';
+/** Records par difficulté : les cartes tirées n'ont pas d'identité, une seule clé. */
+const RECORD_KEY = 'tirage';
 const PENDING_KEY = 'dedale.pending.v1';
 const DUEL_SEAT_KEY = 'dedale.duelseat.v1';
 
 const ICON_CANCEL = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M11 11l18 18M29 11L11 29" stroke="#e0664f" stroke-width="4" stroke-linecap="round"/></svg>';
-const ICON_HELP = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14" fill="none" stroke="#b98d4c" stroke-width="2.5"/><path d="M15.5 16a4.5 4.5 0 119 .5c0 3-4.5 3.5-4.5 6.5" fill="none" stroke="#efe3c4" stroke-width="2.6" stroke-linecap="round"/><circle cx="20" cy="28" r="1.8" fill="#efe3c4"/></svg>';
+const ICON_HELP = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14" fill="none" stroke="#8d939c" stroke-width="2.5"/><path d="M15.5 16a4.5 4.5 0 119 .5c0 3-4.5 3.5-4.5 6.5" fill="none" stroke="#e7e8ea" stroke-width="2.6" stroke-linecap="round"/><circle cx="20" cy="28" r="1.8" fill="#e7e8ea"/></svg>';
 const ICON_SELL = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="17" cy="22" r="9" fill="#e9b949" stroke="#8a6320" stroke-width="2"/><circle cx="24" cy="16" r="9" fill="#f2cc66" stroke="#8a6320" stroke-width="2"/><path d="M24 11v10M21 13.5h4.5a1.7 1.7 0 010 3.4h-3a1.7 1.7 0 000 3.4h4.5" fill="none" stroke="#8a6320" stroke-width="1.6"/></svg>';
-const ICON_TARGET = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="11" fill="none" stroke="#efe3c4" stroke-width="2.5"/><circle cx="20" cy="20" r="3" fill="#e0664f"/><path d="M20 4v8M20 28v8M4 20h8M28 20h8" stroke="#efe3c4" stroke-width="2.5"/></svg>';
-const ICON_BACK = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M24 11l-9 9 9 9" fill="none" stroke="#efe3c4" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_TARGET = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="11" fill="none" stroke="#e7e8ea" stroke-width="2.5"/><circle cx="20" cy="20" r="3" fill="#e0664f"/><path d="M20 4v8M20 28v8M4 20h8M28 20h8" stroke="#e7e8ea" stroke-width="2.5"/></svg>';
+const ICON_BACK = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M24 11l-9 9 9 9" fill="none" stroke="#e7e8ea" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 interface Slot {
   label: string;
@@ -84,7 +86,9 @@ export class Game {
   private readonly sfx = new Sfx();
   private readonly loop: GameLoop;
   private difficulty: Difficulty = 'normal';
-  private mapId: string = MAPS[0].id;
+  private seed = (Date.now() ^ (Math.random() * 1e9)) >>> 0;
+  private biome: Biome = BIOMES[0];
+  private drawnMap: MapDef = drawMap(this.seed, this.biome, MAP_RECIPE);
   private builderId = 'bastion';
   /** Onglet de l'écran titre, gardé d'un retour au titre à l'autre. */
   private startTab: 'solo' | 'duel' = 'solo';
@@ -164,7 +168,7 @@ export class Game {
   private readonly portrait = $<HTMLCanvasElement>('portrait');
 
   constructor() {
-    this.world = this.createWorld(MAPS[0], 'normal');
+    this.world = this.createWorld(this.drawnMap, 'normal');
     this.renderer = new Renderer(this.canvas);
     this.loop = new GameLoop(() => this.stepSim(), (dt) => this.frame(dt));
     this.bindInput();
@@ -183,7 +187,7 @@ export class Game {
   private async newGame(d: Difficulty): Promise<void> {
     if (this.launching) return;
     this.launching = true;
-    const map = MAPS.find((m) => m.id === this.mapId) ?? MAPS[0];
+    const map = this.drawnMap;
     const previous = this.loadSeat(PENDING_KEY) ?? undefined;
     this.link?.close();
     this.link = null;
@@ -959,7 +963,7 @@ export class Game {
       else if (this.view.ghost) {
         const now = w.mazeLength();
         status = this.previewDelta > 0.01
-          ? `<p style="color:var(--gold)">Trajet : ${fmt0(now)} → ${fmt0(now + this.previewDelta)} cases (+${fmt0(this.previewDelta)})</p>`
+          ? `<p style="color:var(--accent)">Trajet : ${fmt0(now)} → ${fmt0(now + this.previewDelta)} cases (+${fmt0(this.previewDelta)})</p>`
           : `<p>Trajet inchangé : ${fmt0(now)} cases.</p>`;
       }
       html = towerInfo(def, def.cost) + status;
@@ -1030,7 +1034,7 @@ export class Game {
     const c = this.portrait;
     const ctx = c.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#0f0d0a';
+    ctx.fillStyle = '#0e0f11';
     ctx.fillRect(0, 0, c.width, c.height);
     const w = this.world;
     const t = this.selectedTower();
@@ -1184,9 +1188,7 @@ export class Game {
 
   private loadBest(): RecordBook {
     try {
-      const book = JSON.parse(localStorage.getItem(BEST_KEY) ?? '{}') as RecordBook;
-      const legacy = JSON.parse(localStorage.getItem(LEGACY_BEST_KEY) ?? '{}') as Partial<Record<Difficulty, number>>;
-      return importLegacyRecords(book, legacy, 'crossing');
+      return JSON.parse(localStorage.getItem(BEST_KEY) ?? '{}') as RecordBook;
     } catch {
       return {};
     }
@@ -1196,7 +1198,7 @@ export class Game {
     const w = this.world;
     const reached = Math.max(0, w.wave);
     try {
-      const best = withRecord(this.loadBest(), this.mapId, this.difficulty, reached);
+      const best = withRecord(this.loadBest(), RECORD_KEY, this.difficulty, reached);
       localStorage.setItem(BEST_KEY, JSON.stringify(best));
     } catch {
       /* stockage indisponible : on s'en passe */
@@ -1279,7 +1281,7 @@ export class Game {
         <h2>La partie est terminée.</h2>
         <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="backToStart">Écran titre</button></div>
       </div>`);
-    $('backToStart').addEventListener('click', () => this.showStart());
+    $('backToStart').addEventListener('click', () => this.showStart(true));
   }
 
   /** Décompte affiché pendant le gel, et tentatives de reconnexion toutes les ~2 s. */
@@ -1348,8 +1350,8 @@ export class Game {
     this.link = link;
     this.attachLink(link);
     this.world = restore(msg.snapshot);
+    this.biome = this.world.map.biome ?? BIOMES[0];
     this.announcedWave = this.world.wave;
-    this.mapId = this.world.map.id;
     this.difficulty = this.world.difficulty;
     this.resize();
     this.setPaused(msg.paused);
@@ -1364,7 +1366,7 @@ export class Game {
     this.link = null;
     this.clearSeat(PENDING_KEY);
     this.world = restore(msg.snapshot);
-    this.mapId = this.world.map.id;
+    this.biome = this.world.map.biome ?? BIOMES[0];
     this.difficulty = this.world.difficulty;
     this.resize();
     this.saveBest();
@@ -1382,8 +1384,8 @@ export class Game {
   }
 
   /** `records` : affiche le record solo de chaque difficulté (sans objet en partie à deux). */
-  private diffsHtml(mapId: string, records = true): string {
-    const best = records ? (this.loadBest()[mapId] ?? {}) : {};
+  private diffsHtml(records = true): string {
+    const best = records ? (this.loadBest()[RECORD_KEY] ?? {}) : {};
     return (Object.keys(DIFFICULTY) as Difficulty[])
       .map((d) => {
         const D = DIFFICULTY[d];
@@ -1411,7 +1413,14 @@ export class Game {
     );
   }
 
-  private showStart(): void {
+  private redraw(): void {
+    this.seed = (Date.now() ^ (Math.random() * 1e9)) >>> 0;
+    this.drawnMap = drawMap(this.seed, this.biome, MAP_RECIPE);
+  }
+
+  /** `fresh` : tire une nouvelle carte (RM-09), seulement au retour d’une partie ou d’un salon ; faux au démarrage et depuis l’aide. */
+  private showStart(fresh = false): void {
+    if (fresh) this.redraw();
     this.link?.close();
     this.link = null;
     this.setPaused(true);
@@ -1464,7 +1473,7 @@ export class Game {
       const mapsEl = panel.querySelector<HTMLElement>('.maps')!;
       const diffsEl = panel.querySelector<HTMLElement>('.diffs')!;
       const bindDiffs = (): void => {
-        diffsEl.innerHTML = this.diffsHtml(this.mapId, records);
+        diffsEl.innerHTML = this.diffsHtml(records);
         diffsEl.querySelectorAll<HTMLButtonElement>('[data-diff]').forEach((b) =>
           b.addEventListener('click', () => {
             this.difficulty = b.dataset.diff as Difficulty;
@@ -1472,21 +1481,25 @@ export class Game {
           }),
         );
       };
-      mapsEl.innerHTML = MAPS.map(
-        (m) => `<button type="button" class="map" role="radio" data-map="${m.id}" aria-checked="${m.id === this.mapId}">
-          <canvas class="map-thumb" data-thumb="${m.id}" width="64" height="64"></canvas><span>${m.name}</span></button>`,
-      ).join('');
-      mapsEl.querySelectorAll<HTMLCanvasElement>('[data-thumb]').forEach((c) => {
-        const map = MAPS.find((m) => m.id === c.dataset.thumb)!;
-        drawMapThumbnail(c.getContext('2d')!, map, c.width);
-      });
-      mapsEl.querySelectorAll<HTMLButtonElement>('[data-map]').forEach((b) =>
-        b.addEventListener('click', () => {
-          this.mapId = b.dataset.map!;
-          mapsEl.querySelectorAll('[data-map]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
-          bindDiffs();
-        }),
-      );
+      const bindMap = (): void => {
+        mapsEl.innerHTML = `<div class="map"><canvas class="map-thumb" width="64" height="64"></canvas><span>${this.drawnMap.name}</span></div>
+          ${BIOMES.map((b) => `<button type="button" class="diff" role="radio" data-biome="${b}" aria-checked="${b === this.biome}"><strong>${biomeLabel(b)}</strong></button>`).join('')}
+          <button type="button" class="btn" data-redraw>Retirer</button>`;
+        const c = mapsEl.querySelector<HTMLCanvasElement>('canvas')!;
+        drawMapThumbnail(c.getContext('2d')!, this.drawnMap, c.width);
+        mapsEl.querySelectorAll<HTMLButtonElement>('[data-biome]').forEach((b) =>
+          b.addEventListener('click', () => {
+            this.biome = b.dataset.biome as Biome;
+            this.drawnMap = drawMap(this.seed, this.biome, MAP_RECIPE);
+            bindMap();
+          }),
+        );
+        mapsEl.querySelector('[data-redraw]')!.addEventListener('click', () => {
+          this.redraw();
+          bindMap();
+        });
+      };
+      bindMap();
       bindDiffs();
     };
     const showTab = (mode: 'solo' | 'duel'): void => {
@@ -1554,7 +1567,7 @@ export class Game {
   private async hostDuel(): Promise<void> {
     if (this.duelLink) return;
     const nick = $<HTMLInputElement>('duelNick').value;
-    const map = MAPS.find((m) => m.id === this.mapId) ?? MAPS[0];
+    const map = this.drawnMap;
     const link = new ServerLink();
     this.duelLink = link;
     try {
@@ -1651,7 +1664,7 @@ export class Game {
         break;
       case ServerMessageType.Cancelled:
         this.closeDuelLink();
-        this.showStart();
+        this.showStart(true);
         this.toast('L’hôte a quitté la partie.', true);
         break;
       default:
@@ -1799,7 +1812,7 @@ export class Game {
     for (const panel of el.querySelectorAll<HTMLElement>('.duel-panel')) this.bindDebriefTabs(panel);
     $('again').addEventListener('click', () => {
       this.closeDuelLink();
-      this.showStart();
+      this.showStart(true);
     });
   }
 
@@ -1810,6 +1823,10 @@ export class Game {
     const guest = this.duelGuestNick ? escapeHtml(this.duelGuestNick) : 'en attente…';
     const host = escapeHtml(this.duelHostNick ?? '');
     const map = this.duelMap ? escapeHtml(this.duelMap.name) : '';
+    const biomes = this.duelRole === 'host'
+      ? `${BIOMES.map((b) => `<button type="button" class="diff" role="radio" data-biome="${b}" aria-checked="${b === this.duelMap?.biome}"><strong>${biomeLabel(b)}</strong></button>`).join('')}
+          <button type="button" class="btn" data-redraw>Retirer</button>`
+      : '';
     const diff = this.duelDifficulty ? escapeHtml(DIFFICULTY[this.duelDifficulty].label) : '';
     const picked = (p: boolean) => (p ? 'a choisi' : 'choisit…');
     const status = `<p>${host} : ${picked(this.duelPicked.host)} · ${guest} : ${picked(this.duelPicked.guest)}</p>`;
@@ -1820,6 +1837,7 @@ export class Game {
         ${code}
         ${this.duelMode === Mode.Teams ? teamRoster(this.duelTeams, this.duelWaiting) : `<p>${host} ${pairingWord(this.duelMode)} ${guest}</p>`}
         <p>${modeLabel(this.duelMode)} · ${map} · ${diff}</p>
+        <div class="map"><canvas class="map-thumb" width="64" height="64"></canvas>${biomes}</div>
         <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.lobbyBuilderId)}</div>
         ${status}
         <div class="row" style="justify-content:center">${startBtn}<button type="button" class="btn" id="leaveLobby">Quitter</button></div>
@@ -1829,6 +1847,23 @@ export class Game {
   private showLobby(): void {
     this.openOverlay(Overlay.Lobby, this.lobbyHtml());
     $('leaveLobby').addEventListener('click', () => this.leaveLobby());
+    const thumb = $('overlay').querySelector<HTMLCanvasElement>('.map-thumb')!;
+    if (this.duelMap) drawMapThumbnail(thumb.getContext('2d')!, this.duelMap, thumb.width);
+    // La graine reste côté client (ARCH-05) ; l'écran se redessine à la réception du salon.
+    const chooseMap = (): void => {
+      this.drawnMap = drawMap(this.seed, this.biome, MAP_RECIPE);
+      this.duelLink?.send({ t: ClientMessageType.ChooseMap, map: this.drawnMap });
+    };
+    $('overlay').querySelectorAll<HTMLButtonElement>('[data-biome]').forEach((b) =>
+      b.addEventListener('click', () => {
+        this.biome = b.dataset.biome as Biome;
+        chooseMap();
+      }),
+    );
+    $('overlay').querySelector('[data-redraw]')?.addEventListener('click', () => {
+      this.redraw();
+      this.duelLink?.send({ t: ClientMessageType.ChooseMap, map: this.drawnMap });
+    });
     this.bindBuilders($('overlay'), () => {
       this.lobbyBuilderId = this.builderId;
       this.duelLink?.send({ t: ClientMessageType.ChooseBuilder, builder: this.builderId });
@@ -1845,7 +1880,7 @@ export class Game {
     this.resetLostState();
     this.duelLink?.send({ t: ClientMessageType.Leave });
     this.closeDuelLink();
-    this.showStart();
+    this.showStart(true);
   }
 
   private closeDuelLink(): void {
@@ -1998,6 +2033,9 @@ export class Game {
         </div>
       </div>`);
     this.bindDebriefTabs($('overlay'));
-    $('again').addEventListener('click', () => this.showStart());
+    $('again').addEventListener('click', () => {
+      this.redraw();
+      this.newGame(this.difficulty);
+    });
   }
 }

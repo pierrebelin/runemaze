@@ -1,4 +1,4 @@
-import { MAP_CROSSING } from '../../src/domain/catalog/map';
+import { MAP_CROSSING } from './maps';
 import { World } from '../../src/domain/model/World';
 import { dispatch } from '../../src/application/dispatch';
 import { spawnCreep } from '../../src/domain/systems/waves';

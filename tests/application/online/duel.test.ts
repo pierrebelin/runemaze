@@ -6,7 +6,7 @@ import { World } from '../../../src/domain/model/World';
 import { dispatch } from '../../../src/application/dispatch';
 import { fingerprint } from '../../../src/domain/rules/fingerprint';
 import { snapshot } from '../../../src/domain/model/snapshot';
-import { MAP_SPIRAL } from '../../../src/domain/catalog/map';
+import { MAP_SPIRAL } from '../../support/maps';
 import { CommandType, Phase } from '../../../src/domain/model/types';
 import type { Command } from '../../../src/domain/model/types';
 import { ServerMessageType, Verdict, readClientMessage } from '../../../src/application/online/protocol';

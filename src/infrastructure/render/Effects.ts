@@ -30,7 +30,7 @@ export class Effects {
       switch (e.t) {
         case GameEventType.Kill:
           this.floaters.push({ x: e.x, y: e.y - 0.4, text: `+${e.bounty}`, color: PAL.gold, life: 1.1, big: e.boss });
-          this.burst(e.x, e.y, e.boss ? 26 : 8, e.boss ? PAL.gold : '#c9b48a', e.boss ? 3 : 1.6);
+          this.burst(e.x, e.y, e.boss ? 26 : 8, e.boss ? PAL.gold : '#b9b6ae', e.boss ? 3 : 1.6);
           break;
         case GameEventType.Hit: {
           const col = FAMILY_COLOR[e.family];

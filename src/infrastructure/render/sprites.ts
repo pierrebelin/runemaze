@@ -1,6 +1,6 @@
 import { Grid } from '../../domain/model/Grid';
-import type { CellKind, Creep, CreepDef, MapDef, TowerDef } from '../../domain/model/types';
-import { CREEP_STYLE, FAMILY_COLOR, PAL } from './palette';
+import type { Biome, CellKind, Creep, CreepDef, MapDef, TowerDef } from '../../domain/model/types';
+import { BIOME_PALETTE, CREEP_STYLE, FAMILY_COLOR, PAL } from './palette';
 import { BreakerPhase } from '../../domain/model/types';
 
 // Dessins vectoriels procéduraux. Le contexte est déjà mis à l'échelle :
@@ -24,7 +24,10 @@ function circle(ctx: Ctx, x: number, y: number, r: number): void {
   ctx.arc(x, y, r, 0, Math.PI * 2);
 }
 
-/** Socle de pierre commun, plus orné à chaque niveau. Un hybride porte en plus le liseré de sa seconde famille. */
+/**
+ * Socle de pierre commun. Quatre équerres d'angle gris clair donnent le niveau :
+ * elles s'allongent à chaque niveau. Un hybride porte en plus le liseré de sa seconde famille.
+ */
 function plinth(ctx: Ctx, cx: number, cy: number, tier: number, hybrid?: string): void {
   const s = 1.78;
   ctx.fillStyle = PAL.shadow;
@@ -37,7 +40,7 @@ function plinth(ctx: Ctx, cx: number, cy: number, tier: number, hybrid?: string)
   roundRect(ctx, cx - s / 2 + 0.1, cy - s / 2 + 0.08, s - 0.2, s - 0.24, 0.16);
   ctx.fill();
   // Joints de pierre.
-  ctx.strokeStyle = 'rgba(40,34,26,0.35)';
+  ctx.strokeStyle = 'rgba(30,31,34,0.35)';
   ctx.lineWidth = 0.04;
   ctx.beginPath();
   ctx.moveTo(cx - s / 2 + 0.1, cy);
@@ -49,25 +52,28 @@ function plinth(ctx: Ctx, cx: number, cy: number, tier: number, hybrid?: string)
   ctx.moveTo(cx + 0.45, cy + 0.02);
   ctx.lineTo(cx + 0.45, cy + s / 2 - 0.18);
   ctx.stroke();
-  if (tier >= 2 || hybrid) {
-    ctx.strokeStyle = tier >= 3 || (hybrid && tier >= 2) ? PAL.gold : PAL.bronze;
-    ctx.lineWidth = 0.07;
-    roundRect(ctx, cx - s / 2 + 0.06, cy - s / 2 + 0.05, s - 0.12, s - 0.14, 0.18);
-    ctx.stroke();
+  const len = [0, 0.14, 0.3, 0.5][tier];
+  const e = s / 2 - 0.08;
+  ctx.strokeStyle = PAL.stoneLight;
+  ctx.lineWidth = 0.06;
+  ctx.lineCap = 'round';
+  for (const dx of [-1, 1]) {
+    for (const dy of [-1, 1]) {
+      const x = cx + dx * e;
+      const y = cy + dy * e;
+      ctx.beginPath();
+      ctx.moveTo(x - dx * len, y);
+      ctx.lineTo(x, y);
+      ctx.lineTo(x, y - dy * len);
+      ctx.stroke();
+    }
   }
+  ctx.lineCap = 'butt';
   if (hybrid) {
     ctx.strokeStyle = hybrid;
     ctx.lineWidth = 0.08;
     roundRect(ctx, cx - s / 2 + 0.16, cy - s / 2 + 0.15, s - 0.32, s - 0.34, 0.12);
     ctx.stroke();
-  }
-}
-
-function pips(ctx: Ctx, cx: number, cy: number, tier: number): void {
-  for (let i = 0; i < tier; i++) {
-    ctx.fillStyle = tier >= 3 ? PAL.gold : PAL.parchment;
-    circle(ctx, cx - 0.125 * (tier - 1) + i * 0.25, cy + 0.72, 0.075);
-    ctx.fill();
   }
 }
 
@@ -851,27 +857,34 @@ export function drawTower(ctx: Ctx, def: TowerDef, cx: number, cy: number, aim: 
   const art = TOWER_ART[def.id];
   if (def.family !== 'wall') plinth(ctx, cx, cy, def.tier, def.elements && FAMILY_COLOR[def.elements[1]].main);
   art({ ctx, cx, top: cy - 0.12, aim, time });
-  if (def.family !== 'wall') pips(ctx, cx, cy, def.tier);
 }
 
-const CELL_COLOR: Record<CellKind, string> = {
-  build: PAL.grassA,
-  rock: PAL.rock,
-  spawn: PAL.good,
-  exit: PAL.danger,
-  road: PAL.dirt,
-  checkpoint: PAL.gold,
+/** Couleur des cases `build` dans l'aperçu : Terre garde son herbe claire, les autres biomes leur sol. */
+const THUMB_BUILD: Record<Biome, string> = {
+  earth: PAL.grassA,
+  snow: BIOME_PALETTE.snow.ground,
+  space: BIOME_PALETTE.space.ground,
 };
 
 /** Vignette d'une carte : une couleur par nature de case, ratio conservé. */
 export function drawMapThumbnail(ctx: Ctx, map: MapDef, size: number): void {
+  const biome = map.biome ?? 'earth';
+  const pal = BIOME_PALETTE[biome];
+  const color: Record<CellKind, string> = {
+    build: THUMB_BUILD[biome],
+    rock: pal.rock,
+    spawn: PAL.good,
+    exit: PAL.danger,
+    road: pal.dirt,
+    checkpoint: PAL.gold,
+  };
   const grid = new Grid(map);
   const scale = size / Math.max(grid.w, grid.h);
   const ox = (size - grid.w * scale) / 2;
   const oy = (size - grid.h * scale) / 2;
   for (let y = 0; y < grid.h; y++) {
     for (let x = 0; x < grid.w; x++) {
-      ctx.fillStyle = CELL_COLOR[grid.kind[grid.idx(x, y)]];
+      ctx.fillStyle = color[grid.kind[grid.idx(x, y)]];
       ctx.fillRect(ox + x * scale, oy + y * scale, scale + 0.5, scale + 0.5);
     }
   }
@@ -1351,4 +1364,11 @@ export function drawCreep(ctx: Ctx, c: CreepLike, dirX: number, dirY: number, ti
     ctx.fillStyle = f > 0.5 ? PAL.good : f > 0.25 ? PAL.gold : PAL.danger;
     ctx.fillRect(bx, by, w * f, 0.1);
   }
+}
+
+/** Graine du décor : empreinte FNV-1a de la disposition, le biome n'y entre pas. */
+export function decorSeed(map: MapDef): number {
+  let h = 0x811c9dc5;
+  for (const ch of map.rows.join('\n')) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
+  return h >>> 0;
 }

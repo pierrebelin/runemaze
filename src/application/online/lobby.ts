@@ -201,6 +201,18 @@ export class Lobby {
     return [];
   }
 
+  chooseMap(key: string, map: MapDef): Addressed[] {
+    for (const room of this.rooms.values()) {
+      if (!room.members.some((m) => m.key === key)) continue;
+      if (room.members[0].key !== key) {
+        return [{ key, msg: { t: ServerMessageType.Refused, reason: "Seul l'hôte peut changer la carte." } }];
+      }
+      room.map = map;
+      return broadcast(room);
+    }
+    return [];
+  }
+
   pickTeam(key: string, team: Team): Addressed[] {
     for (const room of this.rooms.values()) {
       const member = room.members.find((m) => m.key === key);

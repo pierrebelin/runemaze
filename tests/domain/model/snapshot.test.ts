@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { snapshot, restore } from '../../../src/domain/model/snapshot';
-import { MAP_CROSSING } from '../../../src/domain/catalog/map';
+import { MAP_CROSSING } from '../../support/maps';
 import { World } from '../../../src/domain/model/World';
 import { launchWave, spawnCreep } from '../../../src/domain/systems/waves';
 import { buildTowerChain, newDuelWorld, newWorld, run, spawnDummy } from '../../support/helpers';

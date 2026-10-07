@@ -1,7 +1,8 @@
-import type { Command, Difficulty, MapDef, TargetMode } from '../../domain/model/types';
+import type { Biome, Command, Difficulty, MapDef, TargetMode } from '../../domain/model/types';
 import type { WorldSnapshot } from '../../domain/model/snapshot';
 import { CommandType } from '../../domain/model/types';
 import { BUILDERS } from '../../domain/catalog/builders';
+import { BIOMES } from '../../domain/catalog/map';
 import type { Seat } from './duel';
 
 export enum ClientMessageType {
@@ -18,6 +19,7 @@ export enum ClientMessageType {
   Rejoin = 'rejoin',
   ChooseBuilder = 'chooseBuilder',
   ChooseTeam = 'chooseTeam',
+  ChooseMap = 'chooseMap',
 }
 
 export enum ServerMessageType {
@@ -71,7 +73,8 @@ export type ClientMessage =
   | { t: ClientMessageType.Start }
   | { t: ClientMessageType.Rejoin; code: string; token: string }
   | { t: ClientMessageType.ChooseBuilder; builder: string }
-  | { t: ClientMessageType.ChooseTeam; team: Team };
+  | { t: ClientMessageType.ChooseTeam; team: Team }
+  | { t: ClientMessageType.ChooseMap; map: MapDef };
 
 const TARGET_MODES: TargetMode[] = ['first', 'last', 'strong', 'weak', 'close'];
 const DIFFICULTIES: Difficulty[] = ['easy', 'normal', 'hard'];
@@ -113,7 +116,8 @@ function isMapDef(v: unknown): v is MapDef {
     isPositiveInt(m.width) &&
     isPositiveInt(m.height) &&
     Array.isArray(m.rows) &&
-    m.rows.every(isString)
+    m.rows.every(isString) &&
+    (m.biome === undefined || BIOMES.includes(m.biome as Biome))
   );
 }
 
@@ -253,6 +257,11 @@ export function readClientMessage(raw: string): ClientMessage | null {
     case ClientMessageType.ChooseTeam:
       if (m.team === Team.A || m.team === Team.B) {
         return { t: ClientMessageType.ChooseTeam, team: m.team };
+      }
+      return null;
+    case ClientMessageType.ChooseMap:
+      if (isMapDef(m.map)) {
+        return { t: ClientMessageType.ChooseMap, map: m.map };
       }
       return null;
     default:

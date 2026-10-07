@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
-import { MAP_CROSSING } from '../../../src/domain/catalog/map';
 import { builder } from '../../../src/domain/catalog/builders';
 import { World } from '../../../src/domain/model/World';
 import { BreakerPhase, CommandType, Phase } from '../../../src/domain/model/types';
@@ -8,8 +7,7 @@ import { launchWave, spawnCreep } from '../../../src/domain/systems/waves';
 import { CREEPS } from '../../../src/domain/catalog/creeps';
 import { creepSpeed } from '../../../src/domain/rules/speed';
 import { newDuelWorld, newWorld, observeSpawns, run } from '../../support/helpers';
-import { MAP_BENT_STONES, MAP_CORRIDOR, MAP_TWO_STONES } from '../../support/maps';
-import { MAP_SEALS, MAP_SPIRAL } from '../../../src/domain/catalog/map';
+import { MAP_BENT_STONES, MAP_CORRIDOR, MAP_CROSSING, MAP_SEALS, MAP_SPIRAL, MAP_TWO_STONES } from '../../support/maps';
 
 describe('World', () => {
   it('[RM-01] garde le bâtisseur choisi à la création de la partie', () => {

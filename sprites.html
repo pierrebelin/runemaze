@@ -10,15 +10,15 @@
   /* Planche d'atelier : une seule ambiance sombre, celle du jeu. Colonne unique, sections empilées, tuiles en grille. */
   :root {
     color-scheme: dark;
-    --ground: #14110d;
-    --panel: #1d1914;
-    --line: #4a3d29;
-    --line-soft: #342c20;
-    --bronze: #b98d4c;
-    --gold: #e9b949;
-    --text: #efe3c4;
-    --text-dim: #b3a78b;
-    --text-faint: #857a63;
+    --ground: #111214;
+    --panel: #1a1b1e;
+    --line: #3d4047;
+    --line-soft: #2b2d32;
+    --accent-dim: #8d939c;
+    --accent: #d9dce1;
+    --text: #e7e8ea;
+    --text-dim: #a8acb3;
+    --text-faint: #777c84;
     --display: "Grenze Gotisch", "Palatino Linotype", Palatino, serif;
     --body: "Alegreya Sans", "Gill Sans", "Trebuchet MS", sans-serif;
     --caps: "Alegreya Sans SC", "Alegreya Sans", "Gill Sans", sans-serif;
@@ -28,18 +28,18 @@
   body { background: var(--ground); color: var(--text); font: 16px/1.5 var(--body); padding-inline: 16px; padding-block: 0 64px; }
   .wrap { max-width: 1180px; margin: 0 auto; }
   header.top { padding-block: 40px 8px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 8px; }
-  header.top h1 { font: 700 clamp(2.4rem, 6vw, 3.6rem)/1 var(--display); color: var(--gold); margin: 0; letter-spacing: 0.01em; }
+  header.top h1 { font: 700 clamp(2.4rem, 6vw, 3.6rem)/1 var(--display); color: var(--accent); margin: 0; letter-spacing: 0.01em; }
   header.top p { margin: 0 0 16px; color: var(--text-dim); max-width: 64ch; }
   nav.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; padding-block: 14px; font: 500 0.95rem var(--caps); letter-spacing: 0.06em; }
-  nav.toc a { color: var(--bronze); text-decoration: none; }
-  nav.toc a:hover, nav.toc a:focus-visible { color: var(--gold); text-decoration: underline; }
-  a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  nav.toc a { color: var(--accent-dim); text-decoration: none; }
+  nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); text-decoration: underline; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   section.part { padding-block: 36px 8px; display: grid; gap: 16px; }
   section.part > h2 { font: 700 2rem/1.1 var(--display); color: var(--text); margin: 0; text-wrap: balance; }
   section.part > p { margin: 0; color: var(--text-dim); max-width: 70ch; }
-  h3 { font: 700 1.6rem/1.1 var(--display); color: var(--gold); margin: 0; }
+  h3 { font: 700 1.6rem/1.1 var(--display); color: var(--accent); margin: 0; }
   h4 { font: 700 0.85rem var(--caps); letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 8px; text-transform: uppercase; }
-  h5 { font: 500 0.95rem var(--caps); letter-spacing: 0.06em; color: var(--bronze); margin: 12px 0 0; }
+  h5 { font: 500 0.95rem var(--caps); letter-spacing: 0.06em; color: var(--accent-dim); margin: 12px 0 0; }
   code { font: 0.78rem var(--mono); color: var(--text-faint); }
 
   #palette { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
@@ -102,7 +102,7 @@
 
   <section class="part" id="p-towers">
     <h2>Tours</h2>
-    <p>Par bâtisseur, puis par lignée. Chaque tour pivote comme en jeu ; les points indiquent sa ou ses familles. Les puces sous le socle donnent le niveau.</p>
+    <p>Par bâtisseur, puis par lignée. Chaque tour pivote comme en jeu ; les points indiquent sa ou ses familles. Les équerres gris clair aux angles du socle donnent le niveau : elles s'allongent à chaque niveau.</p>
     <div id="towers"></div>
   </section>
 
