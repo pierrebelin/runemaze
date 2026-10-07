@@ -9,6 +9,7 @@ npm run dev          # serveur de dev (port 5173)
 npx tsc --noEmit     # typage
 npm test             # tous les tests unitaires
 npx vitest run <fichier>
+npm run build:sprites # planche des sprites → dist/sprites.html (en dev : /sprites.html)
 ```
 
 ## Architecture

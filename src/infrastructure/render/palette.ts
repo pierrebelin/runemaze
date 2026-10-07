@@ -38,27 +38,26 @@ export interface CreepStyle {
   body: string;
   dark: string;
   eye: string;
-  shape: 'round' | 'block' | 'wing' | 'ghost';
 }
 
 export const CREEP_STYLE: Record<string, CreepStyle> = {
-  rat: { body: '#8c7b64', dark: '#5a4b3a', eye: '#f2d36b', shape: 'round' },
-  wolf: { body: '#9da3a8', dark: '#5f656b', eye: '#f7e27a', shape: 'round' },
-  raider: { body: '#b5713c', dark: '#6e3f1c', eye: '#ffd9a8', shape: 'round' },
-  troll: { body: '#6c9a5b', dark: '#3c5e31', eye: '#ffe066', shape: 'round' },
-  golem: { body: '#948b7b', dark: '#5c5548', eye: '#7fe0ff', shape: 'block' },
-  knight: { body: '#7888a0', dark: '#3f4a5c', eye: '#ff7a5a', shape: 'block' },
-  harpy: { body: '#c7829f', dark: '#7c4660', eye: '#fff0a0', shape: 'wing' },
-  wyvern: { body: '#6f9a63', dark: '#3d5c35', eye: '#ffcf4a', shape: 'wing' },
-  wraith: { body: '#b9d6e2', dark: '#6c8b99', eye: '#e8fbff', shape: 'ghost' },
-  ogre: { body: '#9a643c', dark: '#5a3620', eye: '#ffd24a', shape: 'round' },
-  hydra: { body: '#3f8a66', dark: '#1f4d38', eye: '#ffe36b', shape: 'round' },
-  ashlord: { body: '#b9492f', dark: '#5e1f14', eye: '#ffcf6b', shape: 'block' },
-  runeguard: { body: '#5a6b8a', dark: '#2e3a52', eye: '#a0e0ff', shape: 'block' },
-  dunerunner: { body: '#d4b06a', dark: '#8a6a35', eye: '#fff2c2', shape: 'round' },
-  shaman: { body: '#c9a3d4', dark: '#7a5c85', eye: '#fff4c2', shape: 'round' },
-  slime: { body: '#5fbf60', dark: '#2e7a34', eye: '#eaffb0', shape: 'round' },
-  slimelet: { body: '#8fe08f', dark: '#4a9a4f', eye: '#eaffb0', shape: 'round' },
-  sapper: { body: '#7a8f4a', dark: '#455a26', eye: '#ffe9a0', shape: 'round' },
-  hydrahead: { body: '#4fa878', dark: '#256b46', eye: '#ffe36b', shape: 'round' },
+  rat: { body: '#8c7b64', dark: '#5a4b3a', eye: '#f2d36b' },
+  wolf: { body: '#9da3a8', dark: '#5f656b', eye: '#f7e27a' },
+  raider: { body: '#b5713c', dark: '#6e3f1c', eye: '#ffd9a8' },
+  troll: { body: '#6c9a5b', dark: '#3c5e31', eye: '#ffe066' },
+  golem: { body: '#948b7b', dark: '#5c5548', eye: '#7fe0ff' },
+  knight: { body: '#7888a0', dark: '#3f4a5c', eye: '#ff7a5a' },
+  harpy: { body: '#c7829f', dark: '#7c4660', eye: '#fff0a0' },
+  wyvern: { body: '#6f9a63', dark: '#3d5c35', eye: '#ffcf4a' },
+  wraith: { body: '#b9d6e2', dark: '#6c8b99', eye: '#e8fbff' },
+  ogre: { body: '#9a643c', dark: '#5a3620', eye: '#ffd24a' },
+  hydra: { body: '#3f8a66', dark: '#1f4d38', eye: '#ffe36b' },
+  ashlord: { body: '#b9492f', dark: '#5e1f14', eye: '#ffcf6b' },
+  runeguard: { body: '#5a6b8a', dark: '#2e3a52', eye: '#a0e0ff' },
+  dunerunner: { body: '#d4b06a', dark: '#8a6a35', eye: '#fff2c2' },
+  shaman: { body: '#c9a3d4', dark: '#7a5c85', eye: '#fff4c2' },
+  slime: { body: '#5fbf60', dark: '#2e7a34', eye: '#eaffb0' },
+  slimelet: { body: '#8fe08f', dark: '#4a9a4f', eye: '#eaffb0' },
+  sapper: { body: '#7a8f4a', dark: '#455a26', eye: '#ffe9a0' },
+  hydrahead: { body: '#4fa878', dark: '#256b46', eye: '#ffe36b' },
 };

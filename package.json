@@ -11,7 +11,8 @@
     "server": "tsx src/server/main.ts",
     "test": "vitest run",
     "balance": "vitest run tests/balance.test.ts",
-    "build:artifact": "npm run build && node scripts/artifact.mjs"
+    "build:artifact": "npm run build && node scripts/artifact.mjs",
+    "build:sprites": "node scripts/sprites.mjs"
   },
   "dependencies": {
     "tsx": "^4.19.0",

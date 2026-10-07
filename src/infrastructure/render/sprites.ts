@@ -877,6 +877,397 @@ export function drawMapThumbnail(ctx: Ctx, map: MapDef, size: number): void {
   }
 }
 
+// ─── Une silhouette par créature ───────────────────────────────────────────
+
+/** Ce qu'un dessin de créature reçoit : repère centré, x vers l'avant de la marche. */
+interface Beast {
+  ctx: Ctx;
+  r: number;
+  body: string;
+  dark: string;
+  eye: string;
+  t: number;
+}
+
+const BONE = '#e8dcc0';
+const WOOD = '#6b4a2b';
+const STEEL = '#aab3bd';
+
+function oval(ctx: Ctx, x: number, y: number, rx: number, ry: number, color: string, rot = 0): void {
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+/** Corps en deux tons : ombre puis dessus légèrement décalé, comme les anciens sprites. */
+function hull(b: Beast, x: number, y: number, rx: number, ry: number): void {
+  oval(b.ctx, x, y, rx, ry, b.dark);
+  oval(b.ctx, x + rx * 0.04, y - ry * 0.06, rx * 0.84, ry * 0.8, b.body);
+}
+
+function eyes(b: Beast, x: number, spread: number, size: number, color = b.eye): void {
+  for (const s of [-1, 1]) disc(b.ctx, x, s * spread, Math.max(0.03, size), color);
+}
+
+/** Pattes latérales qui balancent d'avant en arrière, en alternance. */
+function legs(b: Beast, xs: number[], side: number, reach: number, width: number, speed: number): void {
+  xs.forEach((lx, i) => {
+    for (const s of [-1, 1]) {
+      const swing = Math.sin(b.t * speed + i * Math.PI + (s > 0 ? Math.PI : 0)) * reach * 0.45;
+      line(b.ctx, b.dark, width, [lx, s * side, lx + swing, s * (side + reach)]);
+    }
+  });
+}
+
+/** Queue souple : une courbe effilée qui ondule derrière la créature. */
+function tail(b: Beast, from: number, to: number, width: number, wag: number, color = b.dark): void {
+  const sway = Math.sin(b.t * 5) * wag;
+  const ctx = b.ctx;
+  ctx.beginPath();
+  ctx.moveTo(from, -width / 2);
+  ctx.quadraticCurveTo((from + to) / 2, sway - width / 3, to, sway * 1.6);
+  ctx.quadraticCurveTo((from + to) / 2, sway + width / 3, from, width / 2);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function slime(b: Beast): void {
+  const { ctx, r } = b;
+  const squash = 1 + Math.sin(b.t * 6) * 0.08;
+  ctx.beginPath();
+  for (let i = 0; i <= 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const rr = r * (1 + Math.sin(a * 3 + b.t * 4) * 0.06);
+    const px = Math.cos(a) * rr * squash;
+    const py = Math.sin(a) * rr / squash;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.fillStyle = b.dark;
+  ctx.fill();
+  ctx.globalAlpha = 0.85;
+  oval(ctx, 0, -r * 0.05, r * 0.82 * squash, r * 0.78 / squash, b.body);
+  ctx.globalAlpha = 1;
+  disc(ctx, -r * 0.3, r * 0.25, r * 0.16, b.dark);
+  disc(ctx, -r * 0.1, -r * 0.35, r * 0.1, b.dark);
+  oval(ctx, -r * 0.2, -r * 0.45, r * 0.3, r * 0.12, 'rgba(255,255,255,0.35)', -0.4);
+  eyes(b, r * 0.4, r * 0.28, r * 0.17, b.eye);
+  eyes(b, r * 0.46, r * 0.28, r * 0.07, PAL.ink);
+}
+
+export const CREEP_ART: Record<string, (b: Beast) => void> = {
+  rat: (b) => {
+    const { ctx, r } = b;
+    tail(b, -r * 0.7, -r * 1.75, r * 0.14, r * 0.35);
+    legs(b, [-r * 0.35, r * 0.35], r * 0.45, r * 0.3, 0.05, 16);
+    hull(b, -r * 0.1, 0, r * 0.85, r * 0.6);
+    poly(ctx, b.body, [r * 0.35, -r * 0.38, r * 1.3, 0, r * 0.35, r * 0.38]);
+    disc(ctx, r * 1.3, 0, r * 0.09, b.dark);
+    for (const s of [-1, 1]) {
+      disc(ctx, r * 0.35, s * r * 0.4, r * 0.22, b.dark);
+      disc(ctx, r * 0.37, s * r * 0.4, r * 0.13, '#c99a8a');
+    }
+    eyes(b, r * 0.75, r * 0.16, r * 0.09);
+  },
+  wolf: (b) => {
+    const { ctx, r } = b;
+    legs(b, [-r * 0.55, r * 0.45], r * 0.35, r * 0.45, 0.07, 14);
+    oval(ctx, -r * 1.15, Math.sin(b.t * 7) * r * 0.15, r * 0.5, r * 0.2, b.dark, Math.sin(b.t * 7) * 0.3);
+    hull(b, -r * 0.05, 0, r * 1.0, r * 0.48);
+    line(ctx, b.dark, r * 0.18, [-r * 0.7, 0, r * 0.4, 0]);
+    oval(ctx, r * 0.45, 0, r * 0.38, r * 0.5, b.dark);
+    poly(ctx, b.body, [r * 0.55, -r * 0.3, r * 1.5, 0, r * 0.55, r * 0.3]);
+    disc(ctx, r * 1.48, 0, r * 0.08, PAL.ink);
+    for (const s of [-1, 1]) poly(ctx, b.dark, [r * 0.75, s * r * 0.2, r * 0.45, s * r * 0.5, r * 0.55, s * r * 0.12]);
+    eyes(b, r * 0.9, r * 0.15, r * 0.09);
+  },
+  raider: (b) => {
+    const { ctx, r } = b;
+    const swing = Math.sin(b.t * 6) * 0.25;
+    oval(ctx, -r * 0.1, 0, r * 0.5, r * 0.95, b.dark);
+    oval(ctx, -r * 0.05, 0, r * 0.4, r * 0.82, b.body);
+    // Hache à droite, bouclier rond à gauche.
+    ctx.save();
+    ctx.translate(r * 0.1, r * 0.7);
+    ctx.rotate(swing);
+    line(ctx, WOOD, r * 0.12, [0, 0, r * 1.05, 0]);
+    poly(ctx, STEEL, [r * 0.8, 0, r * 1.1, r * 0.05, r * 1.15, r * 0.4, r * 0.85, r * 0.3]);
+    ctx.restore();
+    disc(ctx, r * 0.3, -r * 0.72, r * 0.34, PAL.bronze);
+    disc(ctx, r * 0.3, -r * 0.72, r * 0.26, WOOD);
+    disc(ctx, r * 0.3, -r * 0.72, r * 0.09, PAL.bronze);
+    disc(ctx, r * 0.1, 0, r * 0.42, b.dark);
+    disc(ctx, r * 0.05, 0, r * 0.34, b.body);
+    eyes(b, r * 0.35, r * 0.14, r * 0.08);
+  },
+  troll: (b) => {
+    const { ctx, r } = b;
+    const sw = Math.sin(b.t * 5) * r * 0.15;
+    for (const s of [-1, 1]) {
+      line(ctx, b.dark, r * 0.32, [0, s * r * 0.75, r * 0.85 + s * sw, s * r * 0.85]);
+      disc(ctx, r * 0.9 + s * sw, s * r * 0.85, r * 0.24, b.body);
+    }
+    hull(b, -r * 0.15, 0, r * 0.85, r * 0.9);
+    disc(ctx, -r * 0.4, r * 0.3, r * 0.18, b.dark);
+    disc(ctx, -r * 0.55, -r * 0.2, r * 0.13, b.dark);
+    disc(ctx, -r * 0.2, -r * 0.45, r * 0.1, b.dark);
+    disc(ctx, r * 0.55, 0, r * 0.36, b.dark);
+    disc(ctx, r * 0.58, 0, r * 0.28, b.body);
+    for (const s of [-1, 1]) poly(ctx, BONE, [r * 0.78, s * r * 0.12, r * 1.05, s * r * 0.24, r * 0.8, s * r * 0.22]);
+    eyes(b, r * 0.68, r * 0.14, r * 0.08);
+  },
+  golem: (b) => {
+    const { ctx, r } = b;
+    const glow = 0.55 + 0.45 * Math.sin(b.t * 2.5);
+    for (const s of [-1, 1]) {
+      poly(ctx, b.dark, [r * 0.35, s * r * 0.7, r * 0.95, s * r * 0.62, r * 1.0, s * r * 1.1, r * 0.4, s * r * 1.15]);
+      poly(ctx, b.body, [r * 0.42, s * r * 0.75, r * 0.88, s * r * 0.7, r * 0.9, s * r * 1.02, r * 0.45, s * r * 1.05]);
+    }
+    poly(ctx, b.dark, [-r * 0.9, -r * 0.4, -r * 0.5, -r * 0.9, r * 0.4, -r * 0.85, r * 0.8, -r * 0.2, r * 0.75, r * 0.5, r * 0.3, r * 0.92, -r * 0.6, r * 0.85, -r * 0.95, r * 0.3]);
+    poly(ctx, b.body, [-r * 0.78, -r * 0.35, -r * 0.42, -r * 0.76, r * 0.35, -r * 0.72, r * 0.66, -r * 0.18, r * 0.62, r * 0.4, r * 0.24, r * 0.76, -r * 0.52, r * 0.7, -r * 0.82, r * 0.24]);
+    ctx.globalAlpha = glow;
+    line(ctx, b.eye, r * 0.06, [-r * 0.5, -r * 0.3, -r * 0.1, 0, -r * 0.35, r * 0.4]);
+    line(ctx, b.eye, r * 0.06, [-r * 0.1, 0, r * 0.25, -r * 0.1]);
+    ctx.globalAlpha = 1;
+    poly(ctx, b.dark, [r * 0.4, -r * 0.3, r * 0.78, -r * 0.25, r * 0.78, r * 0.25, r * 0.4, r * 0.3]);
+    line(ctx, b.eye, r * 0.1, [r * 0.62, -r * 0.16, r * 0.62, r * 0.16]);
+  },
+  knight: (b) => {
+    const { ctx, r } = b;
+    line(ctx, STEEL, r * 0.14, [r * 0.1, r * 0.72, r * 1.45, r * 0.72]);
+    line(ctx, PAL.bronze, r * 0.1, [r * 0.35, r * 0.5, r * 0.35, r * 0.94]);
+    roundRect(ctx, -r * 0.6, -r * 0.7, r * 1.1, r * 1.4, r * 0.25);
+    ctx.fillStyle = b.dark;
+    ctx.fill();
+    for (const s of [-1, 1]) {
+      disc(ctx, -r * 0.05, s * r * 0.68, r * 0.42, b.dark);
+      disc(ctx, -r * 0.02, s * r * 0.65, r * 0.33, b.body);
+      disc(ctx, -r * 0.02, s * r * 0.65, r * 0.08, STEEL);
+    }
+    disc(ctx, r * 0.1, 0, r * 0.45, b.dark);
+    disc(ctx, r * 0.12, 0, r * 0.37, b.body);
+    line(ctx, b.dark, r * 0.12, [-r * 0.3, 0, r * 0.3, 0]);
+    line(ctx, b.eye, r * 0.09, [r * 0.42, -r * 0.2, r * 0.42, r * 0.2]);
+  },
+  harpy: (b) => {
+    const { ctx, r } = b;
+    const flap = 0.75 + Math.sin(b.t * 11) * 0.3;
+    for (const s of [-1, 1]) {
+      for (let i = 0; i < 4; i++) {
+        const fx = r * (0.25 - i * 0.28);
+        oval(ctx, fx, s * r * (0.55 + 0.75 * flap), r * 0.17, r * 0.8 * flap, i % 2 ? b.dark : b.body, s * (0.25 + i * 0.12));
+      }
+    }
+    for (const a of [-0.35, 0, 0.35]) oval(ctx, -r * 0.8, Math.sin(a) * r * 0.5, r * 0.4, r * 0.12, b.dark, a);
+    hull(b, 0, 0, r * 0.62, r * 0.42);
+    disc(ctx, r * 0.55, 0, r * 0.3, b.body);
+    poly(ctx, PAL.gold, [r * 0.78, -r * 0.1, r * 1.1, 0, r * 0.78, r * 0.1]);
+    eyes(b, r * 0.62, r * 0.13, r * 0.07);
+  },
+  wyvern: (b) => {
+    const { ctx, r } = b;
+    const flap = 0.7 + Math.sin(b.t * 8) * 0.3;
+    for (const s of [-1, 1]) {
+      const tipY = s * r * (0.6 + 1.0 * flap);
+      poly(ctx, b.dark, [r * 0.3, s * r * 0.25, r * 0.15, tipY, -r * 0.25, s * r * 1.0 * flap, -r * 0.55, s * r * 0.85 * flap, -r * 0.45, s * r * 0.25]);
+      line(ctx, b.body, r * 0.06, [r * 0.3, s * r * 0.25, r * 0.15, tipY]);
+      line(ctx, b.body, r * 0.04, [r * 0.15, tipY * 0.7, -r * 0.25, s * r * 1.0 * flap]);
+      line(ctx, b.body, r * 0.04, [r * 0.15, tipY * 0.7, -r * 0.55, s * r * 0.85 * flap]);
+    }
+    tail(b, -r * 0.4, -r * 1.55, r * 0.22, r * 0.3);
+    poly(ctx, b.dark, [-r * 1.45 , Math.sin(b.t * 5) * r * 0.48, -r * 1.75, Math.sin(b.t * 5) * r * 0.48 - r * 0.15, -r * 1.75, Math.sin(b.t * 5) * r * 0.48 + r * 0.15]);
+    hull(b, -r * 0.05, 0, r * 0.6, r * 0.36);
+    line(ctx, b.body, r * 0.22, [r * 0.4, 0, r * 0.95, Math.sin(b.t * 3) * r * 0.1]);
+    oval(ctx, r * 1.05, Math.sin(b.t * 3) * r * 0.1, r * 0.3, r * 0.2, b.body);
+    for (const s of [-1, 1]) line(ctx, BONE, r * 0.05, [r * 0.95, s * r * 0.12, r * 0.7, s * r * 0.3]);
+    ctx.save();
+    ctx.translate(0, Math.sin(b.t * 3) * r * 0.1);
+    eyes(b, r * 1.12, r * 0.1, r * 0.06);
+    ctx.restore();
+  },
+  wraith: (b) => {
+    const { ctx, r } = b;
+    ctx.globalAlpha = 0.25 + 0.1 * Math.sin(b.t * 3);
+    disc(ctx, 0, 0, r * 1.15, b.body);
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(r * 0.55, -r * 0.65);
+    for (let i = 0; i <= 5; i++) {
+      const k = i / 5;
+      const tx = -r * (0.9 + (i % 2) * 0.55) + Math.sin(b.t * 6 + i) * r * 0.12;
+      ctx.lineTo(tx, -r * 0.7 + k * r * 1.4);
+    }
+    ctx.lineTo(r * 0.55, r * 0.65);
+    ctx.closePath();
+    ctx.fillStyle = b.dark;
+    ctx.fill();
+    oval(ctx, -r * 0.1, 0, r * 0.65, r * 0.55, b.body);
+    disc(ctx, r * 0.35, 0, r * 0.42, b.dark);
+    disc(ctx, r * 0.45, 0, r * 0.28, PAL.ink);
+    ctx.globalAlpha = 1;
+    eyes(b, r * 0.55, r * 0.12, r * 0.08);
+  },
+  ogre: (b) => {
+    const { ctx, r } = b;
+    const swing = Math.sin(b.t * 4) * 0.3;
+    ctx.save();
+    ctx.translate(r * 0.1, r * 0.75);
+    ctx.rotate(swing);
+    line(ctx, WOOD, r * 0.16, [0, 0, r * 0.95, r * 0.15]);
+    disc(ctx, r * 1.0, r * 0.16, r * 0.24, WOOD);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      disc(ctx, r * 1.0 + Math.cos(a) * r * 0.24, r * 0.16 + Math.sin(a) * r * 0.24, r * 0.06, STEEL);
+    }
+    ctx.restore();
+    disc(ctx, r * 0.45, -r * 0.82, r * 0.2, b.body);
+    hull(b, -r * 0.1, 0, r * 0.8, r * 0.95);
+    line(ctx, WOOD, r * 0.12, [-r * 0.2, -r * 0.88, -r * 0.2, r * 0.88]);
+    disc(ctx, -r * 0.2, 0, r * 0.12, PAL.bronze);
+    disc(ctx, r * 0.5, 0, r * 0.33, b.dark);
+    disc(ctx, r * 0.52, 0, r * 0.26, b.body);
+    line(ctx, PAL.ink, r * 0.12, [r * 0.3, 0, r * 0.6, 0]);
+    for (const s of [-1, 1]) poly(ctx, BONE, [r * 0.7, s * r * 0.12, r * 0.95, s * r * 0.2, r * 0.72, s * r * 0.22]);
+    eyes(b, r * 0.66, r * 0.12, r * 0.06);
+  },
+  hydra: (b) => {
+    const { ctx, r } = b;
+    tail(b, -r * 0.5, -r * 1.4, r * 0.4, r * 0.2);
+    hull(b, -r * 0.15, 0, r * 0.75, r * 0.75);
+    for (let i = 0; i < 4; i++) disc(ctx, -r * 0.45 + i * r * 0.2, (i % 2 ? 1 : -1) * r * 0.2, r * 0.1, b.dark);
+    [-0.65, 0, 0.65].forEach((a, i) => {
+      const sway = Math.sin(b.t * 3 + i * 2) * 0.18;
+      const hx = Math.cos(a + sway) * r * 1.15;
+      const hy = Math.sin(a + sway) * r * 1.15;
+      ctx.beginPath();
+      ctx.moveTo(r * 0.3, Math.sin(a) * r * 0.35);
+      ctx.quadraticCurveTo(r * 0.75, Math.sin(a) * r * 0.5 - sway * r, hx, hy);
+      ctx.strokeStyle = b.dark;
+      ctx.lineWidth = r * 0.26;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.strokeStyle = b.body;
+      ctx.lineWidth = r * 0.16;
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(a + sway);
+      oval(ctx, r * 0.05, 0, r * 0.26, r * 0.18, b.dark);
+      oval(ctx, r * 0.07, 0, r * 0.2, r * 0.13, b.body);
+      eyes(b, r * 0.1, r * 0.09, r * 0.05);
+      ctx.restore();
+    });
+  },
+  ashlord: (b) => {
+    const { ctx, r } = b;
+    const ember = 0.5 + 0.5 * Math.sin(b.t * 3);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.1, -r * 0.8);
+    for (let i = 0; i <= 6; i++) ctx.lineTo(-r * (0.95 + (i % 2) * 0.3) + Math.sin(b.t * 4 + i) * r * 0.05, -r * 0.8 + (i / 6) * r * 1.6);
+    ctx.lineTo(-r * 0.1, r * 0.8);
+    ctx.closePath();
+    ctx.fillStyle = '#3a1410';
+    ctx.fill();
+    for (const s of [-1, 1]) {
+      disc(ctx, 0, s * r * 0.62, r * 0.36, b.dark);
+      poly(ctx, '#2a1a16', [-r * 0.1, s * r * 0.7, r * 0.15, s * r * 1.15, r * 0.2, s * r * 0.65]);
+    }
+    hull(b, -r * 0.05, 0, r * 0.62, r * 0.7);
+    ctx.globalAlpha = 0.5 + 0.5 * ember;
+    line(ctx, PAL.gold, r * 0.05, [-r * 0.45, -r * 0.3, -r * 0.1, -r * 0.05, -r * 0.35, r * 0.35]);
+    line(ctx, PAL.gold, r * 0.05, [-r * 0.1, -r * 0.05, r * 0.15, r * 0.25]);
+    ctx.globalAlpha = 1;
+    disc(ctx, r * 0.35, 0, r * 0.3, '#2a1a16');
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(r * 0.3, s * r * 0.2);
+      ctx.quadraticCurveTo(r * 0.4, s * r * 0.45, r * 0.7, s * r * 0.36);
+      ctx.strokeStyle = BONE;
+      ctx.lineWidth = r * 0.07;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+    eyes(b, r * 0.5, r * 0.11, r * 0.07);
+  },
+  runeguard: (b) => {
+    const { ctx, r } = b;
+    const glow = 0.5 + 0.5 * Math.sin(b.t * 2.2);
+    hull(b, -r * 0.2, 0, r * 0.55, r * 0.8);
+    disc(ctx, -r * 0.05, 0, r * 0.34, b.dark);
+    disc(ctx, -r * 0.03, 0, r * 0.26, b.body);
+    // Pavois de pierre gravé d'une rune.
+    roundRect(ctx, r * 0.4, -r * 0.95, r * 0.4, r * 1.9, r * 0.12);
+    ctx.fillStyle = b.dark;
+    ctx.fill();
+    roundRect(ctx, r * 0.47, -r * 0.85, r * 0.26, r * 1.7, r * 0.08);
+    ctx.fillStyle = b.body;
+    ctx.fill();
+    ctx.globalAlpha = 0.4 + 0.6 * glow;
+    line(ctx, b.eye, r * 0.08, [r * 0.6, -r * 0.55, r * 0.6, r * 0.55]);
+    line(ctx, b.eye, r * 0.07, [r * 0.6, -r * 0.2, r * 0.6 - r * 0.0, -r * 0.2, r * 0.6, r * 0.1]);
+    line(ctx, b.eye, r * 0.07, [r * 0.52, -r * 0.35, r * 0.68, -r * 0.05, r * 0.52, r * 0.25]);
+    ctx.globalAlpha = 1;
+  },
+  dunerunner: (b) => {
+    const { ctx, r } = b;
+    tail(b, -r * 0.4, -r * 1.7, r * 0.3, r * 0.5);
+    legs(b, [-r * 0.4, r * 0.35], r * 0.25, r * 0.55, 0.07, 22);
+    hull(b, 0, 0, r * 0.75, r * 0.35);
+    for (let i = 0; i < 4; i++) poly(ctx, b.dark, [-r * 0.5 + i * r * 0.3, -r * 0.06, -r * 0.35 + i * r * 0.3, 0, -r * 0.5 + i * r * 0.3, r * 0.06]);
+    poly(ctx, b.body, [r * 0.5, -r * 0.28, r * 1.25, 0, r * 0.5, r * 0.28]);
+    for (const s of [-1, 1]) poly(ctx, b.dark, [r * 0.55, s * r * 0.22, r * 0.4, s * r * 0.55, r * 0.75, s * r * 0.25]);
+    eyes(b, r * 0.8, r * 0.15, r * 0.08);
+  },
+  shaman: (b) => {
+    const { ctx, r } = b;
+    const glow = 0.5 + 0.5 * Math.sin(b.t * 3);
+    ctx.globalAlpha = 0.15 + 0.15 * glow;
+    disc(ctx, 0, 0, r * 1.25, b.eye);
+    ctx.globalAlpha = 1;
+    line(ctx, WOOD, r * 0.1, [-r * 0.5, r * 0.75, r * 1.05, r * 0.65]);
+    disc(ctx, r * 1.12, r * 0.64, r * 0.2, b.dark);
+    disc(ctx, r * 1.12, r * 0.64, r * (0.1 + 0.05 * glow), b.eye);
+    hull(b, -r * 0.1, 0, r * 0.62, r * 0.75);
+    for (const s of [-1, 1]) {
+      oval(ctx, -r * 0.35, s * r * 0.55, r * 0.3, r * 0.08, BONE, s * 0.5);
+      oval(ctx, -r * 0.5, s * r * 0.45, r * 0.28, r * 0.07, PAL.danger, s * 0.7);
+    }
+    disc(ctx, r * 0.25, 0, r * 0.36, b.dark);
+    disc(ctx, r * 0.42, 0, r * 0.2, PAL.ink);
+    eyes(b, r * 0.48, r * 0.09, r * 0.06);
+  },
+  slime,
+  slimelet: slime,
+  sapper: (b) => {
+    const { ctx, r } = b;
+    // Bombe sur le dos, mèche qui crépite.
+    disc(ctx, -r * 0.65, 0, r * 0.45, IRON);
+    disc(ctx, -r * 0.72, -r * 0.12, r * 0.12, '#4a4a52');
+    line(ctx, BONE, r * 0.06, [-r * 1.0, 0, -r * 1.25, -r * 0.2]);
+    const spark = Math.sin(b.t * 30) > 0 ? PAL.gold : PAL.danger;
+    disc(ctx, -r * 1.27, -r * 0.22, r * 0.12, spark);
+    legs(b, [0], r * 0.35, r * 0.25, 0.06, 18);
+    hull(b, 0, 0, r * 0.5, r * 0.55);
+    for (const s of [-1, 1]) poly(ctx, b.body, [r * 0.3, s * r * 0.2, -r * 0.05, s * r * 1.05, r * 0.15, s * r * 0.25]);
+    disc(ctx, r * 0.4, 0, r * 0.34, b.body);
+    poly(ctx, b.dark, [r * 0.6, -r * 0.08, r * 0.95, 0, r * 0.6, r * 0.08]);
+    eyes(b, r * 0.55, r * 0.15, r * 0.08);
+  },
+  hydrahead: (b) => {
+    const { ctx, r } = b;
+    tail(b, -r * 0.2, -r * 1.6, r * 0.55, r * 0.45);
+    for (let i = 0; i < 3; i++) poly(ctx, b.dark, [-r * (0.3 + i * 0.4), -r * 0.05, -r * (0.15 + i * 0.4), -r * 0.35, -r * (0.05 + i * 0.4), 0]);
+    hull(b, r * 0.15, 0, r * 0.85, r * 0.55);
+    oval(ctx, r * 0.75, 0, r * 0.35, r * 0.2, b.dark);
+    for (const s of [-1, 1]) line(ctx, BONE, r * 0.05, [r * 0.95, s * r * 0.06, r * 1.05, s * r * 0.16]);
+    eyes(b, r * 0.45, r * 0.25, r * 0.1);
+  },
+};
+
 export interface CreepLike {
   def: CreepDef;
   x: number;
@@ -913,62 +1304,14 @@ export function drawCreep(ctx: Ctx, c: CreepLike, dirX: number, dirY: number, ti
     ctx.fill();
   }
 
-  if (st.shape === 'wing') {
-    const flap = Math.sin(time * 12 + c.bob) * 0.35;
-    ctx.fillStyle = st.dark;
-    for (const s of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + s * r * 2.1, y - r * (0.5 + flap));
-      ctx.lineTo(x + s * r * 1.4, y + r * 0.4);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-
-  const flash = c.hitFlash > 0;
-  ctx.globalAlpha = st.shape === 'ghost' ? 0.78 : 1;
-  ctx.fillStyle = st.dark;
-  if (st.shape === 'block') {
-    roundRect(ctx, x - r, y - r, r * 2, r * 2, r * 0.35);
-  } else if (st.shape === 'ghost') {
-    ctx.beginPath();
-    ctx.arc(x, y - r * 0.1, r, Math.PI, 0);
-    const wave = Math.sin(time * 6 + c.bob) * r * 0.15;
-    ctx.lineTo(x + r, y + r * 0.8);
-    ctx.lineTo(x + r * 0.5, y + r * 0.55 + wave);
-    ctx.lineTo(x, y + r * 0.85);
-    ctx.lineTo(x - r * 0.5, y + r * 0.55 - wave);
-    ctx.lineTo(x - r, y + r * 0.8);
-    ctx.closePath();
-  } else {
-    circle(ctx, x, y, r);
-  }
-  ctx.fill();
-  ctx.fillStyle = flash ? '#fff4dc' : st.body;
-  if (st.shape === 'block') {
-    roundRect(ctx, x - r + 0.05, y - r + 0.04, r * 2 - 0.1, r * 2 - 0.12, r * 0.3);
-    ctx.fill();
-  } else if (st.shape === 'ghost') {
-    circle(ctx, x, y - r * 0.12, r * 0.82);
-    ctx.fill();
-  } else {
-    circle(ctx, x, y - 0.02, r * 0.84);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  // Yeux orientés dans le sens de la marche.
+  // Silhouette propre à la créature, dessinée dans le repère de la marche (x vers l'avant).
   const len = Math.hypot(dirX, dirY) || 1;
-  const fx = dirX / len;
-  const fy = dirY / len;
-  const ex = x + fx * r * 0.45;
-  const ey = y + fy * r * 0.45 - r * 0.1;
-  ctx.fillStyle = st.eye;
-  for (const s of [-1, 1]) {
-    circle(ctx, ex - fy * s * r * 0.32, ey + fx * s * r * 0.32, Math.max(0.035, r * 0.14));
-    ctx.fill();
-  }
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(Math.atan2(dirY / len, dirX / len));
+  const art = CREEP_ART[c.def.id] ?? CREEP_ART.rat;
+  art({ ctx, r, body: c.hitFlash > 0 ? '#fff4dc' : st.body, dark: st.dark, eye: st.eye, t: time + c.bob });
+  ctx.restore();
 
   if (c.def.boss) {
     ctx.strokeStyle = PAL.gold;

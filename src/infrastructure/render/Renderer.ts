@@ -23,6 +23,7 @@ const BODY_FONT = '"Alegreya Sans", "Gill Sans", "Trebuchet MS", sans-serif';
 export interface Board { world: World; place: MapPlacement; fx: Effects; view: ViewState; nick: string }
 
 interface Terrain { canvas: HTMLCanvasElement; mapId: string; scale: number; dpr: number }
+interface Trail { canvas: HTMLCanvasElement; key: string }
 interface Facing { x: number; y: number; dx: number; dy: number }
 
 export class Renderer {
@@ -32,6 +33,8 @@ export class Renderer {
   private cssH = 0;
   /** Caches par rang de carte : le `World` adverse est remplacé à chaque `Rival`, le terrain (clé : id de carte, échelle ajustée, dpr) et les orientations lui survivent. */
   private terrains: Terrain[] = [];
+  /** Sentier de terre sous le trajet terrestre : redessiné seulement quand le trajet ou le terrain change. */
+  private trails: Trail[] = [];
   private facings: Map<number, Facing>[] = [];
 
   constructor(readonly canvas: HTMLCanvasElement) {
@@ -63,14 +66,83 @@ export class Renderer {
   }
 
   /** Terrain construit une fois à la résolution du zoom maximal ; le zoom courant le réduit au dessin. */
-  private terrainOf(index: number, world: World, place: MapPlacement): HTMLCanvasElement {
+  private terrainOf(index: number, world: World, place: MapPlacement): Terrain {
     const scale = MAX_ZOOM * fittedView(place, { w: this.cssW, h: this.cssH }).scale;
     let t = this.terrains[index];
     if (!t || t.mapId !== world.map.id || t.scale !== scale || t.dpr !== this.dpr) {
       t = { canvas: this.buildTerrain(world, scale), mapId: world.map.id, scale, dpr: this.dpr };
       this.terrains[index] = t;
     }
+    return t;
+  }
+
+  private trailOf(index: number, world: World, terrain: Terrain): HTMLCanvasElement {
+    const route = world.groundRoute();
+    const key = `${terrain.mapId}|${terrain.scale}|${terrain.dpr}|${route.map((leg) => leg.join(',')).join(';')}`;
+    let t = this.trails[index];
+    if (!t || t.key !== key) {
+      t = { canvas: this.buildTrail(world, route, terrain.scale), key };
+      this.trails[index] = t;
+    }
     return t.canvas;
+  }
+
+  /** Sentier discret : terre usée translucide, bords irréguliers, quelques cailloux. Le grain dépend de la case, pas du tracé : il ne scintille pas quand le labyrinthe change. */
+  private buildTrail(world: World, route: number[][], scale: number): HTMLCanvasElement {
+    const g = world.grid;
+    const c = document.createElement('canvas');
+    c.width = Math.round(g.w * scale * this.dpr);
+    c.height = Math.round(g.h * scale * this.dpr);
+    const ctx = c.getContext('2d')!;
+    const s = this.dpr * scale;
+    ctx.setTransform(s, 0, 0, s, 0, 0);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const legs = route.filter((leg) => leg.length > 1).map((leg) => leg.map((i) => ({ x: g.cx(i) + 0.5, y: g.cy(i) + 0.5 })));
+    const smooth = (pts: { x: number; y: number }[]): void => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let k = 1; k < pts.length - 1; k++) {
+        ctx.quadraticCurveTo(pts[k].x, pts[k].y, (pts[k].x + pts[k + 1].x) / 2, (pts[k].y + pts[k + 1].y) / 2);
+      }
+      ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+    };
+    const stroke = (width: number, color: string): void => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      for (const pts of legs) {
+        smooth(pts);
+        ctx.stroke();
+      }
+    };
+    const cells = [...new Set(route.flat())];
+
+    // Herbe usée : un liseré à peine plus sombre, aux bords mordus.
+    for (const i of cells) {
+      const rng = new Rng(i * 7919 + 13);
+      ctx.fillStyle = 'rgba(40, 34, 22, 0.14)';
+      ctx.beginPath();
+      ctx.ellipse(g.cx(i) + 0.5 + (rng.next() - 0.5) * 0.3, g.cy(i) + 0.5 + (rng.next() - 0.5) * 0.3, 0.42 + rng.next() * 0.1, 0.38 + rng.next() * 0.08, rng.next() * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Terre qui affleure, translucide : l'herbe transparaît encore.
+    stroke(0.55, 'rgba(87, 70, 45, 0.32)');
+    stroke(0.3, 'rgba(106, 86, 57, 0.28)');
+    // Grain : quelques mottes et cailloux, épars.
+    for (const i of cells) {
+      const rng = new Rng(i * 104729 + 7);
+      const n = 1 + rng.int(3);
+      for (let k = 0; k < n; k++) {
+        const x = g.cx(i) + 0.5 + (rng.next() - 0.5) * 0.55;
+        const y = g.cy(i) + 0.5 + (rng.next() - 0.5) * 0.55;
+        const pebble = rng.next() < 0.3;
+        ctx.fillStyle = pebble ? 'rgba(176, 162, 132, 0.3)' : 'rgba(60, 46, 30, 0.25)';
+        ctx.beginPath();
+        ctx.ellipse(x, y, pebble ? 0.045 : 0.07, pebble ? 0.03 : 0.045, rng.next() * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    return c;
   }
 
   private buildTerrain(world: World, scale: number): HTMLCanvasElement {
@@ -183,7 +255,10 @@ export class Renderer {
     };
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(this.terrainOf(index, w, place), ox * this.dpr, oy * this.dpr, g.w * cs * this.dpr, g.h * cs * this.dpr);
+    const terrain = this.terrainOf(index, w, place);
+    const rect = [ox * this.dpr, oy * this.dpr, g.w * cs * this.dpr, g.h * cs * this.dpr] as const;
+    ctx.drawImage(terrain.canvas, ...rect);
+    ctx.drawImage(this.trailOf(index, w, terrain), ...rect);
     cellSpace();
 
     this.drawLandmarks(g, realTime);

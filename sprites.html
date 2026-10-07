@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Planche des sprites</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700&family=Alegreya+Sans+SC:wght@500;700&family=Grenze+Gotisch:wght@500;700&display=swap">
+<style>
+  /* Planche d'atelier : une seule ambiance sombre, celle du jeu. Colonne unique, sections empilées, tuiles en grille. */
+  :root {
+    color-scheme: dark;
+    --ground: #14110d;
+    --panel: #1d1914;
+    --line: #4a3d29;
+    --line-soft: #342c20;
+    --bronze: #b98d4c;
+    --gold: #e9b949;
+    --text: #efe3c4;
+    --text-dim: #b3a78b;
+    --text-faint: #857a63;
+    --display: "Grenze Gotisch", "Palatino Linotype", Palatino, serif;
+    --body: "Alegreya Sans", "Gill Sans", "Trebuchet MS", sans-serif;
+    --caps: "Alegreya Sans SC", "Alegreya Sans", "Gill Sans", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  html { background: var(--ground); }
+  body { background: var(--ground); color: var(--text); font: 16px/1.5 var(--body); padding-inline: 16px; padding-block: 0 64px; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header.top { padding-block: 40px 8px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 8px; }
+  header.top h1 { font: 700 clamp(2.4rem, 6vw, 3.6rem)/1 var(--display); color: var(--gold); margin: 0; letter-spacing: 0.01em; }
+  header.top p { margin: 0 0 16px; color: var(--text-dim); max-width: 64ch; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; padding-block: 14px; font: 500 0.95rem var(--caps); letter-spacing: 0.06em; }
+  nav.toc a { color: var(--bronze); text-decoration: none; }
+  nav.toc a:hover, nav.toc a:focus-visible { color: var(--gold); text-decoration: underline; }
+  a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  section.part { padding-block: 36px 8px; display: grid; gap: 16px; }
+  section.part > h2 { font: 700 2rem/1.1 var(--display); color: var(--text); margin: 0; text-wrap: balance; }
+  section.part > p { margin: 0; color: var(--text-dim); max-width: 70ch; }
+  h3 { font: 700 1.6rem/1.1 var(--display); color: var(--gold); margin: 0; }
+  h4 { font: 700 0.85rem var(--caps); letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 8px; text-transform: uppercase; }
+  h5 { font: 500 0.95rem var(--caps); letter-spacing: 0.06em; color: var(--bronze); margin: 12px 0 0; }
+  code { font: 0.78rem var(--mono); color: var(--text-faint); }
+
+  #palette { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+  .swlist { display: grid; gap: 4px; }
+  .sw { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 10px; }
+  .chip { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); }
+  .swname { font-size: 0.92rem; }
+  .famlist { display: grid; gap: 8px; }
+  .fam { display: grid; grid-template-columns: 96px 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; }
+  .fam .fambars { grid-row: span 2; display: flex; height: 36px; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+  .fam .fambars span { flex: 1; }
+
+  #maps { display: grid; gap: 24px; }
+  figure { margin: 0; }
+  .map { display: grid; gap: 8px; }
+  .mapframe { width: 100%; max-width: 720px; }
+  .mapframe canvas, #scene canvas { display: block; border: 1px solid var(--line); border-radius: 4px; max-width: 100%; }
+  figcaption { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+  .map figcaption strong { font: 700 1.2rem var(--display); color: var(--text); }
+  .map figcaption span { color: var(--text-faint); font-size: 0.9rem; }
+  #scene { width: 100%; }
+
+  #towers { display: grid; gap: 28px; }
+  .builder { display: grid; gap: 8px; padding-top: 20px; border-top: 1px solid var(--line-soft); }
+  .builder header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+  .builder header p { margin: 0; color: var(--text-dim); }
+  .tiles { display: flex; flex-wrap: wrap; gap: 12px; }
+  .tile { width: 150px; display: grid; gap: 6px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 4px; padding: 6px; }
+  .tile canvas { display: block; margin: 0 auto; border-radius: 2px; max-width: 100%; height: auto !important; aspect-ratio: 1; }
+  .tile figcaption { display: grid; grid-template-columns: 1fr auto; gap: 0 6px; }
+  .tname { font-weight: 700; font-size: 0.92rem; line-height: 1.2; }
+  .tmeta { grid-column: 1; font: 500 0.78rem var(--caps); letter-spacing: 0.05em; color: var(--text-faint); }
+  .dots { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 3px; align-self: center; }
+  .dots i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--line); }
+  #creeps { display: grid; gap: 8px; }
+  @media (max-width: 420px) { .tile { width: calc(50% - 6px); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Planche des sprites</h1>
+    <p>Tous les éléments graphiques du jeu, dessinés par le vrai code de rendu (<code>sprites.ts</code>, <code>Renderer.ts</code>, <code>palette.ts</code>). Rien n'est une image : ce que montre cette page est ce que montre le jeu.</p>
+  </header>
+  <nav class="toc" aria-label="Sommaire">
+    <a href="#p-palette">Palette</a><a href="#p-maps">Cartes</a><a href="#p-towers">Tours</a><a href="#p-creeps">Créatures</a><a href="#p-states">États</a><a href="#p-scene">Scène</a>
+  </nav>
+
+  <section class="part" id="p-palette">
+    <h2>Palette</h2>
+    <p>Couleurs du monde, de l'interface et des six familles de tours. Une tour normale prend la couleur de sa famille ; un hybride porte la deuxième famille sur son socle.</p>
+    <div id="palette"></div>
+  </section>
+
+  <section class="part" id="p-maps">
+    <h2>Cartes</h2>
+    <p>Terrain, rochers, portail violet, pierres runiques et porte de sortie, sans tour. Un sentier de terre battue suit le trajet des créatures et se redessine quand le labyrinthe change. Le fond de carte est appelé à varier selon la carte.</p>
+    <div id="maps"></div>
+  </section>
+
+  <section class="part" id="p-towers">
+    <h2>Tours</h2>
+    <p>Par bâtisseur, puis par lignée. Chaque tour pivote comme en jeu ; les points indiquent sa ou ses familles. Les puces sous le socle donnent le niveau.</p>
+    <div id="towers"></div>
+  </section>
+
+  <section class="part" id="p-creeps">
+    <h2>Créatures</h2>
+    <p>Une silhouette par créature, vue de dessus et tournée dans le sens de la marche : pattes, queues, ailes et armes animées. Les chefs portent une couronne d'or. Les points donnent corps, ombre et yeux.</p>
+    <div id="creeps"></div>
+  </section>
+
+  <section class="part" id="p-states">
+    <h2>États</h2>
+    <p>Signes affichés sur une créature en jeu, montrés sur un Maraudeur et un Sapeur gobelin.</p>
+    <div class="tiles" id="states"></div>
+  </section>
+
+  <section class="part" id="p-scene">
+    <h2>Scène</h2>
+    <p>Une partie simulée sur Le Gué des Runes : flèches, boulets, éclairs, éclats de zone, particules et primes. Le sentier suit le labyrinthe des tours ; le trajet en pointillés est affiché par-dessus.</p>
+    <div id="scene"></div>
+  </section>
+</div>
+<script type="module" src="/tools/sprites/sheet.ts"></script>
+</body>
+</html>
