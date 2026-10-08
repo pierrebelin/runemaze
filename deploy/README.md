@@ -1,4 +1,4 @@
-# Déploiement de Tower Defense sur VPS — td.pierrebelin.fr
+# Déploiement de Runemaze sur VPS — td.pierrebelin.fr
 
 Plan étape par étape : VPS Ubuntu/Debian existant (Node, Nginx et Certbot déjà en place), utilisateur dédié `td`, service systemd utilisateur, déploiement automatique par GitHub Actions à chaque push sur `main`.
 
@@ -92,7 +92,7 @@ dig +short td.pierrebelin.fr AAAA
 
 ```bash
 # Utilisateur sans mot de passe (connexion par clé uniquement), sans sudo
-sudo adduser --disabled-password --gecos "Tower Defense" td
+sudo adduser --disabled-password --gecos "Runemaze" td
 
 # Dossiers de l'application et de SSH
 sudo -u td mkdir -p /home/td/app/releases /home/td/.ssh /home/td/.config/systemd/user
@@ -187,7 +187,7 @@ httpServer.listen(PORT, HOST, () => {
 ```ini
 # Service systemd utilisateur : installé par deploy/remote-deploy.sh dans ~/.config/systemd/user/.
 [Unit]
-Description=Tower Defense, serveur de partie
+Description=Runemaze, serveur de partie
 
 [Service]
 WorkingDirectory=%h/app/current
@@ -405,7 +405,7 @@ Tant que le premier déploiement n'a pas eu lieu, `https://td.pierrebelin.fr` r�
 
 ## 7. Secrets GitHub
 
-Dans le dépôt `pierrebelin/tower-defense` : *Settings → Environments → New environment* `production`, puis y ajouter les secrets suivants (secrets d'environnement, pas de dépôt : seul le job `deployer` y a accès).
+Dans le dépôt `pierrebelin/runemaze` : *Settings → Environments → New environment* `production`, puis y ajouter les secrets suivants (secrets d'environnement, pas de dépôt : seul le job `deployer` y a accès).
 
 | Secret | Valeur |
 |---|---|

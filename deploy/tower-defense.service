@@ -1,6 +1,6 @@
 # Service systemd utilisateur : installé par deploy/remote-deploy.sh dans ~/.config/systemd/user/.
 [Unit]
-Description=Tower Defense, serveur de partie
+Description=Runemaze, serveur de partie
 
 [Service]
 WorkingDirectory=%h/app/current

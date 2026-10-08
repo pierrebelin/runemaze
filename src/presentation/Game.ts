@@ -64,11 +64,11 @@ function paintThumb(root: HTMLElement, map: MapDef): void {
 
 const KEYS = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'z', 'x', 'c', 'v'];
 const TARGET_ORDER: TargetMode[] = ['first', 'last', 'strong', 'weak', 'close'];
-const BEST_KEY = 'dedale.best.v2';
+const BEST_KEY = 'runemaze.best.v2';
 /** Records par difficulté : les cartes tirées n'ont pas d'identité, une seule clé. */
 const RECORD_KEY = 'tirage';
-const PENDING_KEY = 'dedale.pending.v1';
-const DUEL_SEAT_KEY = 'dedale.duelseat.v1';
+const PENDING_KEY = 'runemaze.pending.v1';
+const DUEL_SEAT_KEY = 'runemaze.duelseat.v1';
 
 const ICON_CANCEL = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M11 11l18 18M29 11L11 29" stroke="#e0664f" stroke-width="4" stroke-linecap="round"/></svg>';
 const ICON_HELP = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14" fill="none" stroke="#8d939c" stroke-width="2.5"/><path d="M15.5 16a4.5 4.5 0 119 .5c0 3-4.5 3.5-4.5 6.5" fill="none" stroke="#e7e8ea" stroke-width="2.6" stroke-linecap="round"/><circle cx="20" cy="28" r="1.8" fill="#e7e8ea"/></svg>';
@@ -1455,7 +1455,7 @@ export class Game {
       </nav>
       <div class="sheet start">
         <header class="sheet-head">
-          <h1>Tower Defense</h1>
+          <h1>Runemaze</h1>
           <p class="lede">Ici, pas de chemin tout tracé : c'est vous qui le dessinez, mur après mur, pour égarer les hordes sous le feu de vos tours.</p>
         </header>
         <div class="start-ways">

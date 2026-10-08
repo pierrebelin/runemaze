@@ -1,6 +1,6 @@
-# Tower Defense
+# Runemaze
 
-Tower defense de *mazing* dans l'esprit des cartes personnalisées de Warcraft III
+Runemaze est un tower defense de *mazing* dans l'esprit des cartes personnalisées de Warcraft III
 (Wintermaul, Element TD) : pas de chemin imposé, c'est vous qui dessinez le
 labyrinthe avec vos tours. TypeScript, Canvas 2D, serveur Node (`ws`) qui arbitre les parties.
 
@@ -96,7 +96,7 @@ Les choix qui comptent :
 
 ## Esprit du projet
 
-Tower Defense est un projet pour le plaisir, fait pour jouer entre amis, et entièrement
+Runemaze est un projet pour le plaisir, fait pour jouer entre amis, et entièrement
 *vibe codé*. Il ne cherche pas à appliquer des pratiques industrielles : le but est
 d'apporter vite de la valeur, c'est-à-dire de pouvoir jouer, en évitant les complexités
 d'un code de production (pas de CI, de déploiement, de surveillance ni de compatibilité
