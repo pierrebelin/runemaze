@@ -12,7 +12,10 @@ import { GATE } from '../domain/catalog/ether';
 import { gateLevelCost, gateLevelIncome, refundValue } from '../domain/rules/pricing';
 import { creepSpeed } from '../domain/rules/speed';
 import { Mode, Team, Verdict } from '../application/online/protocol';
-import type { Biome } from '../domain/model/types';
+import type { Biome, CellKind, MapDef } from '../domain/model/types';
+import { Grid } from '../domain/model/Grid';
+import { TERRAIN } from '../domain/catalog/map';
+import { emptyLegs } from '../domain/rules/mapDraw';
 import type { WaveReward } from '../domain/rules/waveReward';
 
 const MODE_LABEL: Record<Mode, string> = {
@@ -27,12 +30,53 @@ export function biomeLabel(biome: Biome): string {
   return BIOME_LABEL[biome];
 }
 
+const pct = (x: number) => Math.round(x * 100);
+
+const BIOME_EFFECT: Record<Biome, string> = {
+  earth: 'Des rochers barrent le terrain : ni passage, ni construction.',
+  snow: `La glace accélère les créatures terrestres de ${pct(TERRAIN.ice.speed - 1)} % ; on n’y bâtit pas.`,
+  space: `Une tour sur cristal gagne ${pct(TERRAIN.crystal.range)} % de portée ; les trous de ver relient deux points du terrain.`,
+};
+
+export function biomeEffect(biome: Biome): string {
+  return BIOME_EFFECT[biome];
+}
+
+export interface MapFact {
+  value: number;
+  label: string;
+}
+
+const fact = (value: number, one: string, many: string): MapFact => ({ value, label: value > 1 ? many : one });
+
+/** Chiffres d'une carte pour la choisir : trajet sans aucune tour, pierres runiques à toucher, éléments du biome hors bordure. */
+export function mapFacts(map: MapDef): MapFact[] {
+  const grid = new Grid(map);
+  // La bordure de rochers est commune à toutes les cartes : seul l'intérieur distingue une carte.
+  const inside = (i: number) => i % grid.w > 0 && i % grid.w < grid.w - 1 && i >= grid.w && i < grid.w * (grid.h - 1);
+  const cells = (k: CellKind) => grid.kind.filter((c, i) => c === k && inside(i)).length;
+  const route = Math.round(emptyLegs(map).reduce((a, b) => a + b, 0));
+  const facts = [fact(route, 'case de trajet à vide', 'cases de trajet à vide'), fact(grid.checkpoints.length, 'pierre runique', 'pierres runiques')];
+  if (cells('rock')) facts.push(fact(cells('rock'), 'case de rocher', 'cases de rocher'));
+  if (cells('ice')) facts.push(fact(cells('ice'), 'case de glace', 'cases de glace'));
+  if (cells('crystal')) facts.push(fact(cells('crystal'), 'cristal', 'cristaux'));
+  if (grid.wormholes.length) facts.push(fact(grid.wormholes.length, 'trou de ver', 'trous de ver'));
+  return facts;
+}
+
 export function modeLabel(mode: Mode): string {
   return MODE_LABEL[mode];
 }
 
-export function pairingWord(mode: Mode): string {
-  return mode === Mode.Coop ? 'et' : 'contre';
+const MODE_HINT: Record<Mode, string> = {
+  [Mode.Duel]: '1 contre 1',
+  [Mode.Coop]: 'À deux, vies communes',
+  [Mode.Teams]: '4 joueurs, 2 équipes',
+};
+
+/** Résumé d'un mode sous son nom, à l'accueil. */
+export function modeHint(mode: Mode): string {
+  return MODE_HINT[mode];
 }
 
 const DUEL_VERDICT_LABEL: Record<Verdict, string> = {
@@ -377,12 +421,31 @@ export function sentMessage(groups: SendGroup[], nick: string): string {
   return total === 1 ? `Votre ${who} attaque ${nick}` : `Vos ${who} attaquent ${nick}`;
 }
 
+/** Meuble du blason de chaque bâtisseur, dessiné dans l'écu (0 0 48 56) ; `.ink` reprend le fond de la fiche. */
+const CREST_CHARGE: Record<string, string> = {
+  bastion: '<path d="M14 40V18h4v4h4v-4h4v4h4v-4h4v22z"/><path class="ink" d="M21 40v-6a3 3 0 016 0v6z"/>',
+  forge: '<path d="M12 22h24c0 4-3 6-8 6v3l4 7H16l4-7v-3c-5 0-8-2-8-6z"/><path d="M24 11v5M17 13l2 4M31 13l-2 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  sylve: '<path d="M24 11C13 19 13 34 24 43C35 34 35 19 24 11z"/><path class="ink" d="M24 16v24M24 26l-5-4M24 32l5-4" stroke-width="1.6" stroke-linecap="round"/>',
+  pyromancers: '<path d="M25 10c1 7 9 10 9 19a10 10 0 01-20 0c0-5 3-8 4-11 1 3 2 5 4 5 0-5 0-9 3-13z"/><path class="ink" d="M24 41a4 4 0 01-4-4c0-3 2-4 3-7 2 3 5 4 5 7a4 4 0 01-4 4z"/>',
+  necromancers: '<path d="M14 27a10 10 0 0120 0v5l-3 2v5H17v-5l-3-2z"/><circle class="ink" cx="20" cy="28" r="2.6"/><circle class="ink" cx="28" cy="28" r="2.6"/><path class="ink" d="M21 39v-3M24 39v-3M27 39v-3" stroke-width="1.4"/>',
+  guild: '<circle cx="24" cy="27" r="11"/><circle class="ink" cx="24" cy="27" r="8.6"/><circle cx="24" cy="27" r="7"/><path class="ink" d="M24 21.5l3.6 5.5-3.6 5.5-3.6-5.5z"/>',
+  sanctuary: '<path d="M24 13v28M12 20l24 14M36 20L12 34M20 15l4 4 4-4M20 39l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  arcanists: '<path d="M28 10L15 30h8l-3 14 14-21h-8z"/>',
+};
+
+export function crest(id: string): string {
+  return `<svg class="crest" viewBox="0 0 48 56" aria-hidden="true"><path d="M4 4h40v22c0 14-10 22-20 26C14 48 4 40 4 26z" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="2"/><g fill="currentColor">${CREST_CHARGE[id] ?? ''}</g></svg>`;
+}
+
+/** Carte d'un bâtisseur : blason et nom ; le style, la faiblesse et les tours de base s'affichent au survol. */
 export function builderCard(b: BuilderDef): string {
   const roots = b.roots.map((id) => esc(tower(id).name)).join(' · ');
-  return `<h3>${esc(b.name)}</h3>
-    <p>${esc(b.style)}</p>
-    <p class="weakness"><em>Faiblesse</em> ${esc(b.weakness)}</p>
-    <p class="roots"><em>Tours de base</em> ${roots}</p>`;
+  return `${crest(b.id)}<h3>${esc(b.name)}</h3>
+    <div class="builder-info" role="tooltip">
+      <p>${esc(b.style)}</p>
+      <p class="weakness"><em>Faiblesse</em> ${esc(b.weakness)}</p>
+      <p class="roots"><em>Tours de base</em> ${roots}</p>
+    </div>`;
 }
 
 const recapLine = (g: SendGroup, extra = '') =>
@@ -413,6 +476,14 @@ export function teamRoster(teams: Record<Team, { nick: string; picked: boolean }
   };
   const wait = waiting.length ? `<p>En attente : ${waiting.map(esc).join(', ')}</p>` : '';
   return `<div class="modes">${column(Team.A)}${column(Team.B)}</div>${wait}`;
+}
+
+/** Les deux joueurs du salon duel ou coop, en cartes côte à côte comme les équipes du 2 contre 2 ; l'invité absent est « en attente… ». */
+export function pairRoster(host: { nick: string; picked: boolean }, guest: { nick: string | null; picked: boolean }): string {
+  const card = (p: { nick: string | null; picked: boolean }) => p.nick === null
+    ? '<div class="diff"><strong>en attente…</strong><span>place libre</span></div>'
+    : `<div class="diff"><strong>${esc(p.nick)}</strong><span>${p.picked ? 'a choisi' : 'choisit…'}</span></div>`;
+  return `<div class="modes roster">${card(host)}${card(guest)}</div>`;
 }
 
 export function goldForecastChip(gold: number, r: WaveReward): string {

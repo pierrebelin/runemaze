@@ -23,7 +23,7 @@ import { groupSends, waveBriefing } from '../application/queries/waveBriefing';
 import { realign } from '../application/online/realign';
 import { Seat, rivalSeats, teamOf } from '../application/online/duel';
 import { LOST_LIMIT_MS } from '../application/online/heldGame';
-import { ClientMessageType, Mode, ServerMessageType, Team } from '../application/online/protocol';
+import { ClientMessageType, Mode, NICK_MAX, NICK_MIN, ServerMessageType, Team, validNick } from '../application/online/protocol';
 import type { OtherMap, ServerMessage } from '../application/online/protocol';
 import { refundValue, upgradeCost } from '../domain/rules/pricing';
 import { gleanerCost } from '../domain/rules/gleanerCost';
@@ -34,12 +34,32 @@ import type { ArmorType, AttackType, Biome, Command, Creep, Difficulty, GameEven
 import { CommandType, GameEventType } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { withRecord, type RecordBook } from '../domain/rules/records';
-import { biomeLabel, resignPrompt, etherChip,goldForecastChip, goldForecastInfo, briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeLabel, pairingWord, teamRoster, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
+import { biomeEffect, biomeLabel, mapFacts, resignPrompt, etherChip,goldForecastChip, goldForecastInfo, briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeHint, modeLabel, pairRoster, teamRoster, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
 function escapeHtml(raw: string): string {
   return raw.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+}
+
+/** Carte tirée : grande miniature, puis biome (au choix si `editable`), son effet et les chiffres de la carte. */
+function mapPickHtml(map: MapDef, editable: boolean): string {
+  const biome = map.biome ?? BIOMES[0];
+  const head = editable
+    ? `<div class="biomes" role="radiogroup" aria-label="Biome">${BIOMES.map((b) => `<button type="button" class="biome" role="radio" data-biome="${b}" aria-checked="${b === biome}">${biomeLabel(b)}</button>`).join('')}</div>
+      <button type="button" class="btn" data-redraw>Retirer une carte</button>`
+    : `<h3 class="map-biome">${biomeLabel(biome)}</h3>`;
+  return `<canvas class="map-thumb" width="576" height="384" aria-hidden="true"></canvas>
+    <div class="map-info">
+      <div class="map-head">${head}</div>
+      <p class="map-effect">${biomeEffect(biome)}</p>
+      <dl class="map-facts">${mapFacts(map).map((f) => `<div><dt>${f.label}</dt><dd>${f.value}</dd></div>`).join('')}</dl>
+    </div>`;
+}
+
+function paintThumb(root: HTMLElement, map: MapDef): void {
+  const c = root.querySelector<HTMLCanvasElement>('.map-thumb')!;
+  drawMapThumbnail(c.getContext('2d')!, map, c.width, c.height);
 }
 
 const KEYS = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'z', 'x', 'c', 'v'];
@@ -74,6 +94,7 @@ enum Overlay {
   Lost = 'lost',
   Lobby = 'lobby',
   Resign = 'resign',
+  Setup = 'setup',
 }
 
 type Selection = { kind: 'tower' | 'creep'; id: number; board: number } | null;
@@ -92,7 +113,6 @@ export class Game {
   private drawnMap: MapDef = drawMap(this.seed, this.biome, MAP_RECIPE);
   private builderId = 'bastion';
   /** Onglet de l'écran titre, gardé d'un retour au titre à l'autre. */
-  private startTab: 'solo' | 'duel' = 'solo';
   /** Bâtisseur envoyé dans le salon ; vide tant que le joueur n'a pas cliqué. */
   private lobbyBuilderId: string | null = null;
   /** Qui a choisi son bâtisseur dans le salon (sans l'id adverse). */
@@ -288,10 +308,9 @@ export class Game {
     this.resetLostState();
     this.duelLost = true;
     this.openOverlay(Overlay.Lost, `
-      <div class="sheet" style="width:min(360px,100%);text-align:center">
-        <h2>Connexion perdue</h2>
-        <p class="lede">Reprenez la partie avec son code dans les 30 s.</p>
-        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="quitDuelLost">Écran titre</button></div>
+      <div class="sheet small">
+        <header class="sheet-head"><h2>Connexion perdue</h2><p class="lede">Reprenez la partie avec son code dans les 30 s.</p></header>
+        <div class="row actions"><button type="button" class="btn primary" id="quitDuelLost">Écran titre</button></div>
       </div>`);
     $('quitDuelLost').addEventListener('click', () => this.leaveLobby());
   }
@@ -742,11 +761,13 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.toLowerCase();
-      if (this.overlay === Overlay.Start) {
-        if (k === 'enter' && this.startTab === 'solo') {
+      // Entrée : bouton focalisé (Jouer en solo par défaut), champ pseudo ou code.
+      if (this.overlay === Overlay.Start) return;
+      if (this.overlay === Overlay.Setup) {
+        if (k === 'enter') {
           e.preventDefault();
-          ($('startBtn') as HTMLButtonElement | null)?.click();
-        }
+          $('startBtn').click();
+        } else if (k === 'escape') this.showStart();
         return;
       }
       if (this.overlay === Overlay.End || this.overlay === Overlay.Lost) return;
@@ -1171,8 +1192,10 @@ export class Game {
     this.overlay = kind;
     el.innerHTML = html;
     el.hidden = false;
-    // Ni barre de ressources ni console des tours tant qu'aucune partie n'a commencé (écran titre, aide ouverte depuis le titre, salon).
-    this.setGameChromeHidden(kind === Overlay.Start || kind === Overlay.Lobby || (kind === Overlay.Help && this.helpFromStart));
+    // Ni barre de ressources ni console des tours tant qu'aucune partie n'a commencé (écran titre, préparation, aide ouverte depuis le titre, salon) : fond d'accueil à la place.
+    const home = kind === Overlay.Start || kind === Overlay.Setup || kind === Overlay.Lobby || (kind === Overlay.Help && this.helpFromStart);
+    el.classList.toggle('home', home);
+    this.setGameChromeHidden(home);
   }
 
   private setGameChromeHidden(hidden: boolean): void {
@@ -1252,17 +1275,16 @@ export class Game {
 
   private lostHtml(seconds: number): string {
     return `
-      <div class="sheet" style="width:min(360px,100%);text-align:center">
-        <h2>Connexion perdue — ${seconds} s</h2>
-        <p class="lede">Nouvelle tentative de connexion en cours…</p>
+      <div class="sheet small">
+        <header class="sheet-head"><h2>Connexion perdue — ${seconds} s</h2><p class="lede">Nouvelle tentative de connexion en cours…</p></header>
       </div>`;
   }
 
   private showFrozen(): void {
     this.openOverlay(Overlay.Lost, `
-      <div class="sheet" style="width:min(360px,100%);text-align:center">
-        <h2>${partnerLabel(!this.world.duel)} déconnecté — ${Math.ceil(this.frozenMs! / 1000)} s</h2>
-        <div class="row" style="justify-content:center"><button type="button" class="btn" id="quitFrozen">Quitter la partie</button></div>
+      <div class="sheet small">
+        <header class="sheet-head"><h2>${partnerLabel(!this.world.duel)} déconnecté — ${Math.ceil(this.frozenMs! / 1000)} s</h2></header>
+        <div class="row actions"><button type="button" class="btn" id="quitFrozen">Quitter la partie</button></div>
       </div>`);
     $('quitFrozen').addEventListener('click', () => {
       this.link = null;
@@ -1278,9 +1300,9 @@ export class Game {
 
   private showEndedOverlay(): void {
     this.openOverlay(Overlay.End, `
-      <div class="sheet" style="width:min(360px,100%);text-align:center">
-        <h2>La partie est terminée.</h2>
-        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="backToStart">Écran titre</button></div>
+      <div class="sheet small">
+        <header class="sheet-head"><h2>La partie est terminée.</h2></header>
+        <div class="row actions"><button type="button" class="btn primary" id="backToStart">Écran titre</button></div>
       </div>`);
     $('backToStart').addEventListener('click', () => this.showStart(true));
   }
@@ -1384,14 +1406,15 @@ export class Game {
     this.resetLostState();
   }
 
-  /** `records` : affiche le record solo de chaque difficulté (sans objet en partie à deux). */
-  private diffsHtml(records = true): string {
+  /** `records` : affiche le record solo de chaque difficulté (sans objet en multijoueur). */
+  /** `records` : records solo affichés ; `enabled` faux pour l'invité du salon, qui voit le choix de l'hôte sans le changer. */
+  private diffsHtml(checked: Difficulty, records: boolean, enabled = true): string {
     const best = records ? (this.loadBest()[RECORD_KEY] ?? {}) : {};
     return (Object.keys(DIFFICULTY) as Difficulty[])
       .map((d) => {
         const D = DIFFICULTY[d];
         const rec = best[d] ? `<span class="record">Record : vague ${best[d]}</span>` : '';
-        return `<button type="button" class="diff" role="radio" data-diff="${d}" aria-checked="${d === this.difficulty}">
+        return `<button type="button" class="diff" role="radio" data-diff="${d}" aria-checked="${d === checked}"${enabled ? '' : ' disabled'}>
           <strong>${D.label}</strong><span>${D.lives} vies · ${D.gold} or</span><span>PV des créatures ×${fmt1(D.hp)}</span>${rec}</button>`;
       })
       .join('');
@@ -1426,113 +1449,113 @@ export class Game {
     this.link = null;
     this.setPaused(true);
     this.openOverlay(Overlay.Start, `
-      <div class="sheet wide">
-        <h1>Tower Defense</h1>
-        <p class="lede">Bâtissez le labyrinthe, tenez la porte. Trente vagues, trois chefs, et un seul chemin que vous dessinez vous-même.</p>
-        <div class="mode-tabs" role="tablist" aria-label="Mode de jeu">
-          <button type="button" class="mode-tab" role="tab" data-mode="solo">Solo</button>
-          <button type="button" class="mode-tab" role="tab" data-mode="duel">Partie à deux</button>
-        </div>
-        <section data-panel="solo" role="tabpanel">
-          <ol>
-            <li><b>Les créatures passent par les pierres runiques, dans l'ordre</b> avant de rejoindre la porte : votre champ est traversé à chaque tronçon.</li>
-            <li><b>Murs à 3 pièces d'or</b> pour allonger leur trajet, transformables ensuite en tours. Le passage ne peut jamais être fermé.</li>
-            <li><b>Chaque attaque a ses proies</b> : perçant contre léger, siège contre fortifié, magie contre lourd. Les volants ignorent le labyrinthe.</li>
-            <li><b>Remboursement intégral</b> de ce que vous bâtissez avant le lancement de la vague suivante.</li>
-          </ol>
-          <p class="label">Carte</p>
-          <div class="maps" role="radiogroup" aria-label="Carte"></div>
-          <p class="label">Bâtisseur</p>
-          <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.builderId)}</div>
-          <p class="label">Difficulté</p>
-          <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
-          <div class="row"><button type="button" class="btn primary" id="startBtn">Commencer</button><button type="button" class="btn" id="startHelp">Commandes et armures</button></div>
-        </section>
-        <section data-panel="duel" role="tabpanel">
-          <label class="field"><span>Votre pseudo</span><input type="text" id="duelNick" maxlength="12" placeholder="Anonyme" autocomplete="nickname" spellcheck="false"></label>
-          <div class="duel-way">
-            <h3>Héberger</h3>
-            <p>Choisissez la carte et la difficulté, un code à transmettre vous sera donné. Chacun choisit son bâtisseur dans le salon.</p>
-            <p class="label">Carte</p>
-            <div class="maps" role="radiogroup" aria-label="Carte"></div>
-            <p class="label">Difficulté</p>
-            <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
+      <nav class="home-nav" aria-label="Menu">
+        <button type="button" class="btn" id="startHelp">Commandes</button>
+        <a class="btn" href="sprites.html" target="_blank" rel="noopener">Sprites des factions</a>
+      </nav>
+      <div class="sheet start">
+        <header class="sheet-head">
+          <h1>Tower Defense</h1>
+          <p class="lede">Ici, pas de chemin tout tracé : c'est vous qui le dessinez, mur après mur, pour égarer les hordes sous le feu de vos tours.</p>
+        </header>
+        <div class="start-ways">
+          <section class="block solo" aria-labelledby="soloTitle">
+            <div>
+              <h2 id="soloTitle">Solo</h2>
+              <p>Huit factions, des vagues sans fin. Tenez le plus longtemps possible.</p>
+            </div>
+            <div class="row play-row"><button type="button" class="btn primary" id="playBtn">Jouer en solo</button></div>
+          </section>
+          <section class="block multi" aria-labelledby="multiTitle">
+            <h2 id="multiTitle">En ligne</h2>
+            <label class="field"><span>Votre pseudo</span><input type="text" id="duelNick" minlength="${NICK_MIN}" maxlength="${NICK_MAX}" value="${escapeHtml(this.ownNick)}" placeholder="${NICK_MIN} à ${NICK_MAX} caractères" autocomplete="nickname" spellcheck="false"></label>
             <p class="label">Mode</p>
-            <div class="modes" role="radiogroup" aria-label="Mode">${Object.values(Mode).map((m) => `<button type="button" class="diff" role="radio" data-room-mode="${m}" aria-checked="${m === this.duelMode}"><strong>${modeLabel(m)}</strong></button>`).join('')}</div>
-            <button type="button" class="btn primary" id="hostDuelBtn">Créer une partie</button>
-          </div>
-          <div class="duel-way">
-            <h3>Rejoindre</h3>
-            <p>Saisissez le code reçu de votre adversaire.</p>
-            <div class="code-join"><input type="text" id="duelCode" maxlength="6" placeholder="······" aria-label="Code de la partie" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="btn" id="joinDuelBtn">Rejoindre</button></div>
-          </div>
-        </section>
+            <div class="modes" role="radiogroup" aria-label="Mode">${Object.values(Mode).map((m) => `<button type="button" class="diff" role="radio" data-room-mode="${m}" aria-checked="${m === this.duelMode}"><strong>${modeLabel(m)}</strong><span>${modeHint(m)}</span></button>`).join('')}</div>
+            <div class="duel-ways">
+              <button type="button" class="btn primary" id="hostDuelBtn">Héberger une partie</button>
+              <p class="or">ou</p>
+              <div class="code-join"><input type="text" id="duelCode" maxlength="6" placeholder="ABCDEF" aria-label="Code de la partie" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="btn" id="joinDuelBtn">Rejoindre</button></div>
+            </div>
+          </section>
+        </div>
       </div>`);
-    const el = $('overlay');
-    // Carte et difficulté existent dans les deux onglets : rendues à chaque affichage d'onglet pour refléter le dernier choix.
-    const bindSettings = (panel: HTMLElement, records: boolean): void => {
-      const mapsEl = panel.querySelector<HTMLElement>('.maps')!;
-      const diffsEl = panel.querySelector<HTMLElement>('.diffs')!;
-      const bindDiffs = (): void => {
-        diffsEl.innerHTML = this.diffsHtml(records);
-        diffsEl.querySelectorAll<HTMLButtonElement>('[data-diff]').forEach((b) =>
-          b.addEventListener('click', () => {
-            this.difficulty = b.dataset.diff as Difficulty;
-            diffsEl.querySelectorAll('[data-diff]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
-          }),
-        );
-      };
-      const bindMap = (): void => {
-        mapsEl.innerHTML = `<div class="map"><canvas class="map-thumb" width="64" height="64"></canvas><span>${this.drawnMap.name}</span></div>
-          ${BIOMES.map((b) => `<button type="button" class="diff" role="radio" data-biome="${b}" aria-checked="${b === this.biome}"><strong>${biomeLabel(b)}</strong></button>`).join('')}
-          <button type="button" class="btn" data-redraw>Retirer</button>`;
-        const c = mapsEl.querySelector<HTMLCanvasElement>('canvas')!;
-        drawMapThumbnail(c.getContext('2d')!, this.drawnMap, c.width);
-        mapsEl.querySelectorAll<HTMLButtonElement>('[data-biome]').forEach((b) =>
-          b.addEventListener('click', () => {
-            this.biome = b.dataset.biome as Biome;
-            this.drawnMap = drawMap(this.seed, this.biome, MAP_RECIPE);
-            bindMap();
-          }),
-        );
-        mapsEl.querySelector('[data-redraw]')!.addEventListener('click', () => {
-          this.redraw();
-          bindMap();
-        });
-      };
-      bindMap();
-      bindDiffs();
-    };
-    const showTab = (mode: 'solo' | 'duel'): void => {
-      this.startTab = mode;
-      el.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.mode === mode)));
-      el.querySelectorAll<HTMLElement>('[data-panel]').forEach((p) => (p.hidden = p.dataset.panel !== mode));
-      const panel = el.querySelector<HTMLElement>(`[data-panel="${mode}"]`)!;
-      bindSettings(panel, mode === 'solo');
-      (mode === 'solo' ? $('startBtn') : $('duelNick')).focus();
-    };
-    el.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((t) =>
-      t.addEventListener('click', () => showTab(t.dataset.mode as 'solo' | 'duel')),
-    );
-    this.bindBuilders(el.querySelector<HTMLElement>('[data-panel="solo"]')!);
-    $('startBtn').addEventListener('click', () => {
-      this.sfx.unlock();
-      this.newGame(this.difficulty);
-    });
-    $('startHelp').addEventListener('click', () => this.showHelp(true));
-    el.querySelectorAll<HTMLButtonElement>('[data-room-mode]').forEach((b) =>
+    $('playBtn').addEventListener('click', () => this.showSetup());
+    document.querySelectorAll<HTMLButtonElement>('[data-room-mode]').forEach((b) =>
       b.addEventListener('click', () => {
         this.duelMode = b.dataset.roomMode as Mode;
-        el.querySelectorAll('[data-room-mode]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+        document.querySelectorAll('[data-room-mode]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
       }),
     );
-    $('hostDuelBtn').addEventListener('click', () => this.hostDuel());
+    $('startHelp').addEventListener('click', () => this.showHelp(true));
+    $('hostDuelBtn').addEventListener('click', () => {
+      this.sfx.unlock();
+      this.hostDuel();
+    });
     $('joinDuelBtn').addEventListener('click', () => this.joinDuel());
     $('duelCode').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') this.joinDuel();
     });
-    showTab(this.startTab);
+    $('playBtn').focus();
     this.offerResume();
+  }
+
+  /** Choix de la carte et de la difficulté de la préparation solo, rendus à chaque affichage pour refléter le dernier choix. */
+  private bindSettings(panel: HTMLElement): void {
+    const mapsEl = panel.querySelector<HTMLElement>('.maps')!;
+    const diffsEl = panel.querySelector<HTMLElement>('.diffs')!;
+    const bindDiffs = (): void => {
+      diffsEl.innerHTML = this.diffsHtml(this.difficulty, true);
+      diffsEl.querySelectorAll<HTMLButtonElement>('[data-diff]').forEach((b) =>
+        b.addEventListener('click', () => {
+          this.difficulty = b.dataset.diff as Difficulty;
+          diffsEl.querySelectorAll('[data-diff]').forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+        }),
+      );
+    };
+    const bindMap = (): void => {
+      mapsEl.innerHTML = mapPickHtml(this.drawnMap, true);
+      paintThumb(mapsEl, this.drawnMap);
+      mapsEl.querySelectorAll<HTMLButtonElement>('[data-biome]').forEach((b) =>
+        b.addEventListener('click', () => {
+          this.biome = b.dataset.biome as Biome;
+          this.drawnMap = drawMap(this.seed, this.biome, MAP_RECIPE);
+          bindMap();
+        }),
+      );
+      mapsEl.querySelector('[data-redraw]')!.addEventListener('click', () => {
+        this.redraw();
+        bindMap();
+      });
+    };
+    bindMap();
+    bindDiffs();
+  }
+
+  /** Second temps avant de lancer une partie solo : carte, bâtisseur et difficulté. */
+  private showSetup(): void {
+    this.openOverlay(Overlay.Setup, `
+      <div class="sheet wide">
+        <header class="sheet-head">
+          <h2>Préparer la partie</h2>
+          <p class="lede">Choisissez votre terrain, votre bâtisseur et le niveau de la menace.</p>
+        </header>
+        <p class="label">Carte</p>
+        <div class="maps"></div>
+        <p class="label">Bâtisseur</p>
+        <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.builderId)}</div>
+        <p class="label">Difficulté</p>
+        <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
+        <div class="row actions"><button type="button" class="btn primary" id="startBtn">Commencer</button><button type="button" class="btn" id="setupBack">Retour</button></div>
+      </div>`);
+    const el = $('overlay');
+    this.bindSettings(el);
+    this.bindBuilders(el);
+    $('startBtn').addEventListener('click', () => {
+      this.sfx.unlock();
+      this.newGame(this.difficulty);
+    });
+    $('setupBack').addEventListener('click', () => this.showStart());
+    $('startBtn').focus();
   }
 
   /** Partie interrompue connue (clé locale) : propose de la reprendre, sans bloquer l'écran titre. Liaison de sondage refermée dès la réponse. */
@@ -1563,11 +1586,24 @@ export class Game {
     }
   }
 
-  // ─── Partie à deux ───────────────────────────────────────────────────────
+  // ─── Multijoueur ─────────────────────────────────────────────────────────
+
+  /** Pseudo saisi s'il est valide ; sinon le signale et redonne la main au champ. */
+  private chosenNick(): string | null {
+    const field = $<HTMLInputElement>('duelNick');
+    const nick = validNick(field.value);
+    if (nick === null) {
+      this.toast(`Choisissez un pseudo de ${NICK_MIN} à ${NICK_MAX} caractères.`, true);
+      field.focus();
+    }
+    return nick;
+  }
 
   private async hostDuel(): Promise<void> {
     if (this.duelLink) return;
-    const nick = $<HTMLInputElement>('duelNick').value;
+    const nick = this.chosenNick();
+    if (nick === null) return;
+    this.ownNick = nick;
     const map = this.drawnMap;
     const link = new ServerLink();
     this.duelLink = link;
@@ -1579,7 +1615,6 @@ export class Game {
       return;
     }
     this.duelRole = 'host';
-    this.ownNick = nick;
     this.lobbyBuilderId = null;
     this.setDuelControlsHidden(true);
     link.onMessage((msg) => this.onLobbyMessage(msg));
@@ -1588,8 +1623,11 @@ export class Game {
 
   private async joinDuel(): Promise<void> {
     if (this.duelLink) return;
-    const nick = $<HTMLInputElement>('duelNick').value;
     const code = $<HTMLInputElement>('duelCode').value.toUpperCase();
+    const seat = this.loadSeat(DUEL_SEAT_KEY);
+    const rejoining = !!seat && seat.id === code;
+    const nick = rejoining ? this.ownNick : this.chosenNick();
+    if (nick === null) return;
     const link = new ServerLink();
     this.duelLink = link;
     try {
@@ -1604,9 +1642,8 @@ export class Game {
     this.lobbyBuilderId = null;
     this.setDuelControlsHidden(true);
     link.onMessage((msg) => this.onLobbyMessage(msg));
-    const seat = this.loadSeat(DUEL_SEAT_KEY);
-    this.duelRejoining = !!seat && seat.id === code;
-    if (seat && this.duelRejoining) link.send({ t: ClientMessageType.Rejoin, code, token: seat.token });
+    this.duelRejoining = rejoining;
+    if (seat && rejoining) link.send({ t: ClientMessageType.Rejoin, code, token: seat.token });
     else link.send({ t: ClientMessageType.Join, nick, code });
   }
 
@@ -1789,7 +1826,7 @@ export class Game {
     this.world = own;
     this.openOverlay(Overlay.End, `
       <div class="sheet">
-        <h2>${escapeHtml(title)}</h2>
+        <header class="sheet-head"><h2>${escapeHtml(title)}</h2></header>
         <div class="endstats">${stats}
         </div>
         <div class="duel-tabs" role="tablist">
@@ -1798,7 +1835,7 @@ export class Game {
         </div>
         <div class="duel-panel" data-player="own">${this.debriefBlockHtml(own.stats, own.gold)}</div>
         ${others.map((o) => `<div class="duel-panel" data-player="${o.seat}" hidden>${this.debriefBlockHtml(o.world.stats, o.world.gold)}</div>`).join('')}
-        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="again">Nouvelle partie</button></div>
+        <div class="row actions"><button type="button" class="btn primary" id="again">Retour à l'accueil</button></div>
       </div>`);
     const el = $('overlay');
     for (const tab of el.querySelectorAll<HTMLButtonElement>('.duel-tab')) {
@@ -1819,37 +1856,31 @@ export class Game {
 
   private lobbyHtml(): string {
     const code = this.duelRole === 'host'
-      ? `<p class="label">Code</p><p style="font-size:1.5rem;letter-spacing:.2em">${escapeHtml(this.duelCode ?? '')}</p>`
+      ? `<div class="block lobby-code"><p class="label">Code à partager</p><p class="code">${escapeHtml(this.duelCode ?? '')}</p></div>`
       : '';
-    const guest = this.duelGuestNick ? escapeHtml(this.duelGuestNick) : 'en attente…';
-    const host = escapeHtml(this.duelHostNick ?? '');
-    const map = this.duelMap ? escapeHtml(this.duelMap.name) : '';
-    const biomes = this.duelRole === 'host'
-      ? `${BIOMES.map((b) => `<button type="button" class="diff" role="radio" data-biome="${b}" aria-checked="${b === this.duelMap?.biome}"><strong>${biomeLabel(b)}</strong></button>`).join('')}
-          <button type="button" class="btn" data-redraw>Retirer</button>`
-      : '';
-    const diff = this.duelDifficulty ? escapeHtml(DIFFICULTY[this.duelDifficulty].label) : '';
-    const picked = (p: boolean) => (p ? 'a choisi' : 'choisit…');
-    const status = `<p>${host} : ${picked(this.duelPicked.host)} · ${guest} : ${picked(this.duelPicked.guest)}</p>`;
+    const teams = this.duelMode === Mode.Teams;
     const startBtn = this.duelRole === 'host' ? '<button type="button" class="btn primary" id="startDuel">Lancer la partie</button>' : '';
     return `
-      <div class="sheet wide" style="text-align:center">
-        <h2>Partie à deux</h2>
+      <div class="sheet wide">
+        <header class="sheet-head">
+          <h2>${modeLabel(this.duelMode)}</h2>
+        </header>
         ${code}
-        ${this.duelMode === Mode.Teams ? teamRoster(this.duelTeams, this.duelWaiting) : `<p>${host} ${pairingWord(this.duelMode)} ${guest}</p>`}
-        <p>${modeLabel(this.duelMode)} · ${map} · ${diff}</p>
-        <div class="map"><canvas class="map-thumb" width="64" height="64"></canvas>${biomes}</div>
+        ${teams
+          ? teamRoster(this.duelTeams, this.duelWaiting)
+          : pairRoster({ nick: this.duelHostNick ?? '', picked: this.duelPicked.host }, { nick: this.duelGuestNick, picked: this.duelPicked.guest })}
+        ${this.duelMap ? `<p class="label">Carte</p><div class="maps">${mapPickHtml(this.duelMap, this.duelRole === 'host')}</div>` : ''}
+        <p class="label">Bâtisseur</p>
         <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.lobbyBuilderId)}</div>
-        ${status}
-        <div class="row" style="justify-content:center">${startBtn}<button type="button" class="btn" id="leaveLobby">Quitter</button></div>
+        ${this.duelDifficulty ? `<p class="label">Difficulté</p><div class="diffs" role="radiogroup" aria-label="Difficulté">${this.diffsHtml(this.duelDifficulty, false, this.duelRole === 'host')}</div>` : ''}
+        <div class="row actions">${startBtn}<button type="button" class="btn" id="leaveLobby">Quitter</button></div>
       </div>`;
   }
 
   private showLobby(): void {
     this.openOverlay(Overlay.Lobby, this.lobbyHtml());
     $('leaveLobby').addEventListener('click', () => this.leaveLobby());
-    const thumb = $('overlay').querySelector<HTMLCanvasElement>('.map-thumb')!;
-    if (this.duelMap) drawMapThumbnail(thumb.getContext('2d')!, this.duelMap, thumb.width);
+    if (this.duelMap) paintThumb($('overlay'), this.duelMap);
     // La graine reste côté client (ARCH-05) ; l'écran se redessine à la réception du salon.
     const chooseMap = (): void => {
       this.drawnMap = drawMap(this.seed, this.biome, MAP_RECIPE);
@@ -1869,6 +1900,9 @@ export class Game {
       this.lobbyBuilderId = this.builderId;
       this.duelLink?.send({ t: ClientMessageType.ChooseBuilder, builder: this.builderId });
     });
+    $('overlay').querySelectorAll<HTMLButtonElement>('[data-diff]').forEach((b) =>
+      b.addEventListener('click', () => this.duelLink?.send({ t: ClientMessageType.ChooseDifficulty, difficulty: b.dataset.diff as Difficulty })),
+    );
     $('overlay').querySelectorAll<HTMLButtonElement>('[data-team]').forEach((b) =>
       b.addEventListener('click', () => this.duelLink?.send({ t: ClientMessageType.ChooseTeam, team: b.dataset.team as Team })),
     );
@@ -1906,7 +1940,7 @@ export class Game {
 
   /** Bouton « Reprendre la partie » : ouvre une liaison neuve à chaque clic, la clé locale n'est jamais effacée sur échec réseau. */
   private addResumeButton(pending: { id: string; token: string }): void {
-    const row = document.querySelector<HTMLElement>('#overlay [data-panel="solo"] .row');
+    const row = document.querySelector<HTMLElement>('#overlay .play-row');
     if (!row) return;
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -1956,8 +1990,8 @@ export class Game {
     this.setPaused(true);
     this.openOverlay(Overlay.Help, `
       <div class="sheet">
-        <h2>Commandes</h2>
-        <div class="keys">
+        <header class="sheet-head"><h2>Commandes</h2></header>
+        <div class="keys block">
           <kbd>Q W E R A S</kbd><span>Choisir une construction (le panneau suit la disposition de Warcraft III)</span>
           <kbd>Clic</kbd><span>Bâtir ou sélectionner · clic droit ou Échap pour annuler</span>
           <kbd>Glisser</kbd><span>Déplacer la vue · <kbd>Molette</kbd> ou pincement pour zoomer · <kbd>Espace</kbd> revenir sur sa carte</span>
@@ -1967,13 +2001,13 @@ export class Game {
         <p class="label">Table attaque / armure</p>
         ${this.armorTable()}
         <p class="label">Conseils</p>
-        <ol>
+        <ol class="block">
           <li>Le trajet en pointillés montre le chemin actuel ; en doré, celui qu'aurait votre prochaine construction.</li>
           <li>Chaque point d'armure réduit les dégâts d'environ 6 % ; la Tour acide et la Corrosion la rongent pour toutes vos tours.</li>
           <li>Les intérêts (4 % de votre or, plafonnés) tombent à la fin de chaque vague : épargner rapporte, mais pas autant que tenir.</li>
           <li>Les spectres de la vague 9 ignorent givre et foudre : prévoyez archers, canons ou venin.</li>
         </ol>
-        <div class="row"><button type="button" class="btn primary" id="closeHelp">${fromStart ? 'Retour' : 'Reprendre'}</button></div>
+        <div class="row actions"><button type="button" class="btn primary" id="closeHelp">${fromStart ? 'Retour' : 'Reprendre'}</button></div>
       </div>`);
     $('closeHelp').addEventListener('click', () => this.escape());
   }
@@ -1981,10 +2015,9 @@ export class Game {
   private showPause(): void {
     this.pausedByOverlay = false;
     this.openOverlay(Overlay.Pause, `
-      <div class="sheet" style="width:min(360px,100%);text-align:center">
-        <h2>Pause</h2>
-        <p class="lede">Le temps est suspendu. Vous pouvez encore consulter vos tours.</p>
-        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="resume">Reprendre</button><button type="button" class="btn" id="resignPause">Quitter la partie</button></div>
+      <div class="sheet small">
+        <header class="sheet-head"><h2>Pause</h2><p class="lede">Le temps est suspendu. Vous pouvez encore consulter vos tours.</p></header>
+        <div class="row actions"><button type="button" class="btn primary" id="resume">Reprendre</button><button type="button" class="btn" id="resignPause">Quitter la partie</button></div>
       </div>`);
     $('resume').addEventListener('click', () => this.togglePause());
     $('resignPause').addEventListener('click', () => this.showResign());
@@ -2001,9 +2034,9 @@ export class Game {
       this.sendPace();
     }
     this.openOverlay(Overlay.Resign, `
-      <div class="sheet" style="width:min(360px,100%);text-align:center">
-        <h2>${p.question}</h2>
-        <div class="row" style="justify-content:center"><button type="button" class="btn primary" id="resignConfirm">${p.confirm}</button><button type="button" class="btn" id="resignCancel">${p.cancel}</button></div>
+      <div class="sheet small">
+        <header class="sheet-head"><h2>${p.question}</h2></header>
+        <div class="row actions"><button type="button" class="btn primary" id="resignConfirm">${p.confirm}</button><button type="button" class="btn" id="resignCancel">${p.cancel}</button></div>
       </div>`);
     $('resignConfirm').addEventListener('click', () => {
       this.closeOverlay();
@@ -2019,8 +2052,10 @@ export class Game {
     const reached = Math.max(1, w.wave + 1);
     this.openOverlay(Overlay.End, `
       <div class="sheet">
-        <h2>La porte est tombée</h2>
-        <p class="lede">Votre défense a tenu jusqu'à la vague ${reached}.</p>
+        <header class="sheet-head">
+          <h2>La porte est tombée</h2>
+          <p class="lede">Votre défense a tenu jusqu'à la vague ${reached}.</p>
+        </header>
         <div class="endstats">
           <div><b>${reached}</b><span>Vagues</span></div>
           <div><b>${fmt0(s.kills)}</b><span>Éliminations</span></div>
@@ -2029,14 +2064,9 @@ export class Game {
           <div><b>${fmt0(s.goldEarned)}</b><span>Or gagné</span></div>
         </div>
         ${this.debriefBlockHtml(s, w.gold)}
-        <div class="row">
-          <button type="button" class="btn primary" id="again">Nouvelle partie</button>
-        </div>
+        <div class="row actions"><button type="button" class="btn primary" id="again">Retour à l'accueil</button></div>
       </div>`);
     this.bindDebriefTabs($('overlay'));
-    $('again').addEventListener('click', () => {
-      this.redraw();
-      this.newGame(this.difficulty);
-    });
+    $('again').addEventListener('click', () => this.showStart(true));
   }
 }

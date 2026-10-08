@@ -66,6 +66,19 @@
   .builder { display: grid; gap: 8px; padding-top: 20px; border-top: 1px solid var(--line-soft); }
   .builder header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
   .builder header p { margin: 0; color: var(--text-dim); }
+  .builder header { align-items: center; }
+  .builder .crest { width: 40px; height: 47px; color: var(--hue, var(--accent)); }
+  .builder .crest .ink { fill: var(--ground); stroke: var(--ground); }
+  .builder header h3 { color: var(--hue, var(--text)); }
+  /* Mêmes teintes de bâtisseur que l'écran de choix (index.html). */
+  [data-builder="bastion"] { --hue: #8fa6c8; }
+  [data-builder="forge"] { --hue: #d29468; }
+  [data-builder="sylve"] { --hue: #8dbb84; }
+  [data-builder="pyromancers"] { --hue: #d77a6c; }
+  [data-builder="necromancers"] { --hue: #93bba3; }
+  [data-builder="guild"] { --hue: #7fb7b9; }
+  [data-builder="sanctuary"] { --hue: #c8cfe0; }
+  [data-builder="arcanists"] { --hue: #ad97d6; }
   .tiles { display: flex; flex-wrap: wrap; gap: 12px; }
   .tile { width: 150px; display: grid; gap: 6px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 4px; padding: 6px; }
   .tile canvas { display: block; margin: 0 auto; border-radius: 2px; max-width: 100%; height: auto !important; aspect-ratio: 1; }
@@ -102,7 +115,7 @@
 
   <section class="part" id="p-towers">
     <h2>Tours</h2>
-    <p>Par bâtisseur, puis par lignée. Chaque tour pivote comme en jeu ; les points indiquent sa ou ses familles. Les équerres gris clair aux angles du socle donnent le niveau : elles s'allongent à chaque niveau.</p>
+    <p>Par bâtisseur, sous son blason, puis par lignée. Chaque tour pivote comme en jeu ; les points indiquent sa ou ses familles. Les équerres gris clair aux angles du socle donnent le niveau : elles s'allongent à chaque niveau.</p>
     <div id="towers"></div>
   </section>
 

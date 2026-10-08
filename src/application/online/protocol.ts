@@ -20,6 +20,7 @@ export enum ClientMessageType {
   ChooseBuilder = 'chooseBuilder',
   ChooseTeam = 'chooseTeam',
   ChooseMap = 'chooseMap',
+  ChooseDifficulty = 'chooseDifficulty',
 }
 
 export enum ServerMessageType {
@@ -74,12 +75,26 @@ export type ClientMessage =
   | { t: ClientMessageType.Rejoin; code: string; token: string }
   | { t: ClientMessageType.ChooseBuilder; builder: string }
   | { t: ClientMessageType.ChooseTeam; team: Team }
-  | { t: ClientMessageType.ChooseMap; map: MapDef };
+  | { t: ClientMessageType.ChooseMap; map: MapDef }
+  | { t: ClientMessageType.ChooseDifficulty; difficulty: Difficulty };
 
 const TARGET_MODES: TargetMode[] = ['first', 'last', 'strong', 'weak', 'close'];
 const DIFFICULTIES: Difficulty[] = ['easy', 'normal', 'hard'];
 export const DUEL_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const CODE_PATTERN = new RegExp(`^[${DUEL_CODE_ALPHABET}]{6}$`);
+
+export const NICK_MIN = 2;
+export const NICK_MAX = 32;
+
+/** Pseudo sans ses espaces de bord, ou `null` s'il ne fait pas de NICK_MIN à NICK_MAX caractères. */
+export function validNick(raw: string): string | null {
+  const nick = raw.trim();
+  return nick.length >= NICK_MIN && nick.length <= NICK_MAX ? nick : null;
+}
+
+function isNick(v: unknown): v is string {
+  return isString(v) && validNick(v) !== null;
+}
 
 function isString(v: unknown): v is string {
   return typeof v === 'string';
@@ -220,7 +235,7 @@ export function readClientMessage(raw: string): ClientMessage | null {
       return null;
     case ClientMessageType.Host:
       if (
-        isString(m.nick) &&
+        isNick(m.nick) &&
         isMapDef(m.map) &&
         isString(m.difficulty) &&
         DIFFICULTIES.includes(m.difficulty as Difficulty) &&
@@ -228,7 +243,7 @@ export function readClientMessage(raw: string): ClientMessage | null {
       ) {
         return {
           t: ClientMessageType.Host,
-          nick: m.nick,
+          nick: m.nick.trim(),
           map: m.map as MapDef,
           difficulty: m.difficulty as Difficulty,
           mode: m.mode ?? Mode.Duel,
@@ -236,8 +251,8 @@ export function readClientMessage(raw: string): ClientMessage | null {
       }
       return null;
     case ClientMessageType.Join:
-      if (isString(m.nick) && isString(m.code) && CODE_PATTERN.test(m.code) && m.map === undefined && m.difficulty === undefined) {
-        return { t: ClientMessageType.Join, nick: m.nick, code: m.code };
+      if (isNick(m.nick) && isString(m.code) && CODE_PATTERN.test(m.code) && m.map === undefined && m.difficulty === undefined) {
+        return { t: ClientMessageType.Join, nick: m.nick.trim(), code: m.code };
       }
       return null;
     case ClientMessageType.Leave:
@@ -262,6 +277,11 @@ export function readClientMessage(raw: string): ClientMessage | null {
     case ClientMessageType.ChooseMap:
       if (isMapDef(m.map)) {
         return { t: ClientMessageType.ChooseMap, map: m.map };
+      }
+      return null;
+    case ClientMessageType.ChooseDifficulty:
+      if (isString(m.difficulty) && DIFFICULTIES.includes(m.difficulty as Difficulty)) {
+        return { t: ClientMessageType.ChooseDifficulty, difficulty: m.difficulty as Difficulty };
       }
       return null;
     default:

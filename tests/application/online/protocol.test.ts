@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClientMessageType, Mode, Team, readClientMessage } from '../../../src/application/online/protocol';
+import { ClientMessageType, Mode, Team, readClientMessage, validNick } from '../../../src/application/online/protocol';
 import { MAP_RECIPE } from '../../../src/domain/catalog/map';
 import { drawMap } from '../../../src/domain/rules/mapDraw';
 import { MAP_TWO_STONES } from '../../support/maps';
@@ -270,6 +270,17 @@ describe('readClientMessage', () => {
   });
 });
 
+describe('validNick', () => {
+  it('[RM-05] accepte un pseudo de 2 à 32 caractères une fois les espaces de bord retirés', () => {
+    expect(validNick('Bo')).toBe('Bo');
+    expect(validNick('  Ada ')).toBe('Ada');
+    expect(validNick('A'.repeat(32))).toBe('A'.repeat(32));
+    expect(validNick('')).toBeNull();
+    expect(validNick(' A ')).toBeNull();
+    expect(validNick('A'.repeat(33))).toBeNull();
+  });
+});
+
 describe('readClientMessage — salon', () => {
   it('[RM-16] lit la création d\'un salon avec pseudo, carte et difficulté', () => {
     const longNick = 'A'.repeat(20);
@@ -380,6 +391,30 @@ describe('readClientMessage — salon', () => {
     ).toBeNull();
     expect(readClientMessage(JSON.stringify({ t: 'chooseMap', map: {} }))).toBeNull();
     expect(readClientMessage(JSON.stringify({ t: 'chooseMap', map: null }))).toBeNull();
+  });
+
+  it("lit le changement de difficulté de l'hôte au salon", () => {
+    expect(readClientMessage(JSON.stringify({ t: 'chooseDifficulty', difficulty: 'hard' }))).toEqual({
+      t: ClientMessageType.ChooseDifficulty,
+      difficulty: 'hard',
+    });
+  });
+
+  it('refuse un changement de difficulté inconnue', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'chooseDifficulty', difficulty: 'cauchemar' }))).toBeNull();
+    expect(readClientMessage(JSON.stringify({ t: 'chooseDifficulty' }))).toBeNull();
+  });
+
+  it('[RM-05] refuse de créer ou rejoindre une partie sans pseudo de 2 à 32 caractères', () => {
+    for (const nick of ['', '   ', 'A', ' B ', 'A'.repeat(33)]) {
+      expect(readClientMessage(JSON.stringify({ t: 'host', nick, map: MAP_TWO_STONES, difficulty: 'hard' }))).toBeNull();
+      expect(readClientMessage(JSON.stringify({ t: 'join', nick, code: 'ABCDEF' }))).toBeNull();
+    }
+  });
+
+  it('[RM-05] garde le pseudo sans ses espaces de bord quand il fait de 2 à 32 caractères', () => {
+    expect(readClientMessage(JSON.stringify({ t: 'join', nick: '  Bo  ', code: 'ABCDEF' }))).toEqual({ t: 'join', nick: 'Bo', code: 'ABCDEF' });
+    expect(readClientMessage(JSON.stringify({ t: 'host', nick: 'A'.repeat(32), map: MAP_TWO_STONES, difficulty: 'hard' }))).toMatchObject({ nick: 'A'.repeat(32) });
   });
 
   it('[RM-16] lit la demande de rejoindre avec pseudo et code', () => {

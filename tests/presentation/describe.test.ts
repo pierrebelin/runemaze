@@ -9,7 +9,7 @@ import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   briefingChip, briefingInfo, builderCard,
   counters, creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, matchupTags, modeLabel, nextWaveInfo, pairingWord, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, teamRoster, towerSpecials, waveRecap,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, matchupTags, modeHint, modeLabel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, pairRoster, teamRoster, towerSpecials, waveRecap,
 } from '../../src/presentation/describe';
 import { GLEANER } from '../../src/domain/catalog/ether';
 import { etherChip, goldForecastChip, goldForecastInfo, resignPrompt } from '../../src/presentation/describe';
@@ -17,14 +17,15 @@ import { etherPerMinute } from '../../src/domain/rules/etherRate';
 import type { WaveReward } from '../../src/domain/rules/waveReward';
 import { Mode, Team, Verdict } from '../../src/application/online/protocol';
 import { TOWERS, tower } from '../../src/domain/catalog/towers';
-import { builder } from '../../src/domain/catalog/builders';
+import { BUILDERS, builder } from '../../src/domain/catalog/builders';
 import { familyDamage, towerRanking, towerYield } from '../../src/domain/rules/debrief';
 import { dispatch } from '../../src/application/dispatch';
 import { waveBriefing } from '../../src/application/queries/waveBriefing';
 import { CommandType } from '../../src/domain/model/types';
 import { newDuelWorld, newWorld } from '../support/helpers';
 import { BIOMES } from '../../src/domain/catalog/map';
-import { biomeLabel } from '../../src/presentation/describe';
+import { biomeEffect, biomeLabel, mapFacts } from '../../src/presentation/describe';
+import type { MapDef } from '../../src/domain/model/types';
 
 const attack = (extra: Partial<AttackDef>): AttackDef => ({
   type: 'normal', dmg: [1, 1], cooldown: 1, range: 4, projectileSpeed: 10, targets: 'both', ...extra,
@@ -416,6 +417,13 @@ describe('fiche d’un bâtisseur', () => {
     expect(html).toContain(b.weakness);
     for (const id of b.roots) expect(html).toContain(tower(id).name);
   });
+
+  it('affiche un blason distinct quand on compare les bâtisseurs', () => {
+    const crests = Object.values(BUILDERS).map((b) => builderCard(b).match(/<svg class="crest"[\s\S]*?<\/svg>/)?.[0]);
+
+    expect(crests.every(Boolean)).toBe(true);
+    expect(new Set(crests).size).toBe(crests.length);
+  });
 });
 
 describe('effets des tours signature', () => {
@@ -576,9 +584,34 @@ describe('mode de partie', () => {
     expect(modeLabel(Mode.Coop)).toBe('Coopération');
   });
 
-  it('[RM-01] relie les joueurs du salon par « contre » en duel et « et » en coopération', () => {
-    expect(pairingWord(Mode.Duel)).toBe('contre');
-    expect(pairingWord(Mode.Coop)).toBe('et');
+  it("résume chaque mode en une ligne pour l'accueil", () => {
+    expect(modeHint(Mode.Duel)).toBe('1 contre 1');
+    expect(modeHint(Mode.Coop)).toBe('À deux, vies communes');
+    expect(modeHint(Mode.Teams)).toBe('4 joueurs, 2 équipes');
+  });
+});
+
+describe('salon duel et coop', () => {
+  it('montre les deux joueurs côte à côte avec leur choix de bâtisseur, hôte d’abord', () => {
+    const html = pairRoster({ nick: 'Alice', picked: true }, { nick: 'Bob', picked: false });
+
+    const a = html.indexOf('Alice');
+    const b = html.indexOf('Bob');
+    expect(a).toBeGreaterThanOrEqual(0);
+    expect(a).toBeLessThan(b);
+    expect(html.slice(a, b)).toContain('a choisi');
+    expect(html.slice(b)).toContain('choisit…');
+  });
+
+  it('marque l’invité « en attente… » tant que personne n’a rejoint', () => {
+    const html = pairRoster({ nick: 'Alice', picked: false }, { nick: null, picked: false });
+
+    expect(html).toContain('en attente…');
+    expect(html.split('choisit…')).toHaveLength(2);
+  });
+
+  it('échappe les pseudos', () => {
+    expect(pairRoster({ nick: '<b>', picked: false }, { nick: null, picked: false })).not.toContain('<b>');
   });
 });
 
@@ -776,6 +809,23 @@ describe('confirmation d’abandon', () => {
 describe('choix du biome', () => {
   it('[CU-01] nomme les biomes Terre, Neige et Espace', () => {
     expect(BIOMES.map(biomeLabel)).toEqual(['Terre', 'Neige', 'Espace']);
+  });
+
+  it('résume l’effet de chaque biome en une phrase', () => {
+    expect(BIOMES.map(biomeEffect)).toEqual([
+      'Des rochers barrent le terrain : ni passage, ni construction.',
+      'La glace accélère les créatures terrestres de 40 % ; on n’y bâtit pas.',
+      'Une tour sur cristal gagne 20 % de portée ; les trous de ver relient deux points du terrain.',
+    ]);
+  });
+
+  it('chiffre une carte : trajet à vide, pierres runiques, éléments du biome hors bordure', () => {
+    const earth: MapDef = { id: 't', name: 't', width: 8, height: 4, rows: ['S...1..E', '........', '.##.....', '########'] };
+    expect(mapFacts(earth)).toEqual([{ value: 7, label: 'cases de trajet à vide' }, { value: 1, label: 'pierre runique' }, { value: 2, label: 'cases de rocher' }]);
+    const snow: MapDef = { id: 't', name: 't', width: 8, height: 4, biome: 'snow', rows: ['S...1.2E', '........', '.***....', '........'] };
+    expect(mapFacts(snow)).toEqual([{ value: 7, label: 'cases de trajet à vide' }, { value: 2, label: 'pierres runiques' }, { value: 3, label: 'cases de glace' }]);
+    const space: MapDef = { id: 't', name: 't', width: 8, height: 4, biome: 'space', rows: ['S...1..E', '........', '.+aA..+.', '........'] };
+    expect(mapFacts(space)).toEqual([{ value: 7, label: 'cases de trajet à vide' }, { value: 1, label: 'pierre runique' }, { value: 2, label: 'cristaux' }, { value: 1, label: 'trou de ver' }]);
   });
 });
 

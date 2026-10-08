@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DUEL_CODE_ALPHABET, duelCode, nickname, Lobby } from '../../../src/application/online/lobby';
+import { DUEL_CODE_ALPHABET, duelCode, Lobby } from '../../../src/application/online/lobby';
 import { Mode, ServerMessageType, Team } from '../../../src/application/online/protocol';
 import { CODE_TAKEN_MSG, Seat } from '../../../src/application/online/duel';
 import { LOST_LIMIT_MS } from '../../../src/application/online/heldGame';
@@ -70,34 +70,6 @@ describe('lobby', () => {
     });
   });
 
-  it('[RM-05] garde le pseudo saisi quand il fait de 1 à 12 caractères', () => {
-    expect(nickname('A', 'Hôte')).toBe('A');
-    expect(nickname('Douze_lettre', 'Hôte')).toBe('Douze_lettre');
-    expect(nickname('Douze_lettre', 'Hôte')).toHaveLength(12);
-  });
-
-  it('[RM-05] nomme « Hôte » l\'hôte au pseudo vide et tronque au-delà de 12 caractères', () => {
-    const lobby = new Lobby();
-
-    const vide = lobby.host({ code: 'AAAAAA', nick: '', map: MAP_SPIRAL, difficulty: 'easy', key: 'k2' });
-    const blanc = lobby.host({ code: 'BBBBBB', nick: '   ', map: MAP_SPIRAL, difficulty: 'easy', key: 'k3' });
-    const long = lobby.host({
-      code: 'CCCCCC',
-      nick: 'Quinze_lettres!',
-      map: MAP_SPIRAL,
-      difficulty: 'easy',
-      key: 'k4',
-    });
-
-    expect(vide).toEqual([{ key: 'k2', msg: expect.objectContaining({ host: 'Hôte' }) }]);
-    expect(blanc).toEqual([{ key: 'k3', msg: expect.objectContaining({ host: 'Hôte' }) }]);
-    expect(long).toEqual([{ key: 'k4', msg: expect.objectContaining({ host: 'Quinze_lettr' }) }]);
-    expect(long[0].msg).toMatchObject({});
-    if ('host' in (long[0].msg as { host?: string })) {
-      expect((long[0].msg as { host: string }).host).toHaveLength(12);
-    }
-  });
-
   it('[RM-03] signale un code déjà pris pour qu\'un autre soit tiré', () => {
     const lobby = new Lobby();
     expect(lobby.taken('DDDDDD')).toBe(false);
@@ -130,17 +102,6 @@ describe('lobby', () => {
       key: 'h',
       msg: { t: ServerMessageType.Room, host: 'Ada', guest: 'Bob', map: MAP_SPIRAL, difficulty: 'hard', mode: Mode.Duel, picked: { host: false, guest: false } },
     });
-  });
-
-  it('[RM-05] nomme « Invité » l\'invité au pseudo vide', () => {
-    const lobby = new Lobby();
-    lobby.host({ code: 'HHHHHH', nick: 'Ada', map: MAP_SPIRAL, difficulty: 'hard', key: 'h' });
-
-    const addressed = lobby.join({ code: 'HHHHHH', nick: '  ', key: 'g' });
-
-    for (const a of addressed) {
-      expect(a.msg).toMatchObject({ guest: 'Invité' });
-    }
   });
 
   it('[RM-04] refuse un troisième joueur avec « Code invalide ou partie déjà commencée. »', () => {
@@ -986,6 +947,44 @@ describe('lobby', () => {
     ]);
     const after = lobby.choose('h', 'forge');
     expect(after).toContainEqual({ key: 'g', msg: expect.objectContaining({ t: ServerMessageType.Room, map: MAP_SPIRAL }) });
+  });
+
+  it("diffuse la nouvelle difficulté à tout le salon quand l'hôte la change", () => {
+    const lobby = salonPret();
+
+    const addressed = lobby.chooseDifficulty('h', 'easy');
+
+    expect(addressed).toHaveLength(2);
+    for (const key of ['h', 'g']) {
+      expect(addressed).toContainEqual({
+        key,
+        msg: expect.objectContaining({ t: ServerMessageType.Room, difficulty: 'easy' }),
+      });
+    }
+  });
+
+  it("diffuse la nouvelle difficulté aux deux équipes d'un 2 contre 2", () => {
+    const lobby = fourPlayerRoom();
+
+    const addressed = lobby.chooseDifficulty('h', 'easy');
+
+    expect(addressed).toHaveLength(4);
+    for (const key of ['h', 'g', 'c', 'd']) {
+      expect(addressed).toContainEqual({
+        key,
+        msg: expect.objectContaining({ t: ServerMessageType.TeamRoom, difficulty: 'easy' }),
+      });
+    }
+  });
+
+  it("refuse le changement de difficulté quand il vient d'un invité", () => {
+    const lobby = salonPret();
+
+    const addressed = lobby.chooseDifficulty('g', 'hard');
+
+    expect(addressed).toEqual([
+      { key: 'g', msg: { t: ServerMessageType.Refused, reason: "Seul l'hôte peut changer la difficulté." } },
+    ]);
   });
 
   type Started = { t: ServerMessageType; snapshot: { map: unknown }; others: { snapshot: { map: unknown } }[] };

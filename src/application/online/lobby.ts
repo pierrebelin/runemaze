@@ -9,11 +9,6 @@ export function duelCode(draws: number[]): string {
   return draws.map((d) => DUEL_CODE_ALPHABET[d % 24]).join('');
 }
 
-export function nickname(raw: string, fallback: string): string {
-  const trimmed = raw.trim();
-  return trimmed === '' ? fallback : trimmed.slice(0, 12);
-}
-
 interface Member {
   nick: string;
   key: string;
@@ -82,7 +77,7 @@ export class Lobby {
 
   host(req: { code: string; nick: string; map: MapDef; difficulty: Difficulty; key: string; mode?: Mode }): Addressed[] {
     const freed = this.leaveRoom(req.key);
-    const host = nickname(req.nick, 'Hôte');
+    const host = req.nick;
     const mode = req.mode ?? Mode.Duel;
     const room: Room = {
       members: [{ nick: host, key: req.key, ...(mode === Mode.Teams ? { team: Team.A } : {}) }],
@@ -104,7 +99,7 @@ export class Lobby {
       return [{ key: req.key, msg: { t: ServerMessageType.Refused, reason: CODE_TAKEN_MSG } }];
     }
     const freed = this.leaveRoom(req.key);
-    const guest = nickname(req.nick, 'Invité');
+    const guest = req.nick;
     room.members.push({ nick: guest, key: req.key });
     return [...freed, ...broadcast(room)];
   }
@@ -208,6 +203,18 @@ export class Lobby {
         return [{ key, msg: { t: ServerMessageType.Refused, reason: "Seul l'hôte peut changer la carte." } }];
       }
       room.map = map;
+      return broadcast(room);
+    }
+    return [];
+  }
+
+  chooseDifficulty(key: string, difficulty: Difficulty): Addressed[] {
+    for (const room of this.rooms.values()) {
+      if (!room.members.some((m) => m.key === key)) continue;
+      if (room.members[0].key !== key) {
+        return [{ key, msg: { t: ServerMessageType.Refused, reason: "Seul l'hôte peut changer la difficulté." } }];
+      }
+      room.difficulty = difficulty;
       return broadcast(room);
     }
     return [];

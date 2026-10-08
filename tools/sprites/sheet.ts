@@ -14,7 +14,7 @@ import { Effects } from '../../src/infrastructure/render/Effects';
 import { fittedView } from '../../src/infrastructure/render/commonWorld';
 import { drawTower, drawCreep, type CreepLike } from '../../src/infrastructure/render/sprites';
 import { PAL, FAMILY_COLOR, CREEP_STYLE } from '../../src/infrastructure/render/palette';
-import { biomeLabel } from '../../src/presentation/describe';
+import { biomeLabel, crest } from '../../src/presentation/describe';
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = (sel: string) => document.querySelector(sel) as HTMLElement;
@@ -180,7 +180,9 @@ function chain(roots: string[], allowed: Set<string>, hybrids: string[]): string
 
   for (const b of Object.values(BUILDERS)) {
     const sec = el('section', 'builder');
+    sec.dataset.builder = b.id;
     const head = el('header');
+    head.insertAdjacentHTML('beforeend', crest(b.id));
     head.append(el('h3', '', b.name), el('p', '', `${b.style[0].toUpperCase()}${b.style.slice(1)}.`));
     sec.append(head);
     const allowed = builderTowers(b, TOWERS);

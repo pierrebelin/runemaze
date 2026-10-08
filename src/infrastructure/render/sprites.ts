@@ -1191,7 +1191,7 @@ const THUMB_BUILD: Record<Biome, string> = {
 };
 
 /** Vignette d'une carte : une couleur par nature de case, ratio conservé. */
-export function drawMapThumbnail(ctx: Ctx, map: MapDef, size: number): void {
+export function drawMapThumbnail(ctx: Ctx, map: MapDef, width: number, height = width): void {
   const biome = map.biome ?? 'earth';
   const pal = BIOME_PALETTE[biome];
   const color: Record<CellKind, string> = {
@@ -1206,9 +1206,9 @@ export function drawMapThumbnail(ctx: Ctx, map: MapDef, size: number): void {
     wormhole: PAL.ice,
   };
   const grid = new Grid(map);
-  const scale = size / Math.max(grid.w, grid.h);
-  const ox = (size - grid.w * scale) / 2;
-  const oy = (size - grid.h * scale) / 2;
+  const scale = Math.min(width / grid.w, height / grid.h);
+  const ox = (width - grid.w * scale) / 2;
+  const oy = (height - grid.h * scale) / 2;
   for (let y = 0; y < grid.h; y++) {
     for (let x = 0; x < grid.w; x++) {
       ctx.fillStyle = color[grid.kind[grid.idx(x, y)]];

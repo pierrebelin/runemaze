@@ -214,6 +214,11 @@ function handleMessage(ws: WebSocket, msg: NonNullable<ReturnType<typeof readCli
       dispatchAddressed(lobby.chooseMap(key, msg.map));
       break;
     }
+    case ClientMessageType.ChooseDifficulty: {
+      const key = keyBySocket.get(ws)!;
+      dispatchAddressed(lobby.chooseDifficulty(key, msg.difficulty));
+      break;
+    }
     case ClientMessageType.ChooseTeam: {
       const key = keyBySocket.get(ws)!;
       dispatchAddressed(lobby.pickTeam(key, msg.team));
