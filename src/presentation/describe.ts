@@ -5,11 +5,11 @@ import type { AuraKind, BuilderDef, ArmorType, AttackType, Creep, CreepDef, Resu
 import { breakerLosses } from '../domain/rules/debrief';
 import type { familyDamage, waveCurve } from '../domain/rules/debrief';
 import { towerRange } from '../domain/rules/crystal';
-import { builderTowers } from '../domain/rules/builder';
+import { builderTowers, upgradeOptions } from '../domain/rules/builder';
 import { CREEPS } from '../domain/catalog/creeps';
 import { TOWERS, tower } from '../domain/catalog/towers';
 import { GATE } from '../domain/catalog/ether';
-import { gateLevelCost, gateLevelIncome, refundValue } from '../domain/rules/pricing';
+import { gateLevelCost, gateLevelIncome, refundValue, upgradeCost } from '../domain/rules/pricing';
 import { creepSpeed } from '../domain/rules/speed';
 import { Mode, Team, Verdict } from '../application/online/protocol';
 import type { Biome, CellKind, MapDef } from '../domain/model/types';
@@ -193,17 +193,28 @@ export function towerInfo(def: TowerDef, cost: number | null, heading = def.name
     <div>${matchupTags(a.type, a.dispel)}</div>`;
 }
 
-/** Fiche d'une tour posée ; l'invitation à transformer n'a de sens que pour ses propres murs. */
-export function placedTowerInfo(t: Tower, own: boolean): string {
+/** Choix de transformation d'un mur : « Tour d'archers (7 or), Garde (12 or) ». */
+function transforms(t: Tower, b: BuilderDef): string {
+  const list = upgradeOptions(t.def, builderTowers(b, TOWERS)).map((id) => `${esc(TOWERS[id].name)} (${upgradeCost(t.def, TOWERS[id])} or)`);
+  return list.length ? ` Transformer en : ${list.join(', ')}.` : '';
+}
+
+/** Fiche d'une tour posée ; `own` est le bâtisseur du joueur quand la tour est à lui (null sinon) : ses murs listent leurs transformations. */
+export function placedTowerInfo(t: Tower, own: BuilderDef | null): string {
   const extra = t.def.attack
     ? `<p>${fmt0(t.kills)} éliminations · ${fmt0(t.damage)} dégâts infligés · ciblage ${TARGET_LABEL[t.targetMode].toLowerCase()} · revente ${refundValue(t)} or</p>`
-    : `<p>Revente ${refundValue(t)} or.${own ? ' Sélectionnez une tour à transformer.' : ''}</p>`;
+    : `<p>Revente ${refundValue(t)} or.${own ? transforms(t, own) : ''}</p>`;
   const crystal = t.def.attack && t.rangeBonus > 0 ? `<p>+${Math.round(t.rangeBonus * 100)} % de portée (cristal)</p>` : '';
   return towerInfo(t.def, null, t.def.name, towerRange(t)) + crystal + extra;
 }
 
+/** « Sans armure », « Armure légère »… */
+export function armorName(type: ArmorType): string {
+  return type === 'unarmored' ? ARMOR_LABEL[type] : `Armure ${ARMOR_LABEL[type].toLowerCase()}`;
+}
+
 export function creepTags(def: CreepDef): string {
-  const tags = [`<span class="tag">Armure ${ARMOR_LABEL[def.armorType].toLowerCase()} ${def.armor}</span>`];
+  const tags = [`<span class="tag">${armorName(def.armorType)}${def.armor ? ` ${def.armor}` : ''}</span>`];
   if (def.air) tags.push('<span class="tag air">Volant</span>');
   if (def.magicImmune) tags.push('<span class="tag bad">Immunisé à la magie</span>');
   if (def.regen) tags.push(`<span class="tag">Régénère ${fmt1(def.regen * 100)} %/s</span>`);
@@ -222,17 +233,33 @@ const dispellerOf = (b: BuilderDef) => builderTowerWhere(b, (t) => t.attack?.dis
 /** Tour de chaos (seule à toucher les immunisés de plein fouet) accessible au bâtisseur, s'il en a une. */
 const chaosTowerOf = (b: BuilderDef) => builderTowerWhere(b, (t) => t.attack?.type === 'chaos');
 
-/** Types d'attaque les plus efficaces contre une armure donnée. */
+/**
+ * Tours du bâtisseur les plus efficaces contre une créature, groupées par type d'attaque :
+ * « Canon, Enclume (Siège ×1,5) ». Les efficaces du plus bas niveau, sinon la meilleure tour de base.
+ */
 export function counters(def: CreepDef, b: BuilderDef): string {
-  const types = (Object.keys(ATTACK_TABLE) as AttackType[])
-    .filter((t) => t !== 'chaos' && !(t === 'magic' && def.magicImmune))
-    .map((t) => [t, ATTACK_TABLE[t][def.armorType]] as const)
-    .sort((a, b) => b[1] - a[1]);
-  const best = types.filter(([, m]) => m >= 1.25);
-  const pick = best.length ? best : types.slice(0, 1);
-  const list = pick.map(([t, m]) => `${ATTACK_LABEL[t]} ×${fmtM(m)}`).join(', ');
+  const own = builderTowers(b, TOWERS);
+  const usable = (t: TowerDef) => t.attack && !t.elements && !(t.attack.type === 'magic' && def.magicImmune);
+  const mult = (t: TowerDef) => ATTACK_TABLE[t.attack!.type][def.armorType];
+  const strong = Object.values(TOWERS).filter((t) => own.has(t.id) && usable(t) && mult(t) >= 1.25);
+  const low = Math.min(...strong.map((t) => t.tier));
+  let pick = strong.filter((t) => t.tier === low);
+  if (!pick.length) {
+    const roots = b.roots.map(tower).filter(usable);
+    const best = Math.max(...roots.map(mult));
+    pick = roots.filter((t) => mult(t) === best);
+  }
+  // Ordre du menu de construction : tours de base d'abord.
+  const rank = (t: TowerDef) => (b.roots.includes(t.id) ? b.roots.indexOf(t.id) : b.roots.length);
+  pick.sort((x, y) => rank(x) - rank(y));
+  const types = [...new Set(pick.map((t) => t.attack!.type))];
+  const list = types.map((type) => {
+    const names = pick.filter((t) => t.attack!.type === type).map((t) => t.name).join(', ');
+    return `${names} (${ATTACK_LABEL[type]} ×${fmtM(ATTACK_TABLE[type][def.armorType])})`;
+  }).join(', ');
   const dispeller = def.magicImmune && dispellerOf(b);
-  return dispeller ? `${list} ou ${dispeller.name}` : list;
+  if (!dispeller) return list || 'aucune de vos tours';
+  return list ? `${list} ou ${dispeller.name}` : dispeller.name;
 }
 
 function waveHint(def: CreepDef, b: BuilderDef): string {
@@ -261,31 +288,6 @@ export function nextWaveInfo(b: WaveBriefing, builder: BuilderDef): string {
   return `<h3>Prochaine vague ${b.wave + 1}</h3>
       ${b.groups.map(nextWaveGroup).join('')}
       <p>${esc(waveHint(b.groups[0].creep, builder))}</p>`;
-}
-
-function briefingEntry(g: WaveBriefingGroup): string {
-  const traits = [g.creep.air && 'volants', g.creep.magicImmune && 'immunisés', g.creep.boss && 'chef'].filter(Boolean);
-  const who = g.count > 1 ? `${g.count} ${g.creep.plural}` : g.creep.name;
-  return `<b>${esc(who)}</b>${traits.length ? ` · ${traits.join(' · ')}` : ''}`;
-}
-
-/** Résumé d'une ligne dans la barre du haut : « 12 Harpies · volants ». Un groupe par entrée. */
-export function briefingChip(b: WaveBriefing): string {
-  return b.groups.map(briefingEntry).join(' · ');
-}
-
-function briefingGroupInfo(g: WaveBriefingGroup, builder: BuilderDef): string {
-  const who = g.creep.boss ? `Chef : ${g.creep.name}` : g.count > 1 ? `${g.count} ${g.creep.plural}` : g.creep.name;
-  const hp = g.count > 1 ? `${fmt0(g.hp)} PV chacun · ${fmt0(g.hp * g.count)} au total` : `${fmt0(g.hp)} PV`;
-  return `<h3>${esc(who)}</h3>
-    <div>${creepTags(g.creep)}</div>
-    <p class="facts">${hp} · vitesse ${fmt1(g.creep.speed)} · butin ${g.bounty} or</p>
-    <p>${esc(waveHint(g.creep, builder))}</p>`;
-}
-
-/** Détail de la prochaine vague, déroulé au survol du résumé. Une section par groupe. */
-export function briefingInfo(b: WaveBriefing, builder: BuilderDef): string {
-  return `<div class="when">Vague ${b.wave + 1}</div>${b.groups.map((g) => briefingGroupInfo(g, builder)).join('')}`;
 }
 
 /** Effets en cours sur une créature (ralentissement, corrosion, poison). */
@@ -471,6 +473,26 @@ export function crest(id: string): string {
   return `<svg class="crest" viewBox="0 0 48 56" aria-hidden="true"><path d="M4 4h40v22c0 14-10 22-20 26C14 48 4 40 4 26z" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="2"/><g fill="currentColor">${CREST_CHARGE[id] ?? ''}</g></svg>`;
 }
 
+/** Logo du jeu : sceau runique où le sentier tracé entre les murs mène au cristal. */
+export function logo(): string {
+  const rune = [0, 45, 90, 135, 180, 225, 270, 315].map((a) => `<path transform="rotate(${a} 60 60)" d="M60 7v6M57 9l3 2 3-2"/>`).join('');
+  return `<svg class="logo" viewBox="0 0 120 120" aria-hidden="true">
+    <defs>
+      <filter id="logoGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <clipPath id="logoIn"><circle cx="60" cy="60" r="46"/></clipPath>
+    </defs>
+    <circle cx="60" cy="60" r="56" fill="#151b24" stroke="#557a9e" stroke-width="2"/>
+    <circle cx="60" cy="60" r="46" fill="#0a0d12" stroke="#334052" stroke-width="1.5"/>
+    <g stroke="#6fa8dc" stroke-opacity="0.7" stroke-width="1.6" stroke-linecap="round" fill="none">${rune}</g>
+    <g clip-path="url(#logoIn)" fill="#2a3546" stroke="#4a5a70" stroke-width="1">
+      <rect x="47" y="41" width="60" height="10" rx="2"/><rect x="13" y="69" width="60" height="10" rx="2"/>
+      <rect x="10" y="10" width="64" height="16" rx="2"/><rect x="56" y="94" width="54" height="16" rx="2"/>
+    </g>
+    <path d="M86 4V32H34V60H86V88H44V96" fill="none" stroke="#6fa8dc" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" filter="url(#logoGlow)"/>
+    <path d="M44 90l7 9-7 9-7-9z" fill="#e9b949" stroke="#0a0d12" stroke-width="1.5"/>
+  </svg>`;
+}
+
 /** Carte d'un bâtisseur : blason et nom ; le style, la faiblesse et les tours de base s'affichent au survol. */
 export function builderCard(b: BuilderDef): string {
   const roots = b.roots.map((id) => esc(tower(id).name)).join(' · ');
@@ -521,7 +543,26 @@ export function pairRoster(host: { nick: string; picked: boolean }, guest: { nic
 }
 
 export function goldForecastChip(gold: number, r: WaveReward): string {
-  return `<b>${fmt0(gold)}</b> or · +${fmt0(r.bonus + r.interest + r.income)}`;
+  return `<b>${fmt0(gold)}</b> or <small>+${fmt0(r.bonus + r.interest + r.income)} en fin de vague</small>`;
+}
+
+/** Ligne d'une tour trop chère : l'or qui manque. */
+export function missingGold(cost: number, gold: number): string {
+  return gold < cost ? `<p class="bad">Il manque ${fmt0(cost - gold)} or.</p>` : '';
+}
+
+/** Barre du haut : « Vague 1 dans 34 s » avant la première vague, puis la suivante. */
+export function nextWaveLabel(wave: number, secs: number): string {
+  return `Vague ${wave + 2} dans ${secs} s`;
+}
+
+/** Effet d'une construction sur le trajet, calculé sur les longueurs arrondies affichées. */
+export function routeChange(now: number, delta: number): string {
+  const before = Math.round(now);
+  const after = Math.round(now + delta);
+  return after > before
+    ? `<p class="route">Trajet : ${fmt0(before)} → ${fmt0(after)} cases (+${fmt0(after - before)})</p>`
+    : `<p>Trajet inchangé : ${fmt0(before)} cases.</p>`;
 }
 
 export function goldForecastInfo(r: WaveReward, duel: boolean): string {

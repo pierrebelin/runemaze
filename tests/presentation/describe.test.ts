@@ -7,12 +7,12 @@ import type { WaveBriefing } from '../../src/application/queries/waveBriefing';
 import { groupSends } from '../../src/application/queries/waveBriefing';
 import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
-  briefingChip, briefingInfo, builderCard,
+  armorName, builderCard,
   counters, creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
   duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, matchupTags, modeHint, modeLabel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, scoreboard, sendPanel, sentMessage, pairRoster, teamRoster, towerSpecials, waveRecap,
 } from '../../src/presentation/describe';
 import { GLEANER } from '../../src/domain/catalog/ether';
-import { etherChip, goldForecastChip, goldForecastInfo, resignPrompt } from '../../src/presentation/describe';
+import { etherChip, goldForecastChip, goldForecastInfo, missingGold, nextWaveLabel, resignPrompt, routeChange, creepTags } from '../../src/presentation/describe';
 import { etherPerMinute } from '../../src/domain/rules/etherRate';
 import type { WaveReward } from '../../src/domain/rules/waveReward';
 import { Mode, Team, Verdict } from '../../src/application/online/protocol';
@@ -209,22 +209,6 @@ describe('aperçu de la prochaine vague', () => {
     ],
   };
 
-  it('[RM-03] résume chaque groupe dans la barre du haut quand la vague est mixte', () => {
-    const html = briefingChip(mixed);
-
-    expect(html).toContain('3 Loups gris');
-    expect(html).toContain('2 Rats des marais');
-  });
-
-  it('[RM-03] détaille les PV et la prime de chaque groupe au survol', () => {
-    const html = briefingInfo(mixed, builder('bastion'));
-
-    expect(html).toContain(fmt0(437));
-    expect(html).toContain('23 or');
-    expect(html).toContain(fmt0(128));
-    expect(html).toContain('9 or');
-  });
-
   it('[RM-03] liste chaque groupe dans la fiche de la prochaine vague quand la vague est mixte', () => {
     const html = nextWaveInfo(mixed, builder('bastion'));
 
@@ -252,12 +236,6 @@ describe('aperçu de la prochaine vague', () => {
     expect(nextWaveInfo(received, builder('bastion'))).toBe(nextWaveInfo(without, builder('bastion')));
   });
 
-  it('[RM-04] ne mentionne aucun envoi dans le résumé du haut quand des envois sont reçus', () => {
-    const { without, received } = withAndWithoutSends();
-
-    expect(briefingChip(received)).not.toContain('envoi');
-    expect(briefingChip(received)).toBe(briefingChip(without));
-  });
 });
 
 describe('panneau d’envois', () => {
@@ -538,7 +516,7 @@ describe('placedTowerInfo', () => {
   it('[RM-07] montre éliminations, dégâts, ciblage et revente quand la tour est adverse', () => {
     const t = towerFixture({ def: TOWERS.archer, kills: 12, damage: 3456, targetMode: 'strong', spent: 100 });
 
-    const html = placedTowerInfo(t, false);
+    const html = placedTowerInfo(t, null);
 
     expect(html).toContain(`${fmt0(12)} éliminations`);
     expect(html).toContain(`${fmt0(3456)} dégâts infligés`);
@@ -549,16 +527,21 @@ describe('placedTowerInfo', () => {
   it('[RM-07] omet l’invitation à transformer quand le mur est adverse', () => {
     const t = towerFixture({ def: TOWERS.wall, spent: 10 });
 
-    const html = placedTowerInfo(t, false);
+    const html = placedTowerInfo(t, null);
 
     expect(html).toMatch(/Revente \d+ or/);
-    expect(html).not.toContain('transformer');
+    expect(html).not.toContain('Transformer');
   });
 
-  it('[RM-07] invite à transformer quand le mur est à soi', () => {
-    const t = towerFixture({ def: TOWERS.wall, spent: 10 });
+  it('[RM-07] liste les tours en lesquelles transformer son mur, avec le coût de chacune', () => {
+    const t = towerFixture({ def: TOWERS.wall, spent: 3 });
 
-    expect(placedTowerInfo(t, true)).toContain('Sélectionnez une tour à transformer');
+    const html = placedTowerInfo(t, builder('bastion'));
+
+    expect(html).toContain('Transformer en');
+    expect(html).toContain(`${TOWERS.archer.name} (${TOWERS.archer.cost - TOWERS.wall.cost} or)`);
+    expect(html).toContain(`${TOWERS.guard.name} (${TOWERS.guard.cost - TOWERS.wall.cost} or)`);
+    expect(html).not.toContain(TOWERS.cannon.name);
   });
 
   it('[CU-02] affiche la portée bonifiée et la mention du cristal quand la tour est sur un cristal', () => {
@@ -566,7 +549,7 @@ describe('placedTowerInfo', () => {
     const boosted = TOWERS.archer.attack!.range * 1.2;
     expect(fmt1(boosted)).not.toBe(fmt1(TOWERS.archer.attack!.range));
 
-    const html = placedTowerInfo(t, true);
+    const html = placedTowerInfo(t, builder('bastion'));
 
     expect(html).toContain(`<em>Portée</em>${fmt1(boosted)}`);
     expect(html.toLowerCase()).toContain('cristal');
@@ -575,7 +558,7 @@ describe('placedTowerInfo', () => {
   it('[RM-05] n’affiche aucune mention du cristal pour un mur posé sur un cristal', () => {
     const t = towerFixture({ def: TOWERS.wall, rangeBonus: 0.2, spent: 10 });
 
-    const html = placedTowerInfo(t, true);
+    const html = placedTowerInfo(t, builder('bastion'));
 
     expect(html.toLowerCase()).not.toContain('cristal');
   });
@@ -583,7 +566,7 @@ describe('placedTowerInfo', () => {
   it('[CU-02] affiche la portée du catalogue quand la tour n’est pas sur un cristal', () => {
     const t = towerFixture({ def: TOWERS.archer, rangeBonus: 0 });
 
-    const html = placedTowerInfo(t, true);
+    const html = placedTowerInfo(t, builder('bastion'));
 
     expect(html).toContain(`<em>Portée</em>${fmt1(TOWERS.archer.attack!.range)}`);
     expect(html.toLowerCase()).not.toContain('cristal');
@@ -909,5 +892,65 @@ describe('Comptoir', () => {
 describe('Percepteur', () => {
   it('décrit le multiplicateur de prime', () => {
     expect(towerSpecials(TOWERS.taxman).join(' · ')).toContain('prime ×2');
+  });
+});
+
+describe('nom de l’armure', () => {
+  it('dit « Sans armure » sans répéter le mot armure', () => {
+    expect(armorName('unarmored')).toBe('Sans armure');
+    expect(creepTags(CREEPS.rat)).toContain('Sans armure');
+    expect(creepTags(CREEPS.rat)).not.toContain('Armure sans armure');
+  });
+
+  it('préfixe les autres armures par « Armure » et garde leur valeur', () => {
+    expect(armorName('light')).toBe('Armure légère');
+    expect(creepTags(CREEPS.wolf)).toContain(`Armure légère ${CREEPS.wolf.armor}`);
+  });
+});
+
+describe('conseil contre une vague', () => {
+  it('nomme les tours du bâtisseur les plus efficaces, avec leur type d’attaque et le multiplicateur', () => {
+    const html = counters(CREEPS.rat, builder('bastion'));
+
+    expect(html).toContain(`${TOWERS.archer.name} (Perçante ×1,5)`);
+    expect(html).not.toContain(TOWERS.guard.name);
+  });
+
+  it('regroupe les tours qui partagent le même type d’attaque', () => {
+    expect(counters(CREEPS.golem, builder('forge'))).toContain(`${TOWERS.cannon.name}, ${TOWERS.anvil.name} (Siège ×1,5)`);
+  });
+
+  it('ne cite jamais une tour que le bâtisseur ne peut pas construire', () => {
+    expect(counters(CREEPS.rat, builder('bastion'))).not.toContain(TOWERS.cannon.name);
+  });
+});
+
+describe('barre du haut', () => {
+  it('annonce la vague 1 et son délai avant la première vague', () => {
+    expect(nextWaveLabel(-1, 34)).toBe('Vague 1 dans 34 s');
+  });
+
+  it('annonce la vague suivante pendant une vague', () => {
+    expect(nextWaveLabel(0, 20)).toBe('Vague 2 dans 20 s');
+  });
+});
+
+describe('aperçu du trajet', () => {
+  it('calcule l’allongement à partir des longueurs arrondies affichées', () => {
+    expect(routeChange(65.6, 1.8)).toContain('66 → 67 cases (+1)');
+  });
+
+  it('annonce un trajet inchangé quand l’allongement arrondi est nul', () => {
+    expect(routeChange(65.6, 0.3)).toContain('Trajet inchangé : 66 cases');
+  });
+});
+
+describe('or manquant', () => {
+  it('dit combien d’or manque quand la tour est trop chère', () => {
+    expect(missingGold(15, 11)).toContain('Il manque 4 or');
+  });
+
+  it('ne dit rien quand l’or suffit', () => {
+    expect(missingGold(15, 15)).toBe('');
   });
 });

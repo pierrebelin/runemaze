@@ -34,7 +34,7 @@ import type { ArmorType, AttackType, Biome, Command, Creep, Difficulty, GameEven
 import { CommandType, GameEventType } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { withRecord, type RecordBook } from '../domain/rules/records';
-import { biomeEffect, biomeLabel, mapFacts, resignPrompt, etherChip,goldForecastChip, goldForecastInfo, briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeHint, modeLabel, pairRoster, teamRoster, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, scoreboard, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
+import { biomeEffect, biomeLabel, mapFacts, resignPrompt, etherChip, goldForecastChip, goldForecastInfo, armorName, missingGold, nextWaveLabel, routeChange, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeHint, modeLabel, pairRoster, teamRoster, waveRecap, builderCard, elementsLabel, logo, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, scoreboard, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -70,11 +70,8 @@ const RECORD_KEY = 'tirage';
 const PENDING_KEY = 'runemaze.pending.v1';
 const DUEL_SEAT_KEY = 'runemaze.duelseat.v1';
 
-const ICON_CANCEL = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M11 11l18 18M29 11L11 29" stroke="#e0664f" stroke-width="4" stroke-linecap="round"/></svg>';
-const ICON_HELP = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14" fill="none" stroke="#8d939c" stroke-width="2.5"/><path d="M15.5 16a4.5 4.5 0 119 .5c0 3-4.5 3.5-4.5 6.5" fill="none" stroke="#e7e8ea" stroke-width="2.6" stroke-linecap="round"/><circle cx="20" cy="28" r="1.8" fill="#e7e8ea"/></svg>';
 const ICON_SELL = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="17" cy="22" r="9" fill="#e9b949" stroke="#8a6320" stroke-width="2"/><circle cx="24" cy="16" r="9" fill="#f2cc66" stroke="#8a6320" stroke-width="2"/><path d="M24 11v10M21 13.5h4.5a1.7 1.7 0 010 3.4h-3a1.7 1.7 0 000 3.4h4.5" fill="none" stroke="#8a6320" stroke-width="1.6"/></svg>';
 const ICON_TARGET = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="11" fill="none" stroke="#e7e8ea" stroke-width="2.5"/><circle cx="20" cy="20" r="3" fill="#e0664f"/><path d="M20 4v8M20 28v8M4 20h8M28 20h8" stroke="#e7e8ea" stroke-width="2.5"/></svg>';
-const ICON_BACK = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M24 11l-9 9 9 9" fill="none" stroke="#e7e8ea" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 interface Slot {
   label: string;
@@ -172,7 +169,6 @@ export class Game {
   private infoCache = '';
   private sendCache = '';
   private unitCache = '';
-  private briefingCache = '';
   private walletCache = '';
   private hud: Record<string, string> = {};
   private overlay: Overlay | null = null;
@@ -441,7 +437,6 @@ export class Game {
     this.updateHud();
     this.updateCard();
     this.updateInfo();
-    this.updateBriefing();
     this.drawPortrait();
 
     if (w.isOver() && !this.endShown && !this.fx.banner) {
@@ -893,12 +888,12 @@ export class Game {
         slots[i] = {
           label: to.name, icon: this.icon(id), cost, poor: w.gold < cost,
           run: () => this.upgrade(t, id),
-          info: () => towerInfo(to, cost, heading),
+          info: () => towerInfo(to, cost, heading) + missingGold(cost, w.gold),
         };
       });
       if (t.def.attack) {
         slots[8] = {
-          label: `Ciblage : ${TARGET_LABEL[t.targetMode]}`, icon: ICON_TARGET,
+          label: 'Ciblage', icon: ICON_TARGET,
           run: () => {
             const next = TARGET_ORDER[(TARGET_ORDER.indexOf(t.targetMode) + 1) % TARGET_ORDER.length];
             this.order({ c: CommandType.Target, tower: t.id, mode: next });
@@ -908,29 +903,22 @@ export class Game {
         };
       }
       const refund = refundValue(t);
-      slots[10] = { label: 'Retour', icon: ICON_BACK, run: () => (this.selected = null), info: () => '<h3>Retour</h3><p>Revient au menu de construction (Échap).</p>' };
       slots[11] = {
-        label: `Vendre +${refund}`, icon: ICON_SELL, cost: refund,
+        label: 'Vendre', icon: ICON_SELL, cost: refund,
         run: () => this.sell(t),
         info: () => `<h3>Vendre · +${refund} or</h3><p>La moitié de l'or investi est rendue, à tout moment.</p>`,
       };
       return slots;
     }
-    if (this.selected?.kind === 'creep' && this.selected.board === this.duelSeat) {
-      slots[11] = { label: 'Retour', icon: ICON_BACK, run: () => (this.selected = null), info: () => '<h3>Retour</h3><p>Revient au menu de construction (Échap).</p>' };
-      return slots;
-    }
+    if (this.selected?.kind === 'creep' && this.selected.board === this.duelSeat) return slots;
     buildMenu(w.builder).forEach((id, i) => {
       const def = TOWERS[id];
       slots[i] = {
         label: def.name, icon: this.icon(id), cost: def.cost, poor: w.gold < def.cost, active: this.buildDef === id,
         run: () => this.setBuild(this.buildDef === id ? null : id),
-        info: () => towerInfo(def, def.cost),
+        info: () => towerInfo(def, def.cost) + missingGold(def.cost, w.gold),
       };
     });
-    slots[11] = this.buildDef
-      ? { label: 'Annuler', icon: ICON_CANCEL, run: () => this.setBuild(null), info: () => '<h3>Annuler</h3><p>Quitte le mode construction (Échap ou clic droit).</p>' }
-      : { label: 'Aide', icon: ICON_HELP, run: () => this.showHelp(), info: () => '<h3>Aide</h3><p>Commandes, table des armures et conseils de labyrinthe (H).</p>' };
     return slots;
   }
 
@@ -939,13 +927,16 @@ export class Game {
     const key = this.slots.map((s) => (s ? `${s.label}|${s.cost}|${s.poor}|${s.active}` : '-')).join(';');
     if (key === this.cardKey) return;
     this.cardKey = key;
+    // Seules les rangées occupées s'affichent ; une case vide garde la place de sa touche.
     $('card').innerHTML = this.slots
       .map((s, i) => {
+        const row = Math.floor(i / 4);
+        if (!this.slots.slice(row * 4, row * 4 + 4).some(Boolean)) return '';
         const hk = KEYS[i].toUpperCase();
         if (!s) return `<div class="slot empty" aria-hidden="true"></div>`;
         const cls = ['slot', s.poor ? 'poor' : '', s.active ? 'active' : ''].join(' ');
         const cost = s.cost !== undefined ? `<span class="cost">${s.cost}</span>` : '';
-        return `<button type="button" class="${cls}" data-slot="${i}" title="${s.label} (${hk})" aria-label="${s.label}, touche ${hk}">${s.icon}<span class="hk">${hk}</span>${cost}</button>`;
+        return `<button type="button" class="${cls}" data-slot="${i}" title="${s.label} (${hk})" aria-label="${s.label}, touche ${hk}">${s.icon}<span class="hk">${hk}</span>${cost}<span class="name">${s.label}</span></button>`;
       })
       .join('');
   }
@@ -981,15 +972,10 @@ export class Game {
     else if (this.buildDef) {
       const def = TOWERS[this.buildDef];
       let status = '';
-      if (this.view.ghost && !this.view.ghost.ok) status = `<p style="color:var(--bad)">${this.ghostReason}</p>`;
-      else if (this.view.ghost) {
-        const now = w.mazeLength();
-        status = this.previewDelta > 0.01
-          ? `<p style="color:var(--accent)">Trajet : ${fmt0(now)} → ${fmt0(now + this.previewDelta)} cases (+${fmt0(this.previewDelta)})</p>`
-          : `<p>Trajet inchangé : ${fmt0(now)} cases.</p>`;
-      }
-      html = towerInfo(def, def.cost) + status;
-    } else if (shown) html = placedTowerInfo(shown, this.selected!.board === this.duelSeat);
+      if (this.view.ghost && !this.view.ghost.ok) status = `<p class="bad">${this.ghostReason}</p>`;
+      else if (this.view.ghost) status = routeChange(w.mazeLength(), this.previewDelta);
+      html = towerInfo(def, def.cost) + missingGold(def.cost, w.gold) + status;
+    } else if (shown) html = placedTowerInfo(shown, this.selected!.board === this.duelSeat ? w.builder : null);
     else if (this.selected?.kind === 'creep') {
       const c = this.selectedWorld()?.creeps.find((k) => k.id === this.selected!.id);
       html = c ? creepInfo(c, this.world.builder) : nextWaveInfo(waveBriefing(w), this.world.builder);
@@ -1011,13 +997,13 @@ export class Game {
     } else if (this.selected?.kind === 'creep' && this.selected.board === this.duelSeat) {
       const c = w.creeps.find((k) => k.id === this.selected!.id);
       unit = c
-        ? `<h2>${c.def.name}</h2><div class="sub">Armure ${ARMOR_LABEL[c.def.armorType].toLowerCase()} · vague ${c.wave + 1}</div><div class="hpbar"><i style="width:${Math.max(0, (c.hp / c.maxHp) * 100).toFixed(1)}%"></i></div><div class="facts">${fmt0(c.hp)} / ${fmt0(c.maxHp)} PV</div>`
+        ? `<h2>${c.def.name}</h2><div class="sub">${armorName(c.def.armorType)} · vague ${c.wave + 1}</div><div class="hpbar"><i style="width:${Math.max(0, (c.hp / c.maxHp) * 100).toFixed(1)}%"></i></div><div class="facts">${fmt0(c.hp)} / ${fmt0(c.maxHp)} PV</div>`
         : '';
     } else {
       const i = w.wave + 1;
       const wg = waveAt(i).groups[0];
       const def = CREEPS[wg.creep];
-      unit = `<h2>${def.boss ? def.name : def.plural}</h2><div class="sub">Vague ${i + 1}${wg.count > 1 ? ` · ×${wg.count}` : ' · chef'}</div><div class="facts">Armure ${ARMOR_LABEL[def.armorType].toLowerCase()}${def.air ? ' · volants' : ''}${def.magicImmune ? ' · immunisés' : ''}</div>`;
+      unit = `<h2>${def.boss ? def.name : def.plural}</h2><div class="sub">Vague ${i + 1}${wg.count > 1 ? ` · ×${wg.count}` : ' · chef'}</div><div class="facts">${armorName(def.armorType)}${def.air ? ' · volants' : ''}${def.magicImmune ? ' · immunisés' : ''}</div>`;
     }
     if (unit !== this.unitCache) {
       this.unitCache = unit;
@@ -1025,18 +1011,7 @@ export class Game {
     }
   }
 
-  /** Résumé de la prochaine vague dans la barre du haut ; détail au survol. */
-  private updateBriefing(): void {
-    const b = waveBriefing(this.world);
-    const html = briefingChip(b) + briefingInfo(b, this.world.builder);
-    if (html === this.briefingCache) return;
-    this.briefingCache = html;
-    $('briefing').hidden = false;
-    $('briefingChip').innerHTML = briefingChip(b);
-    $('briefingDetail').innerHTML = briefingInfo(b, this.world.builder);
-  }
-
-  /** Or et gain prévu, éther et rythme (duel) au-dessus des commandes ; détail au survol ou à l'appui. */
+  /** Or et gain prévu, éther et rythme (duel) dans la barre du haut ; détail au survol ou à l'appui. */
   private updateWallet(): void {
     const w = this.world;
     const forecast = goldForecast(w);
@@ -1110,7 +1085,8 @@ export class Game {
     this.updateWallet();
     set('lives', fmt0(w.lives));
     $('lives').style.color = w.lives <= 5 ? PAL.danger : '';
-    set('wave', String(Math.max(0, w.wave + 1)));
+    set('wave', String(w.wave + 1));
+    $('waveRes').hidden = w.wave < 0;
     const sendHidden = String(!w.duel);
     if (this.hud.sendHidden !== sendHidden) {
       this.hud.sendHidden = sendHidden;
@@ -1118,8 +1094,7 @@ export class Game {
     }
     const can = !w.isOver();
     const secs = Math.ceil(Math.max(0, w.nextWaveIn));
-    set('timerLabel', can ? 'Vague suivante : ' : '');
-    set('timer', can ? `${secs} s` : '');
+    set('timer', can ? nextWaveLabel(w.wave, secs) : '');
   }
 
   // ─── Autres cartes (duel, coop, 2 contre 2) ──────────────────────────────
@@ -1449,12 +1424,9 @@ export class Game {
     this.link = null;
     this.setPaused(true);
     this.openOverlay(Overlay.Start, `
-      <nav class="home-nav" aria-label="Menu">
-        <button type="button" class="btn" id="startHelp">Commandes</button>
-        <a class="btn" href="sprites.html" target="_blank" rel="noopener">Sprites des factions</a>
-      </nav>
       <div class="sheet start">
         <header class="sheet-head">
+          ${logo()}
           <h1>Runemaze</h1>
           <p class="lede">Ici, pas de chemin tout tracé : c'est vous qui le dessinez, mur après mur, pour égarer les hordes sous le feu de vos tours.</p>
         </header>
@@ -1478,6 +1450,10 @@ export class Game {
             </div>
           </section>
         </div>
+        <nav class="start-links" aria-label="Ressources">
+          <button type="button" class="btn" id="startHelp">Commandes</button>
+          <a class="btn" href="sprites.html" target="_blank" rel="noopener">Sprites des factions</a>
+        </nav>
       </div>`);
     $('playBtn').addEventListener('click', () => this.showSetup());
     document.querySelectorAll<HTMLButtonElement>('[data-room-mode]').forEach((b) =>
