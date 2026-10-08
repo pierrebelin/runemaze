@@ -34,7 +34,7 @@ import type { ArmorType, AttackType, Biome, Command, Creep, Difficulty, GameEven
 import { CommandType, GameEventType } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { withRecord, type RecordBook } from '../domain/rules/records';
-import { biomeEffect, biomeLabel, mapFacts, resignPrompt, etherChip,goldForecastChip, goldForecastInfo, briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeHint, modeLabel, pairRoster, teamRoster, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
+import { biomeEffect, biomeLabel, mapFacts, resignPrompt, etherChip,goldForecastChip, goldForecastInfo, briefingChip, briefingInfo, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeHint, modeLabel, pairRoster, teamRoster, waveRecap, builderCard, elementsLabel, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, scoreboard, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -1415,7 +1415,7 @@ export class Game {
         const D = DIFFICULTY[d];
         const rec = best[d] ? `<span class="record">Record : vague ${best[d]}</span>` : '';
         return `<button type="button" class="diff" role="radio" data-diff="${d}" aria-checked="${d === checked}"${enabled ? '' : ' disabled'}>
-          <strong>${D.label}</strong><span>${D.lives} vies · ${D.gold} or</span><span>PV des créatures ×${fmt1(D.hp)}</span>${rec}</button>`;
+          <strong>${D.label}</strong><span>${D.lives} vies · ${D.gold} or · PV ×${fmt1(D.hp)}</span>${rec}</button>`;
       })
       .join('');
   }
@@ -1771,67 +1771,43 @@ export class Game {
 
   /** Bilan d'une partie (tours, familles, vagues, briseurs), factorisé entre l'écran solo et l'écran de duel. */
   private debriefBlockHtml(stats: Stats, gold: number): string {
+    const ranking = towerRanking(stats.towers.values());
+    const losses = breakerLosses(stats.towers.values());
     return `
-      <div class="debrief-tabs" role="tablist">
-        <button type="button" class="debrief-tab active" data-tab="towers">Tours</button>
-        <button type="button" class="debrief-tab" data-tab="families">Familles</button>
-        <button type="button" class="debrief-tab" data-tab="waves">Vagues</button>
-        <button type="button" class="debrief-tab" data-tab="breakers">Briseurs</button>
-      </div>
-      <div class="debrief-panel" data-panel="towers">${debriefTowers(towerRanking(stats.towers.values()))}</div>
-      <div class="debrief-panel" data-panel="families" hidden>${debriefFamilies(familyDamage(stats.towers.values()))}</div>
-      <div class="debrief-panel" data-panel="waves" hidden>${debriefWaves(waveCurve(stats.waves, gold))}</div>
-      <div class="debrief-panel" data-panel="breakers" hidden>${debriefBreakers(breakerLosses(stats.towers.values()))}</div>`;
-  }
-
-  /** Bascule entre les panneaux `.debrief-tab`/`.debrief-panel` d'un conteneur (scindé du reste de l'écran). */
-  private bindDebriefTabs(container: ParentNode): void {
-    for (const tab of container.querySelectorAll<HTMLButtonElement>('.debrief-tab')) {
-      tab.addEventListener('click', () => {
-        for (const t of container.querySelectorAll('.debrief-tab')) t.classList.remove('active');
-        tab.classList.add('active');
-        for (const panel of container.querySelectorAll<HTMLElement>('.debrief-panel')) {
-          panel.hidden = panel.dataset.panel !== tab.dataset.tab;
-        }
-      });
-    }
+      <section class="debrief">
+        <p class="label">Meilleures tours</p>
+        ${debriefTowers(ranking, (id) => this.icon(id))}
+        ${ranking.length ? debriefFamilies(familyDamage(ranking)) : ''}
+      </section>
+      <section class="debrief">
+        <p class="label">Vies perdues par vague</p>
+        ${debriefWaves(waveCurve(stats.waves, gold))}
+        ${losses.count ? debriefBreakers(losses) : ''}
+      </section>`;
   }
 
   /** Écran de fin de duel : verdict, vies et vague, puis le bilan solo existant par onglet de joueur. En 2 contre 2, les réserves des deux équipes. */
   private showDuelEnd(msg: Extract<ServerMessage, { t: ServerMessageType.DuelOver }>): void {
     const own = restore(msg.snapshot);
-    const others = msg.others.map((o) => ({ seat: o.seat, world: restore(o.snapshot), nick: escapeHtml(o.nick) }));
+    const others = msg.others.map((o) => ({ seat: o.seat, world: restore(o.snapshot), nick: o.nick }));
     const teams = others.length > 1;
     const coop = !own.duel;
-    const rivalNick = teams ? '' : escapeHtml((this.duelRole === 'host' ? this.duelGuestNick : this.duelHostNick) ?? partnerLabel(coop));
+    const rivalNick = teams ? '' : (this.duelRole === 'host' ? this.duelGuestNick : this.duelHostNick) ?? partnerLabel(coop);
     const title = coop ? reachedTitle(own.wave) : duelVerdictLabel(msg.verdict);
-    let stats: string;
-    if (teams) {
-      const opponent = others.find((o) => teamOf(this.duelMode, o.seat) !== teamOf(this.duelMode, this.duelSeat))!;
-      stats = `
-          <div><b>${fmt0(own.wave + 1)}</b><span>Vague</span></div>
-          <div><b>${fmt0(own.lives)}</b><span>Vies — Votre équipe</span></div>
-          <div><b>${fmt0(opponent.world.lives)}</b><span>Vies — Équipe adverse</span></div>`;
-    } else {
-      const rival = others[0];
-      // Réserve commune en coop : une seule fois, pas par joueur.
-      const rivalLives = coop ? '' : `<div><b>${fmt0(rival.world.lives)}</b><span>Vies — ${rivalNick}</span></div>`;
-      stats = `
-          <div><b>${fmt0(own.wave + 1)}</b><span>Vague</span></div>
-          <div><b>${fmt0(own.lives)}</b><span>Vies</span></div>
-          <div><b>${fmt0(rival.world.wave + 1)}</b><span>Vague — ${rivalNick}</span></div>
-          ${rivalLives}`;
-    }
     const label = (nick: string) => (teams ? nick : rivalNick);
+    const board = scoreboard([
+      { name: 'Vous', wave: own.wave, lives: own.lives, stats: own.stats },
+      ...others.map((o) => ({ name: label(o.nick), wave: o.world.wave, lives: o.world.lives, stats: o.world.stats })),
+    ]);
     this.world = own;
     this.openOverlay(Overlay.End, `
       <div class="sheet">
         <header class="sheet-head"><h2>${escapeHtml(title)}</h2></header>
-        <div class="endstats">${stats}
-        </div>
+        ${board}
+        <p class="label">Détail par joueur</p>
         <div class="duel-tabs" role="tablist">
           <button type="button" class="duel-tab active" data-player="own">Vous</button>
-          ${others.map((o) => `<button type="button" class="duel-tab" data-player="${o.seat}">${label(o.nick)}</button>`).join('')}
+          ${others.map((o) => `<button type="button" class="duel-tab" data-player="${o.seat}">${escapeHtml(label(o.nick))}</button>`).join('')}
         </div>
         <div class="duel-panel" data-player="own">${this.debriefBlockHtml(own.stats, own.gold)}</div>
         ${others.map((o) => `<div class="duel-panel" data-player="${o.seat}" hidden>${this.debriefBlockHtml(o.world.stats, o.world.gold)}</div>`).join('')}
@@ -1847,7 +1823,6 @@ export class Game {
         }
       });
     }
-    for (const panel of el.querySelectorAll<HTMLElement>('.duel-panel')) this.bindDebriefTabs(panel);
     $('again').addEventListener('click', () => {
       this.closeDuelLink();
       this.showStart(true);
@@ -2057,16 +2032,14 @@ export class Game {
           <p class="lede">Votre défense a tenu jusqu'à la vague ${reached}.</p>
         </header>
         <div class="endstats">
-          <div><b>${reached}</b><span>Vagues</span></div>
+          <div><b>${reached}</b><span>Vague atteinte</span></div>
           <div><b>${fmt0(s.kills)}</b><span>Éliminations</span></div>
           <div><b>${fmt0(s.leaked)}</b><span>Évasions</span></div>
-          <div><b>${fmt0(s.longestMaze)}</b><span>Plus long trajet</span></div>
           <div><b>${fmt0(s.goldEarned)}</b><span>Or gagné</span></div>
         </div>
         ${this.debriefBlockHtml(s, w.gold)}
         <div class="row actions"><button type="button" class="btn primary" id="again">Retour à l'accueil</button></div>
       </div>`);
-    this.bindDebriefTabs($('overlay'));
     $('again').addEventListener('click', () => this.showStart(true));
   }
 }

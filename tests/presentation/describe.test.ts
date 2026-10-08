@@ -9,7 +9,7 @@ import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   briefingChip, briefingInfo, builderCard,
   counters, creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, matchupTags, modeHint, modeLabel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, sendPanel, sentMessage, pairRoster, teamRoster, towerSpecials, waveRecap,
+  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, matchupTags, modeHint, modeLabel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, scoreboard, sendPanel, sentMessage, pairRoster, teamRoster, towerSpecials, waveRecap,
 } from '../../src/presentation/describe';
 import { GLEANER } from '../../src/domain/catalog/ether';
 import { etherChip, goldForecastChip, goldForecastInfo, resignPrompt } from '../../src/presentation/describe';
@@ -18,7 +18,7 @@ import type { WaveReward } from '../../src/domain/rules/waveReward';
 import { Mode, Team, Verdict } from '../../src/application/online/protocol';
 import { TOWERS, tower } from '../../src/domain/catalog/towers';
 import { BUILDERS, builder } from '../../src/domain/catalog/builders';
-import { familyDamage, towerRanking, towerYield } from '../../src/domain/rules/debrief';
+import { familyDamage, towerRanking } from '../../src/domain/rules/debrief';
 import { dispatch } from '../../src/application/dispatch';
 import { waveBriefing } from '../../src/application/queries/waveBriefing';
 import { CommandType } from '../../src/domain/model/types';
@@ -99,62 +99,83 @@ const towerFixture = (extra: Partial<Tower>): Tower => ({
 });
 
 describe('bilan de partie', () => {
-  it('[RM-01] liste chaque tour avec nom, état, dégâts, éliminations, or investi et rendement', () => {
+  it('[RM-01] montre chaque tour avec son icône, son nom, ses dégâts, ses éliminations et une barre relative à la meilleure', () => {
     const strong = towerFixture({ id: 1, def: TOWERS.archer, damage: 500, kills: 10, spent: 100, fate: 'standing' });
     const weak = towerFixture({ id: 2, def: TOWERS.cannon, damage: 200, kills: 5, spent: 50, fate: 'sold' });
 
-    const html = debriefTowers(towerRanking([strong, weak]));
+    const html = debriefTowers(towerRanking([strong, weak]), (id) => `<i data-icon="${id}"></i>`);
 
+    expect(html).toContain('data-icon="archer"');
     expect(html).toContain(strong.def.name);
-    expect(html).toContain('En place');
-    expect(html).toContain(fmt0(strong.damage));
-    expect(html).toContain(fmt0(strong.kills));
-    expect(html).toContain(fmt0(strong.spent));
-    expect(html).toContain(fmt1(towerYield(strong)));
-
+    expect(html).toContain(`${fmt0(500)} dégâts`);
+    expect(html).toContain('10 éliminations');
+    expect(html).toContain('width: 100%');
     expect(html).toContain(weak.def.name);
     expect(html).toContain('Vendue');
-    expect(html).toContain(fmt0(weak.damage));
-    expect(html).toContain(fmt0(weak.kills));
-    expect(html).toContain(fmt0(weak.spent));
-    expect(html).toContain(fmt1(towerYield(weak)));
-
+    expect(html).toContain('width: 40%');
     expect(html.indexOf(strong.def.name)).toBeLessThan(html.indexOf(weak.def.name));
   });
 
-  it('[RM-03] affiche chaque famille avec son libellé, ses dégâts et sa part en pourcentage, hybrides compris', () => {
+  it('[RM-01] ne montre que les cinq meilleures tours et compte les autres', () => {
+    const towers = Array.from({ length: 7 }, (_, i) => towerFixture({ id: i + 1, damage: 100 - i }));
+
+    const html = debriefTowers(towers, () => '');
+
+    expect(html.match(/class="debrief-tower"/g)).toHaveLength(5);
+    expect(html).toContain('+ 2 autres tours');
+  });
+
+  it('[RM-01] annonce l’absence de tour quand aucune n’a tiré', () => {
+    expect(debriefTowers([], () => '')).toContain('Aucune tour');
+  });
+
+  it('[RM-03] résume la part de chaque famille sur une ligne, hybrides compris', () => {
     const hybrid = towerFixture({ id: 1, def: TOWERS.stinger, damage: 300 });
     const simple = towerFixture({ id: 2, def: TOWERS.frost, damage: 100 });
 
     const html = debriefFamilies(familyDamage([hybrid, simple]));
 
-    expect(html).toContain('Hybrides');
-    expect(html).toContain(FAMILY_LABEL.frost);
-    expect(html).toContain(fmt0(300));
-    expect(html).toContain(fmt0(100));
-    expect(html).toContain(`${fmt0(75)} %`);
-    expect(html).toContain(`${fmt0(25)} %`);
+    expect(html).toContain(`Hybrides ${fmt0(75)} %`);
+    expect(html).toContain(`${FAMILY_LABEL.frost} ${fmt0(25)} %`);
   });
 
-  it('[RM-04] affiche chaque vague avec ses vies perdues et son or', () => {
+  it('[RM-04] trace une colonne par vague, haute en proportion des vies perdues', () => {
     const html = debriefWaves([
-      { wave: 0, livesLost: 2, gold: 120 },
-      { wave: 1, livesLost: 3, gold: 95 },
+      { wave: 0, livesLost: 0, gold: 120 },
+      { wave: 1, livesLost: 4, gold: 95 },
+      { wave: 2, livesLost: 2, gold: 95 },
     ]);
 
-    const wave1 = html.indexOf('Vague 1');
-    const lives1 = html.indexOf(fmt0(2));
-    const gold1 = html.indexOf(fmt0(120));
-    const wave2 = html.indexOf('Vague 2');
-    const lives2 = html.indexOf(fmt0(3));
-    const gold2 = html.indexOf(fmt0(95));
+    expect(html.match(/class="debrief-col"/g)).toHaveLength(3);
+    expect(html).toContain('Vague 2 : 4 vies perdues');
+    expect(html).toContain('height: 100%');
+    expect(html).toContain('height: 50%');
+    expect(html.indexOf('Vague 1 :')).toBeLessThan(html.indexOf('Vague 2 :'));
+  });
 
-    expect(wave1).toBeGreaterThanOrEqual(0);
-    expect(wave1).toBeLessThan(lives1);
-    expect(lives1).toBeLessThan(gold1);
-    expect(gold1).toBeLessThan(wave2);
-    expect(wave2).toBeLessThan(lives2);
-    expect(lives2).toBeLessThan(gold2);
+  it('[RM-06] compare les joueurs critère par critère et marque le meilleur de chaque ligne', () => {
+    const stats = (kills: number, leaked: number, damage: number) => ({
+      kills, leaked, goldEarned: 500, towersBuilt: 0, longestMaze: 40,
+      towers: new Map([[1, towerFixture({ damage })]]), waves: [],
+    });
+    const html = scoreboard([
+      { name: 'Vous', wave: 8, lives: 3, stats: stats(120, 8, 9000) },
+      { name: 'Lise', wave: 10, lives: 0, stats: stats(90, 2, 12000) },
+    ]);
+
+    expect(html).toContain('<th scope="col">Vous</th><th scope="col">Lise</th>');
+    const row = (label: string) => html.slice(html.indexOf(label), html.indexOf('</tr>', html.indexOf(label)));
+    expect(row('Vague atteinte')).toMatch(/<td>9<\/td><td class="best">11<\/td>/);
+    expect(row('Éliminations')).toMatch(/<td class="best">120<\/td><td>90<\/td>/);
+    expect(row('Évasions')).toMatch(/<td>8<\/td><td class="best">2<\/td>/);
+    expect(row('Dégâts')).toContain(`<td class="best">${fmt0(12000)}</td>`);
+  });
+
+  it('[RM-06] ne marque personne quand tous les joueurs sont à égalité', () => {
+    const s = { kills: 0, leaked: 0, goldEarned: 0, towersBuilt: 0, longestMaze: 0, towers: new Map(), waves: [] };
+    const html = scoreboard([{ name: 'A', wave: 1, lives: 5, stats: s }, { name: 'B', wave: 1, lives: 5, stats: s }]);
+
+    expect(html).not.toContain('best');
   });
 
   it('[RM-05] affiche le nombre de tours détruites et l’or qu’elles représentaient', () => {

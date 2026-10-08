@@ -1,9 +1,9 @@
-import type { World } from '../domain/model/World';
+import type { Stats, World } from '../domain/model/World';
 import type { SendGroup, WaveBriefing, WaveBriefingGroup } from '../application/queries/waveBriefing';
 import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage';
 import type { AuraKind, BuilderDef, ArmorType, AttackType, Creep, CreepDef, Result, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
-import type { breakerLosses, familyDamage, waveCurve } from '../domain/rules/debrief';
-import { towerYield } from '../domain/rules/debrief';
+import { breakerLosses } from '../domain/rules/debrief';
+import type { familyDamage, waveCurve } from '../domain/rules/debrief';
 import { towerRange } from '../domain/rules/crystal';
 import { builderTowers } from '../domain/rules/builder';
 import { CREEPS } from '../domain/catalog/creeps';
@@ -304,42 +304,76 @@ export function creepEffects(c: Creep): string[] {
 
 export const FATE_LABEL: Record<TowerFate, string> = { standing: 'En place', sold: 'Vendue', destroyed: 'Détruite' };
 
-export function debriefTowers(towers: Tower[]): string {
-  const rows = towers.map((t) => `<tr class="debrief-tower">
-      <td>${esc(t.def.name)}</td>
-      <td>${FATE_LABEL[t.fate]}</td>
-      <td>${fmt0(t.damage)}</td>
-      <td>${fmt0(t.kills)}</td>
-      <td>${fmt0(t.spent)}</td>
-      <td>${fmt1(towerYield(t))}</td>
-    </tr>`).join('');
-  const head = `<thead><tr><th>Tour</th><th>État</th><th>Dégâts</th><th>Éliminations</th><th>Or investi</th><th>Rendement</th></tr></thead>`;
-  return `<table class="debrief-towers">${head}${rows}</table>`;
+const plural = (n: number, word: string) => `${fmt0(n)} ${word}${n > 1 ? 's' : ''}`;
+
+/** Les cinq tours qui ont fait le plus de dégâts, chacune avec une barre relative à la meilleure. */
+export function debriefTowers(towers: Tower[], icon: (defId: string) => string): string {
+  if (!towers.length) return '<p class="debrief-note">Aucune tour n’a tiré.</p>';
+  const top = Math.max(1, towers[0].damage);
+  const rows = towers.slice(0, 5).map((t) => `<li class="debrief-tower">
+      ${icon(t.def.id)}
+      <div>
+        <p><b>${esc(t.def.name)}</b>${t.fate === 'standing' ? '' : ` <span class="debrief-fate">${FATE_LABEL[t.fate]}</span>`}</p>
+        <div class="debrief-track"><div class="debrief-bar" style="width: ${fmt0((t.damage / top) * 100)}%"></div></div>
+        <p class="debrief-note">${fmt0(t.damage)} dégâts · ${plural(t.kills, 'élimination')}</p>
+      </div>
+    </li>`).join('');
+  const rest = towers.length - 5;
+  const more = rest > 0 ? `<p class="debrief-note">+ ${rest} autre${rest > 1 ? 's' : ''} tour${rest > 1 ? 's' : ''}</p>` : '';
+  return `<ol class="debrief-towers">${rows}</ol>${more}`;
 }
 
 export function debriefFamilies(rows: ReturnType<typeof familyDamage>): string {
-  return rows.map((r) => `<div class="debrief-family">
-      <span>${FAMILY_LABEL[r.family]}</span>
-      <div class="debrief-bar" style="width: ${fmt0(r.share * 100)}%"></div>
-      <span>${fmt0(r.damage)}</span>
-      <span>${fmt0(r.share * 100)} %</span>
-    </div>`).join('');
+  return `<p class="debrief-note">Dégâts par famille : ${rows.map((r) => `${FAMILY_LABEL[r.family]} ${fmt0(r.share * 100)} %`).join(' · ')}</p>`;
 }
 
+/** Une colonne par vague, haute en proportion des vies perdues. */
 export function debriefWaves(rows: ReturnType<typeof waveCurve>): string {
-  const lines = rows.map((r) => `<tr class="debrief-wave">
-      <td>Vague ${r.wave + 1}</td>
-      <td>${fmt0(r.livesLost)}</td>
-      <td>${fmt0(r.gold)}</td>
-    </tr>`).join('');
-  const head = `<thead><tr><th>Vague</th><th>Vies perdues</th><th>Or</th></tr></thead>`;
-  return `<table class="debrief-waves">${head}${lines}</table>`;
+  const top = Math.max(1, ...rows.map((r) => r.livesLost));
+  const cols = rows.map((r) => {
+    const tip = `Vague ${r.wave + 1} : ${plural(r.livesLost, 'vie')} perdue${r.livesLost > 1 ? 's' : ''}`;
+    return `<div class="debrief-col" title="${tip}" aria-label="${tip}"><div style="height: ${fmt0((r.livesLost / top) * 100)}%"></div></div>`;
+  }).join('');
+  const last = rows.length ? rows[rows.length - 1].wave + 1 : 1;
+  return `<div class="debrief-chart">${cols}</div><div class="debrief-axis"><span>Vague 1</span><span>Vague ${last}</span></div>`;
 }
 
 export function debriefBreakers(losses: ReturnType<typeof breakerLosses>): string {
   if (losses.count === 0) return '<p class="debrief-breakers">Aucune tour perdue</p>';
   const noun = losses.count > 1 ? 'tours détruites' : 'tour détruite';
-  return `<p class="debrief-breakers">${fmt0(losses.count)} ${noun} · ${fmt0(losses.gold)} or</p>`;
+  return `<p class="debrief-breakers">${fmt0(losses.count)} ${noun} par les briseurs · ${fmt0(losses.gold)} or perdus</p>`;
+}
+
+export interface ScoreboardPlayer {
+  name: string;
+  wave: number;
+  lives: number;
+  stats: Stats;
+}
+
+/** Critères de fin de partie multijoueur : `low` quand le plus petit chiffre est le meilleur. */
+const CRITERIA: { label: string; value: (p: ScoreboardPlayer) => number; low?: boolean }[] = [
+  { label: 'Vague atteinte', value: (p) => p.wave + 1 },
+  { label: 'Vies restantes', value: (p) => p.lives },
+  { label: 'Éliminations', value: (p) => p.stats.kills },
+  { label: 'Évasions', value: (p) => p.stats.leaked, low: true },
+  { label: 'Dégâts', value: (p) => [...p.stats.towers.values()].reduce((sum, t) => sum + t.damage, 0) },
+  { label: 'Or gagné', value: (p) => p.stats.goldEarned },
+  { label: 'Plus long trajet', value: (p) => p.stats.longestMaze },
+  { label: 'Tours détruites', value: (p) => breakerLosses(p.stats.towers.values()).count, low: true },
+];
+
+/** Tableau comparatif : une ligne par critère, une colonne par joueur, le meilleur de chaque ligne marqué (personne en cas d'égalité générale). */
+export function scoreboard(players: ScoreboardPlayer[]): string {
+  const head = players.map((p) => `<th scope="col">${esc(p.name)}</th>`).join('');
+  const rows = CRITERIA.map((c) => {
+    const values = players.map(c.value);
+    const best = c.low ? Math.min(...values) : Math.max(...values);
+    const tied = values.every((v) => v === best);
+    const cells = values.map((v) => `<td${!tied && v === best ? ' class="best"' : ''}>${fmt0(v)}</td>`).join('');
+    return `<tr><th scope="row">${c.label}</th>${cells}</tr>`;
+  }).join('');
+  return `<div class="table-wrap"><table class="scoreboard"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 export function sendPanel(ether: number, income: number): string {
