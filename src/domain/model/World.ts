@@ -6,12 +6,13 @@ import { Grid } from './Grid';
 import { updateAbilities } from '../systems/abilities';
 import { updateGleaners } from '../systems/gleaners';
 import { updateGate } from '../systems/gate';
+import { updateEmbers } from '../systems/embers';
 import { updateCombat, updateProjectiles } from '../systems/combat';
 import { updateMovement } from '../systems/movement';
 import { updateStatuses } from '../systems/status';
 import { updateWaves, type Spawner } from '../systems/waves';
 import { GameEventType, Phase } from './types';
-import type { BuilderDef, Command, Creep, Difficulty, GameEvent, MapDef, Projectile, Tower, WaveTally } from './types';
+import type { BuilderDef, Command, Creep, Ember, Difficulty, GameEvent, MapDef, Projectile, Tower, WaveTally } from './types';
 
 export const TICK = 1 / 60;
 export const FIRST_WAVE_DELAY = 35;
@@ -79,6 +80,7 @@ export class World {
   /** Rejetons nés d'un coup (scission) : rejoignent `creeps` en fin de `step()`. */
   offspring: Creep[] = [];
   projectiles: Projectile[] = [];
+  embers: Ember[] = [];
   events: GameEvent[] = [];
   readonly log: { tick: number; cmd: Command }[] = [];
   stats: Stats = { kills: 0, leaked: 0, goldEarned: 0, towersBuilt: 0, longestMaze: 0, towers: new Map(), waves: [] };
@@ -205,6 +207,7 @@ export class World {
     updateWaves(this, dt);
     updateGleaners(this);
     updateStatuses(this, dt);
+    updateEmbers(this, dt);
     updateAbilities(this, dt);
     updateMovement(this, dt);
     updateCombat(this, dt);

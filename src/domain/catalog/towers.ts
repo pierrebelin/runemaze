@@ -9,7 +9,7 @@ const T: TowerDef[] = [
   {
     id: 'wall', name: 'Mur de pierre', family: 'wall', tier: 0, cost: 3,
     desc: "Bloc de labyrinthe bon marché. N'attaque pas, mais peut devenir n'importe quelle tour de base.",
-    upgrades: ['archer', 'cannon', 'frost', 'storm', 'venom', 'pylon', 'guard', 'bramble', 'gong', 'anvil', 'dispeller'],
+    upgrades: ['archer', 'cannon', 'frost', 'storm', 'venom', 'pylon', 'guard', 'bramble', 'gong', 'anvil', 'dispeller', 'brazier', 'hearth'],
   },
 
   // Garde et Ronces : attaque de zone instantanée, frappe tout le sol à portée.
@@ -168,7 +168,7 @@ const T: TowerDef[] = [
     id: 'glacier', name: 'Glacier', family: 'frost', tier: 2, cost: 45,
     desc: 'Ralentissement de zone de 40 %.',
     attack: { type: 'magic', dmg: [16, 20], cooldown: 1.2, range: 4.5, projectileSpeed: 11, targets: 'both', splash: { radius: 1.6, falloff: 0.2 }, slow: { pct: 0.4, duration: 2.5 } },
-    upgrades: ['winterheart', 'frostarrow', 'cryoshell', 'hail', 'blightfrost'],
+    upgrades: ['winterheart', 'frostarrow', 'cryoshell', 'hail', 'blightfrost', 'steam'],
   },
   {
     id: 'winterheart', name: "Cœur de l'hiver", family: 'frost', tier: 3, cost: 120,
@@ -180,7 +180,7 @@ const T: TowerDef[] = [
     id: 'iceshard', name: 'Éclat de glace', family: 'frost', tier: 2, cost: 45,
     desc: 'Pointes de glace lourdes, ralentissement de 35 %.',
     attack: { type: 'magic', dmg: [40, 50], cooldown: 1.1, range: 5, projectileSpeed: 16, targets: 'both', slow: { pct: 0.35, duration: 2 } },
-    upgrades: ['frostlance', 'frostarrow', 'cryoshell', 'hail', 'blightfrost'],
+    upgrades: ['frostlance', 'frostarrow', 'cryoshell', 'hail', 'blightfrost', 'steam'],
   },
   {
     id: 'frostlance', name: 'Lance de givre', family: 'frost', tier: 3, cost: 130,
@@ -200,7 +200,7 @@ const T: TowerDef[] = [
     id: 'tempest', name: "Tour d'orage", family: 'storm', tier: 2, cost: 55,
     desc: 'Chaîne d’éclairs sur 5 cibles.',
     attack: { type: 'magic', dmg: [36, 44], cooldown: 1.3, range: 4.5, projectileSpeed: 0, targets: 'both', chain: { bounces: 5, range: 2.8, decay: 0.85 } },
-    upgrades: ['maelstrom', 'thunderarrow', 'teslacannon', 'hail', 'acidarc'],
+    upgrades: ['maelstrom', 'thunderarrow', 'teslacannon', 'hail', 'acidarc', 'plasma'],
   },
   {
     id: 'maelstrom', name: 'Maelström', family: 'storm', tier: 3, cost: 150,
@@ -212,7 +212,7 @@ const T: TowerDef[] = [
     id: 'obelisk', name: 'Obélisque arcanique', family: 'storm', tier: 2, cost: 55,
     desc: 'Frappe unique et massive. Double dégâts contre les armures lourdes.',
     attack: { type: 'magic', dmg: [75, 95], cooldown: 1.4, range: 5.5, projectileSpeed: 0, targets: 'both' },
-    upgrades: ['voidprism', 'thunderarrow', 'teslacannon', 'hail', 'acidarc'],
+    upgrades: ['voidprism', 'thunderarrow', 'teslacannon', 'hail', 'acidarc', 'plasma'],
   },
   {
     id: 'voidprism', name: 'Prisme du néant', family: 'storm', tier: 3, cost: 160,
@@ -284,6 +284,56 @@ const T: TowerDef[] = [
     id: 'blight', name: 'Fléau', family: 'venom', tier: 3, cost: 130,
     desc: 'Contamine des groupes entiers.',
     attack: { type: 'normal', dmg: [10, 14], cooldown: 1, range: 5, projectileSpeed: 10, targets: 'ground', splash: { radius: 2.3, falloff: 0 }, poison: { dps: 32, duration: 6, maxStacks: 2 } },
+    upgrades: [],
+  },
+
+  // Pyromanciens : braise et salves de feu au sol.
+  {
+    id: 'brazier', name: 'Brasero', family: 'fire', tier: 1, cost: 18,
+    desc: 'Projette des braises lourdes. Sol uniquement.',
+    attack: { type: 'siege', dmg: [10, 12], cooldown: 1.4, range: 4, projectileSpeed: 9, targets: 'ground' , ember: { radius: 1, duration: 3, dps: 6 } },
+    upgrades: ['blaze', 'flamethrower'],
+  },
+  {
+    id: 'blaze', name: 'Fournaise', family: 'fire', tier: 2, cost: 48,
+    desc: 'Braises plus lourdes et plus lointaines. Sol uniquement.',
+    attack: { type: 'siege', dmg: [24, 30], cooldown: 1.4, range: 4.5, projectileSpeed: 9, targets: 'ground' , ember: { radius: 1.5, duration: 4, dps: 16 } },
+    upgrades: ['volcano', 'steam', 'plasma'],
+  },
+  {
+    id: 'volcano', name: 'Volcan', family: 'fire', tier: 3, cost: 135,
+    desc: 'Crache une roche en fusion. Sol uniquement.',
+    attack: { type: 'siege', dmg: [70, 85], cooldown: 1.5, range: 5, projectileSpeed: 9, targets: 'ground' , ember: { radius: 2, duration: 5, dps: 45 } },
+    upgrades: [],
+  },
+  {
+    id: 'flamethrower', name: 'Lance-flammes', family: 'fire', tier: 2, cost: 45,
+    desc: 'Jet de flammes rapide à courte portée. Sol uniquement.',
+    attack: { type: 'normal', dmg: [14, 18], cooldown: 0.5, range: 2.5, projectileSpeed: 14, targets: 'ground', splash: { radius: 1, falloff: 0.5 }, relentless: { step: 0.1, max: 1.5 } },
+    upgrades: ['dragonbreath', 'steam', 'plasma'],
+  },
+  {
+    id: 'dragonbreath', name: 'Souffle du dragon', family: 'fire', tier: 3, cost: 130,
+    desc: 'Un torrent de flammes qui balaie le groupe. Sol uniquement.',
+    attack: { type: 'normal', dmg: [40, 48], cooldown: 0.5, range: 3, projectileSpeed: 14, targets: 'ground', splash: { radius: 1.2, falloff: 0.5 }, relentless: { step: 0.1, max: 2.5 } },
+    upgrades: [],
+  },
+  {
+    id: 'hearth', name: 'Foyer', family: 'fire', tier: 1, cost: 20,
+    desc: 'Salve de feu magique qui frappe tout le sol à portée.',
+    attack: { type: 'magic', dmg: [16, 20], cooldown: 2, range: 2.5, projectileSpeed: 0, targets: 'ground', area: true },
+    upgrades: ['conflagration', 'ashfield'],
+  },
+  {
+    id: 'conflagration', name: 'Embrasement', family: 'fire', tier: 3, cost: 50,
+    desc: 'Salve de feu magique plus large et bien plus forte.',
+    attack: { type: 'magic', dmg: [45, 55], cooldown: 2, range: 3, projectileSpeed: 0, targets: 'ground', area: true },
+    upgrades: [],
+  },
+  {
+    id: 'ashfield', name: 'Champ de cendres', family: 'fire', tier: 3, cost: 50,
+    desc: 'Salve de feu magique qui ralentit de 25 % tout le sol à portée.',
+    attack: { type: 'magic', dmg: [30, 36], cooldown: 2, range: 2.5, projectileSpeed: 0, targets: 'ground', area: true, slow: { pct: 0.25, duration: 2 } },
     upgrades: [],
   },
 
@@ -444,6 +494,37 @@ const T: TowerDef[] = [
     desc: 'Éclair qui rebondit sur 6 cibles, les empoisonne et ronge leur armure, en plus dévastateur.',
     elements: ['storm', 'venom'],
     attack: { type: 'magic', dmg: [60, 75], cooldown: 1.2, range: 5, projectileSpeed: 0, targets: 'both', chain: { bounces: 6, range: 2.8, decay: 0.85 }, poison: { dps: 26, duration: 3, maxStacks: 2 }, armorShred: { amount: 5, duration: 4 } },
+    upgrades: [],
+  },
+  // Vapeur : infusion hybride feu/givre.
+  {
+    id: 'steam', name: 'Vapeur', family: 'fire', tier: 1, cost: 70,
+    desc: 'Jet de vapeur brûlante, sol et air.',
+    elements: ['fire', 'frost'],
+    attack: { type: 'magic', dmg: [30, 36], cooldown: 1.2, range: 4.5, projectileSpeed: 12, targets: 'both' , ember: { radius: 1.5, duration: 3, dps: 12, slow: { pct: 0.35, duration: 0.5 } } },
+    upgrades: ['scorchmist'],
+  },
+  {
+    id: 'scorchmist', name: 'Brume ardente', family: 'fire', tier: 2, cost: 155,
+    desc: 'Jet de vapeur brûlante, sol et air, en plus dévastateur.',
+    elements: ['fire', 'frost'],
+    attack: { type: 'magic', dmg: [90, 105], cooldown: 1.2, range: 5, projectileSpeed: 12, targets: 'both' , ember: { radius: 1.8, duration: 3, dps: 30, slow: { pct: 0.45, duration: 0.5 } } },
+    upgrades: [],
+  },
+
+  // Plasma : infusion hybride feu/foudre.
+  {
+    id: 'plasma', name: 'Plasma', family: 'fire', tier: 1, cost: 70,
+    desc: 'Arc de plasma instantané qui rebondit sur 3 cibles.',
+    elements: ['fire', 'storm'],
+    attack: { type: 'magic', dmg: [40, 48], cooldown: 1.3, range: 5, projectileSpeed: 0, targets: 'both', chain: { bounces: 3, range: 2.5, decay: 0.8 } , ember: { radius: 1, duration: 2, dps: 10 } },
+    upgrades: ['solararc'],
+  },
+  {
+    id: 'solararc', name: 'Arc solaire', family: 'fire', tier: 2, cost: 155,
+    desc: 'Arc de plasma instantané qui rebondit sur 5 cibles, en plus dévastateur.',
+    elements: ['fire', 'storm'],
+    attack: { type: 'magic', dmg: [120, 140], cooldown: 1.3, range: 5.5, projectileSpeed: 0, targets: 'both', chain: { bounces: 5, range: 2.8, decay: 0.85 } , ember: { radius: 1, duration: 2, dps: 25 } },
     upgrades: [],
   },
 ];

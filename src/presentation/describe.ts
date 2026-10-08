@@ -68,7 +68,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const LAYER: Record<string, string> = { ground: 'Sol', air: 'Air', both: 'Sol et air' };
 
 export const FAMILY_LABEL: Record<string, string> = {
-  wall: 'Maçonnerie', archer: 'Archers', cannon: 'Artillerie', frost: 'Givre', storm: 'Foudre', venom: 'Venin',
+  wall: 'Maçonnerie', archer: 'Archers', cannon: 'Artillerie', frost: 'Givre', storm: 'Foudre', venom: 'Venin', fire: 'Feu',
   hybrid: 'Hybrides',
 };
 
@@ -98,6 +98,7 @@ export function towerSpecials(def: TowerDef): string[] {
   if (a.area) s.push(a.range === 1.5 && a.targets === 'ground' ? 'corps à corps' : 'frappe toute la zone');
   if (a.stun) s.push(`étourdit ${fmt1(a.stun.duration)} s`);
   if (a.rampUp) s.push(`montée en puissance jusqu’à +${Math.round(a.rampUp.max * 100)} %`);
+  if (a.relentless) s.push(`acharnement +${Math.round(a.relentless.step * 100)} % par coup, jusqu’à +${Math.round(a.relentless.max * 100)} %`);
   if (a.splash) s.push(`zone ${fmt1(a.splash.radius)} cases`);
   if (a.slow) s.push(`ralentit de ${Math.round(a.slow.pct * 100)} % pendant ${fmt1(a.slow.duration)} s`);
   if (a.poison) s.push(`poison ${a.poison.dps}/s pendant ${a.poison.duration} s (×${a.poison.maxStacks})`);
@@ -107,6 +108,10 @@ export function towerSpecials(def: TowerDef): string[] {
   if (a.armorShred) s.push(`−${a.armorShred.amount} armure`);
   if (a.dispel) s.push(`${Math.round(a.dispel * 100)} % des dégâts contre les immunisés à la magie`);
   if (a.freeze) s.push(`gèle ${Math.round(a.freeze.chance * 100)} % des touches pendant ${fmt1(a.freeze.duration)} s (répit ${fmt1(a.freeze.guard)} s)`);
+  if (a.ember) {
+    const slow = a.ember.slow ? `, ralentit de ${Math.round(a.ember.slow.pct * 100)} %` : '';
+    s.push(`flaque de braise ${fmt1(a.ember.radius)} ${a.ember.radius < 2 ? 'case' : 'cases'}, ${fmt1(a.ember.duration)} s, ${a.ember.dps}/s${slow}`);
+  }
   return s;
 }
 

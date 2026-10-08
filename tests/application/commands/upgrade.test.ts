@@ -177,6 +177,21 @@ describe('upgrade — bâtisseur', () => {
     expect(w.towerById.get(wall.id)!.def.id).toBe('wall');
   });
 
+  it("[RM-01] refuse qu'un Pyromancien fasse évoluer un mur en Tour d'archers", () => {
+    const w = newWorld('normal', 42, undefined, 'pyromancers');
+    w.gold = 100000;
+    const wall = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y: 8 }) as { ok: true; id: number };
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Upgrade, tower: wall.id, def: 'archer' });
+
+    expect(r).toEqual({ ok: false, reason: 'Amélioration indisponible.' });
+    expect(w.gold).toBe(gold);
+    expect(w.towerById.get(wall.id)!.def.id).toBe('wall');
+    // Garde : sans elle le refus pourrait venir d'un bâtisseur inconnu.
+    expect(dispatch(w, { c: CommandType.Upgrade, tower: wall.id, def: 'brazier' }).ok).toBe(true);
+  });
+
   it('[RM-03] fait évoluer un niveau 2 en hybride de son bâtisseur dès la première vague', () => {
     const w = newWorld('normal', 42, undefined, 'forge');
     w.gold = 100000;

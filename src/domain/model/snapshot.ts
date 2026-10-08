@@ -2,7 +2,7 @@ import { CREEPS } from '../catalog/creeps';
 import { TOWERS } from '../catalog/towers';
 import type { Spawner } from '../systems/waves';
 import { World } from './World';
-import type { Command, Creep, Difficulty, MapDef, Phase, Projectile, Tower, WaveTally } from './types';
+import type { Command, Creep, Difficulty, Ember, MapDef, Phase, Projectile, Tower, WaveTally } from './types';
 
 /** Tour sans référence de classe : sa définition est stockée par id, résolue via `TOWERS`. */
 type StoredTower = Omit<Tower, 'def'> & { defId: string };
@@ -37,6 +37,7 @@ export interface WorldSnapshot {
   towers: StoredTower[];
   creeps: StoredCreep[];
   projectiles: Projectile[];
+  embers: Ember[];
   log: { tick: number; cmd: Command }[];
   stats: {
     kills: number;
@@ -51,7 +52,7 @@ export interface WorldSnapshot {
 
 function storeTower(t: Tower): StoredTower {
   const { def, ...rest } = t;
-  return { ...rest, defId: def.id };
+  return { ...rest, defId: def.id, relentless: rest.relentless ? { ...rest.relentless } : rest.relentless };
 }
 
 function storeCreep(c: Creep): StoredCreep {
@@ -67,7 +68,7 @@ function storeCreep(c: Creep): StoredCreep {
 
 function loadTower(s: StoredTower): Tower {
   const { defId, ...rest } = s;
-  return { ...rest, def: TOWERS[defId] };
+  return { ...rest, def: TOWERS[defId], relentless: rest.relentless ? { ...rest.relentless } : rest.relentless };
 }
 
 function loadCreep(s: StoredCreep): Creep {
@@ -79,6 +80,10 @@ function loadCreep(s: StoredCreep): Creep {
     breaker: rest.breaker ? { ...rest.breaker } : rest.breaker,
     heading: rest.heading ? { ...rest.heading } : rest.heading,
   };
+}
+
+function copyEmber(e: Ember): Ember {
+  return { ...e, slow: e.slow ? { ...e.slow } : e.slow };
 }
 
 export function snapshot(world: World): WorldSnapshot {
@@ -110,6 +115,7 @@ export function snapshot(world: World): WorldSnapshot {
     towers: world.towers.map(storeTower),
     creeps: world.creeps.map(storeCreep),
     projectiles: world.projectiles.map((p) => ({ ...p })),
+    embers: world.embers.map(copyEmber),
     log: world.log.map((e) => ({ ...e })),
     stats: {
       kills: world.stats.kills,
@@ -150,6 +156,7 @@ export function restore(snap: WorldSnapshot): World {
   world.towerById = new Map(world.towers.map((t) => [t.id, t]));
   world.creeps = snap.creeps.map(loadCreep);
   world.projectiles = snap.projectiles.map((p) => ({ ...p }));
+  world.embers = snap.embers.map(copyEmber);
 
   world.refreshPaths();
 

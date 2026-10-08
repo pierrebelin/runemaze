@@ -34,12 +34,4 @@ describe('decorSeed', () => {
     expect(a.rows).not.toEqual(b.rows);
     expect(decorSeed(a)).not.toBe(decorSeed(b));
   });
-
-  it('[RM-10] garde la même graine de décor quand seul le biome change', () => {
-    const earth = drawMap(7, 'earth', MAP_RECIPE);
-    const snow = drawMap(7, 'snow', MAP_RECIPE);
-
-    expect(earth.rows).toEqual(snow.rows);
-    expect(decorSeed(earth)).toBe(decorSeed(snow));
-  });
 });

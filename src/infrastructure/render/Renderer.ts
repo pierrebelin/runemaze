@@ -143,6 +143,13 @@ export class Renderer {
         ctx.fill();
       }
     }
+    // La glace reste visible sous le sentier : c'est là que les créatures glissent.
+    ctx.fillStyle = PAL.ice;
+    for (let y = 0; y < g.h; y++) {
+      for (let x = 0; x < g.w; x++) {
+        if (g.kind[g.idx(x, y)] === 'ice') ctx.fillRect(x, y, 1, 1);
+      }
+    }
     return c;
   }
 
@@ -168,6 +175,13 @@ export class Renderer {
       ctx.beginPath();
       ctx.ellipse(x, y, r, r * (0.6 + rng.next() * 0.4), rng.next() * 3, 0, Math.PI * 2);
       ctx.fill();
+    }
+    // Plaques de glace : couleur provisoire unie, la même que la vignette.
+    ctx.fillStyle = PAL.ice;
+    for (let y = 0; y < g.h; y++) {
+      for (let x = 0; x < g.w; x++) {
+        if (g.kind[g.idx(x, y)] === 'ice') ctx.fillRect(x, y, 1, 1);
+      }
     }
     // Terre battue autour du portail, de la pierre runique et de la porte.
     for (let y = 0; y < g.h; y++) {
@@ -319,6 +333,12 @@ export class Renderer {
     // Créatures : d'abord au sol, puis les volants au-dessus de tout.
     const ground = w.creeps.filter((c) => c.alive && !c.def.air).sort((a, b) => a.y - b.y);
     const air = w.creeps.filter((c) => c.alive && c.def.air).sort((a, b) => a.y - b.y);
+    ctx.fillStyle = 'rgba(224, 112, 40, 0.35)';
+    for (const e of w.embers) {
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
     for (const c of ground) this.creep(index, c, time);
     for (const p of w.projectiles) this.projectile(p, true);
     for (const c of air) this.creep(index, c, time);
@@ -613,6 +633,17 @@ export class Renderer {
         ctx.fillStyle = col.glow;
         ctx.beginPath();
         ctx.arc(p.x - 0.03, p.y - 0.03, 0.04, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case 'fire': {
+        ctx.fillStyle = col.main;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = col.glow;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.05, 0, Math.PI * 2);
         ctx.fill();
         break;
       }

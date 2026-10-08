@@ -7,7 +7,7 @@ import { CREEPS, bountyFor } from '../../../src/domain/catalog/creeps';
 import type { AttackDef } from '../../../src/domain/model/types';
 import { damageMultiplier } from '../../../src/domain/rules/Damage';
 import { buildTowerChain, newWorld, run, spawnDummy } from '../../support/helpers';
-import type { Tower } from '../../../src/domain/model/types';
+import type { Creep, Tower } from '../../../src/domain/model/types';
 import type { World } from '../../../src/domain/model/World';
 
 /** Avance jusqu'au prochain tir de la tour (borne 5 s) et renvoie la recharge qui vient d'être posée. */
@@ -393,6 +393,58 @@ describe('combat', () => {
     expect(far.frozen).toBe(0);
   });
 
+  it('[RM-05] le Foyer blesse à chaque salve toutes les créatures au sol à 2,5 cases', () => {
+    const w = newWorld('normal', 42, undefined, 'pyromancers');
+    const t = buildTowerChain(w, ['hearth']);
+    const r = CREEPS.rat.radius;
+    const near = spawnDummy(w, t.cx + 1, t.cy);
+    const edge = spawnDummy(w, t.cx, t.cy + 2.4);
+    const rim = spawnDummy(w, t.cx - (2.5 + r - 0.05), t.cy);
+    const far = spawnDummy(w, t.cx, t.cy - (2.5 + r + 0.2));
+
+    // La tour garde un court délai avant sa première salve : on avance jusqu'à la touche (borne 3 s).
+    for (let i = 0; i < 180 && near.hp === near.maxHp; i++) w.step();
+
+    for (const c of [near, edge, rim]) expect(c.hp).toBeLessThan(c.maxHp);
+    expect(far.hp).toBe(far.maxHp);
+    expect(w.projectiles).toHaveLength(0);
+
+    const [n1, e1, r1] = [near.hp, edge.hp, rim.hp];
+    run(w, 2.1);
+    expect(near.hp).toBeLessThan(n1);
+    expect(edge.hp).toBeLessThan(e1);
+    expect(rim.hp).toBeLessThan(r1);
+    expect(far.hp).toBe(far.maxHp);
+    expect(w.projectiles).toHaveLength(0);
+  });
+
+  it('[RM-05] le Foyer ignore les volants', () => {
+    const w = newWorld('normal', 42, undefined, 'pyromancers');
+    const t = buildTowerChain(w, ['hearth']);
+    const flyer = spawnDummy(w, t.cx + 1, t.cy, true);
+    const walker = spawnDummy(w, t.cx, t.cy + 1);
+
+    run(w, 3);
+
+    expect(walker.hp).toBeLessThan(walker.maxHp);
+    expect(flyer.hp).toBe(flyer.maxHp);
+  });
+
+  it('[RM-05] le Champ de cendres ralentit de 25 % les créatures touchées par sa salve', () => {
+    const w = newWorld('normal', 42, undefined, 'pyromancers');
+    const t = buildTowerChain(w, ['hearth', 'ashfield']);
+    const a = spawnDummy(w, t.cx + 2, t.cy);
+    const b = spawnDummy(w, t.cx, t.cy + 2.4);
+    const far = spawnDummy(w, t.cx, t.cy - (2.5 + CREEPS.rat.radius + 0.2));
+
+    for (let i = 0; i < 180 && a.hp === a.maxHp; i++) w.step();
+
+    expect(a.slowPct).toBe(0.25);
+    expect(b.slowPct).toBe(0.25);
+    expect(far.slowPct).toBe(0);
+    expect(far.hp).toBe(far.maxHp);
+  });
+
   it('[RM-06] une tour à côté d\'une Enclume tire plus souvent que seule', () => {
     const shots = (withAnvil: boolean): number => {
       const w = newWorld('normal', 42, undefined, 'forge');
@@ -474,6 +526,53 @@ describe('combat', () => {
     run(w, 0.1);
 
     expect(t.ramp).toBe(0);
+  });
+
+  /** Avance jusqu'à `n` coups reçus par `c` (borne 20 s) et renvoie les PV perdus à chaque coup. */
+  function hitDamages(w: World, c: Creep, n: number): number[] {
+    const out: number[] = [];
+    let prev = c.hp;
+    for (let i = 0; i < 1200 && out.length < n; i++) {
+      w.step();
+      if (c.hp < prev) out.push(prev - c.hp);
+      prev = c.hp;
+    }
+    return out;
+  }
+
+  /** Lance-flammes aux dégâts fixes (10-10) : la variance de `world.rng` disparaît. */
+  function fixedFlamethrower(w: World): Tower {
+    const t = buildTowerChain(w, ['brazier', 'flamethrower'], 10, 8);
+    t.def = { ...t.def, attack: { ...t.def.attack!, dmg: [10, 10] } };
+    return t;
+  }
+
+  it('[RM-04] le 6e coup du Lance-flammes sur la même créature fait 50 % de plus que le premier', () => {
+    const w = newWorld('normal', 42, undefined, 'pyromancers');
+    const t = fixedFlamethrower(w);
+    const c = spawnDummy(w, t.cx + 1, t.cy);
+
+    const d = hitDamages(w, c, 6);
+
+    expect(d).toHaveLength(6);
+    expect(d[5] / d[0]).toBeCloseTo(1.5, 6);
+  });
+
+  it('[RM-04] l\'acharnement retombe à zéro quand le Lance-flammes change de cible', () => {
+    const w = newWorld('normal', 42, undefined, 'pyromancers');
+    const t = fixedFlamethrower(w);
+    const a = spawnDummy(w, t.cx + 1, t.cy);
+    const b = spawnDummy(w, t.cx + 20, t.cy);
+
+    const da = hitDamages(w, a, 4);
+    expect(da[3]).toBeGreaterThan(da[0]);
+
+    // A sort de portée, B y entre : la tour change de cible.
+    a.x = t.cx + 20;
+    b.x = t.cx + 1;
+    const db = hitDamages(w, b, 1);
+
+    expect(db[0]).toBeCloseTo(da[0], 6);
   });
 
   it('[RM-08] le Carillon étourdit 0,4 s et ralentit de 30 %', () => {

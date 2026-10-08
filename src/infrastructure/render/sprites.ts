@@ -31,13 +31,13 @@ function circle(ctx: Ctx, x: number, y: number, r: number): void {
 function plinth(ctx: Ctx, cx: number, cy: number, tier: number, hybrid?: string): void {
   const s = 1.78;
   ctx.fillStyle = PAL.shadow;
-  roundRect(ctx, cx - s / 2 + 0.08, cy - s / 2 + 0.12, s, s, 0.22);
+  roundRect(ctx, cx - s / 2 + 0.04, cy - s / 2 + 0.06, s, s, 0.22);
   ctx.fill();
   ctx.fillStyle = PAL.stoneDark;
   roundRect(ctx, cx - s / 2, cy - s / 2, s, s, 0.22);
   ctx.fill();
   ctx.fillStyle = PAL.stone;
-  roundRect(ctx, cx - s / 2 + 0.1, cy - s / 2 + 0.08, s - 0.2, s - 0.24, 0.16);
+  roundRect(ctx, cx - s / 2 + 0.1, cy - s / 2 + 0.1, s - 0.2, s - 0.2, 0.16);
   ctx.fill();
   // Joints de pierre.
   ctx.strokeStyle = 'rgba(30,31,34,0.35)';
@@ -48,9 +48,9 @@ function plinth(ctx: Ctx, cx: number, cy: number, tier: number, hybrid?: string)
   ctx.moveTo(cx, cy - s / 2 + 0.1);
   ctx.lineTo(cx, cy - 0.02);
   ctx.moveTo(cx - 0.45, cy + 0.02);
-  ctx.lineTo(cx - 0.45, cy + s / 2 - 0.18);
+  ctx.lineTo(cx - 0.45, cy + s / 2 - 0.1);
   ctx.moveTo(cx + 0.45, cy + 0.02);
-  ctx.lineTo(cx + 0.45, cy + s / 2 - 0.18);
+  ctx.lineTo(cx + 0.45, cy + s / 2 - 0.1);
   ctx.stroke();
   const len = [0, 0.14, 0.3, 0.5][tier];
   const e = s / 2 - 0.08;
@@ -72,7 +72,7 @@ function plinth(ctx: Ctx, cx: number, cy: number, tier: number, hybrid?: string)
   if (hybrid) {
     ctx.strokeStyle = hybrid;
     ctx.lineWidth = 0.08;
-    roundRect(ctx, cx - s / 2 + 0.16, cy - s / 2 + 0.15, s - 0.32, s - 0.34, 0.12);
+    roundRect(ctx, cx - s / 2 + 0.16, cy - s / 2 + 0.16, s - 0.32, s - 0.32, 0.12);
     ctx.stroke();
   }
 }
@@ -93,6 +93,7 @@ const CANNON = FAMILY_COLOR.cannon;
 const FROST = FAMILY_COLOR.frost;
 const STORM = FAMILY_COLOR.storm;
 const VENOM = FAMILY_COLOR.venom;
+const FIRE = FAMILY_COLOR.fire;
 const IRON = '#1d1d20';
 const COPPER = '#c07a3a';
 const RUST = '#b5562a';
@@ -334,6 +335,77 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
       roundRect(ctx, cx + x + 0.08, cy + y + 0.06, w - 0.3, 0.12, 0.05);
       ctx.fill();
     }
+  },
+
+  // Pyromanciens
+  brazier: (p) => {
+    disc(p.ctx, p.cx, p.top + 0.1, 0.46, '#2d2a24');
+    disc(p.ctx, p.cx, p.top + 0.1, 0.36, FIRE.dark);
+    poly(p.ctx, FIRE.main, [p.cx - 0.26, p.top + 0.1, p.cx - 0.1, p.top - 0.3, p.cx, p.top - 0.08, p.cx + 0.12, p.top - 0.36, p.cx + 0.26, p.top + 0.1]);
+    poly(p.ctx, FIRE.glow, [p.cx - 0.1, p.top + 0.1, p.cx, p.top - 0.12, p.cx + 0.1, p.top + 0.1]);
+  },
+  blaze: (p) => {
+    aura(p, '224, 97, 42', 0.8);
+    disc(p.ctx, p.cx, p.top + 0.1, 0.56, '#2d2a24');
+    disc(p.ctx, p.cx, p.top + 0.1, 0.46, FIRE.dark);
+    poly(p.ctx, FIRE.main, [p.cx - 0.36, p.top + 0.1, p.cx - 0.2, p.top - 0.45, p.cx - 0.02, p.top - 0.1, p.cx + 0.16, p.top - 0.55, p.cx + 0.36, p.top + 0.1]);
+    poly(p.ctx, FIRE.glow, [p.cx - 0.14, p.top + 0.1, p.cx, p.top - 0.2, p.cx + 0.14, p.top + 0.1]);
+  },
+  volcano: (p) => {
+    aura(p, '224, 97, 42', 0.95);
+    poly(p.ctx, IRON, [p.cx - 0.6, p.top + 0.5, p.cx - 0.2, p.top - 0.3, p.cx + 0.2, p.top - 0.3, p.cx + 0.6, p.top + 0.5]);
+    poly(p.ctx, FIRE.main, [p.cx - 0.2, p.top - 0.3, p.cx + 0.2, p.top - 0.3, p.cx + 0.1, p.top - 0.18, p.cx - 0.1, p.top - 0.18]);
+    bubbles(p, '255, 194, 122', 4, 0.2, 0.7, p.top - 0.3);
+  },
+  flamethrower: (p) => {
+    turret(p, FIRE.dark, 0.44);
+    barrel(p, 0.7, 0.2, IRON, FIRE.glow);
+    disc(p.ctx, p.cx, p.top, 0.12, FIRE.glow);
+  },
+  dragonbreath: (p) => {
+    aura(p, '224, 97, 42', 0.86);
+    turret(p, FIRE.dark, 0.5);
+    barrel(p, 0.85, 0.3, FIRE.main, FIRE.glow);
+    barrel(p, 0.7, 0.14, IRON, FIRE.glow);
+    disc(p.ctx, p.cx, p.top, 0.16, FIRE.glow);
+  },
+  hearth: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.5, '#2d2a24');
+    disc(p.ctx, p.cx, p.top, 0.4, FIRE.dark);
+    disc(p.ctx, p.cx, p.top, 0.24 + 0.06 * pulse(p, 4), FIRE.main);
+    disc(p.ctx, p.cx, p.top, 0.1, FIRE.glow);
+  },
+  conflagration: (p) => {
+    aura(p, '224, 97, 42', 0.9);
+    disc(p.ctx, p.cx, p.top, 0.58, '#2d2a24');
+    disc(p.ctx, p.cx, p.top, 0.48, FIRE.dark);
+    disc(p.ctx, p.cx, p.top, 0.34 + 0.08 * pulse(p, 5), FIRE.main);
+    disc(p.ctx, p.cx, p.top, 0.18, FIRE.glow);
+    bubbles(p, '255, 194, 122', 4, 0.3, 0.6);
+  },
+  ashfield: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.58, '#2d2a24');
+    disc(p.ctx, p.cx, p.top, 0.46, '#5a554e');
+    disc(p.ctx, p.cx, p.top, 0.2 + 0.05 * pulse(p, 3), FIRE.main);
+    bubbles(p, '170, 165, 155', 4, 0.3, 0.6);
+  },
+  steam: (p) => {
+    cauldron(p, '#c9d6dc');
+    bubbles(p, '230, 240, 245', 4, 0.2, 0.7, p.top - 0.1);
+    disc(p.ctx, p.cx, p.top + 0.3, 0.1, FIRE.main);
+  },
+  scorchmist: (p) => {
+    aura(p, '224, 97, 42', 0.86);
+    cauldron(p, '#e8d2c0', 0.5);
+    bubbles(p, '255, 220, 190', 6, 0.3, 0.9, p.top - 0.1);
+    disc(p.ctx, p.cx, p.top + 0.3, 0.14, FIRE.main);
+  },
+  plasma: (p) => {
+    orb(p, FIRE.glow, 'rgba(224, 97, 42, A)', STORM.glow, 1);
+  },
+  solararc: (p) => {
+    aura(p, '224, 97, 42', 0.9);
+    orb(p, '#fff1c8', 'rgba(224, 97, 42, A)', STORM.glow, 2, 0.5);
   },
 
   // Garde et Ronces
@@ -856,7 +928,7 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
 export function drawTower(ctx: Ctx, def: TowerDef, cx: number, cy: number, aim: number, time: number): void {
   const art = TOWER_ART[def.id];
   if (def.family !== 'wall') plinth(ctx, cx, cy, def.tier, def.elements && FAMILY_COLOR[def.elements[1]].main);
-  art({ ctx, cx, top: cy - 0.12, aim, time });
+  art({ ctx, cx, top: cy, aim, time });
 }
 
 /** Couleur des cases `build` dans l'aperçu : Terre garde son herbe claire, les autres biomes leur sol. */
@@ -877,6 +949,7 @@ export function drawMapThumbnail(ctx: Ctx, map: MapDef, size: number): void {
     exit: PAL.danger,
     road: pal.dirt,
     checkpoint: PAL.gold,
+    ice: PAL.ice,
   };
   const grid = new Grid(map);
   const scale = size / Math.max(grid.w, grid.h);

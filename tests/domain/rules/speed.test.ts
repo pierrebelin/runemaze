@@ -30,4 +30,18 @@ describe('creepSpeed', () => {
     c.hp = 50;
     expect(creepSpeed(c)).toBeCloseTo(CREEPS.ogre.speed, 6);
   });
+
+  it('[RM-03] vaut 2,24 quand une créature de vitesse 2 ralentie de 20 % est sur la glace', () => {
+    const c = { def: { ...CREEPS.wolf, speed: 2 }, hp: 10, maxHp: 10, slowPct: 0.2, sprint: 0 };
+
+    expect(creepSpeed(c, 1.4)).toBeCloseTo(2.24, 6);
+  });
+
+  it('[RM-03] multiplie le sprint et la fureur par le bonus de glace', () => {
+    const sprinting = { def: RUNNER_DEF, hp: 10, maxHp: 10, slowPct: 0, sprint: 0.5 };
+    const furious = { def: CREEPS.ogre, hp: 49, maxHp: 100, slowPct: 0, sprint: 0 };
+
+    expect(creepSpeed(sprinting, 1.4)).toBeCloseTo(creepSpeed(sprinting) * 1.4, 6);
+    expect(creepSpeed(furious, 1.4)).toBeCloseTo(creepSpeed(furious) * 1.4, 6);
+  });
 });

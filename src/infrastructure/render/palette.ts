@@ -17,6 +17,7 @@ export const PAL = {
   stoneLight: '#b3b0a9',
   bronze: '#b98d4c',
   gold: '#e9b949',
+  ice: '#cfe3ee',
   parchment: '#e7e8ea',
   ink: '#151619',
   danger: '#d8553f',
@@ -98,6 +99,7 @@ export const FAMILY_COLOR: Record<Family, { main: string; dark: string; glow: st
   frost: { main: '#8fd3f2', dark: '#3c7fa6', glow: '#d8f3ff' },
   storm: { main: '#a98cf0', dark: '#5a3fa8', glow: '#e7dcff' },
   venom: { main: '#98c94a', dark: '#4d7322', glow: '#d6f59a' },
+  fire: { main: '#e0612a', dark: '#8a2f12', glow: '#ffc27a' },
 };
 
 export interface CreepStyle {

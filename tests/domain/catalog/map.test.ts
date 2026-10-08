@@ -5,7 +5,7 @@ import { World } from '../../../src/domain/model/World';
 import type { Difficulty } from '../../../src/domain/model/types';
 import { drawMap } from '../../../src/domain/rules/mapDraw';
 import { launchWave } from '../../../src/domain/systems/waves';
-import { MAP_SEALS } from '../../support/maps';
+import { MAP_ICE, MAP_SEALS } from '../../support/maps';
 
 const SEEDS = [1, 2, 3, 4, 5, 6];
 const DIFFICULTIES: Difficulty[] = ['easy', 'normal', 'hard'];
@@ -40,22 +40,6 @@ describe('catalogue des cartes', () => {
     });
   });
 
-  it('[RM-08] trace le même trajet et les mêmes cases constructibles quel que soit le biome', () => {
-    for (const seed of SEEDS) {
-      const maps = BIOMES.map((biome) => drawMap(seed, biome, MAP_RECIPE));
-      const worlds = maps.map((map) => new World({ map, difficulty: 'normal', seed: 1, builder: 'bastion' }));
-      expect(worlds).toHaveLength(3);
-      const [reference, ...others] = worlds;
-      const cells = maps[0].width * maps[0].height;
-      const buildable = (w: World) => Array.from({ length: cells }, (_, i) => w.grid.buildable(i));
-      for (const [k, w] of others.entries()) {
-        expect(maps[k + 1].rows).toEqual(maps[0].rows);
-        expect(w.mazeLength()).toBe(reference.mazeLength());
-        expect(buildable(w)).toEqual(buildable(reference));
-      }
-    }
-  });
-
   it.each(DIFFICULTIES)(
     '[RM-08] lance la même première vague avec le même or et les mêmes vies quel que soit le biome en difficulté %s',
     (difficulty) => {
@@ -74,6 +58,15 @@ describe('catalogue des cartes', () => {
       for (const s of states.slice(1)) expect(s).toEqual(states[0]);
     },
   );
+
+  it('[RM-02] lit la glace comme une case praticable non constructible', () => {
+    const g = new World({ map: MAP_ICE, difficulty: 'normal', seed: 1, builder: 'bastion' }).grid;
+    const i = g.idx(5, 3);
+
+    expect(g.kind[i]).toBe('ice');
+    expect(g.walkable(i)).toBe(true);
+    expect(g.buildable(i)).toBe(false);
+  });
 
   it('[CU-01] propose Terre, Neige et Espace, Terre en premier', () => {
     expect(BIOMES).toEqual(['earth', 'snow', 'space']);

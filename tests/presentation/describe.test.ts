@@ -743,3 +743,18 @@ describe('choix du biome', () => {
     expect(BIOMES.map(biomeLabel)).toEqual(['Terre', 'Neige', 'Espace']);
   });
 });
+
+describe('acharnement', () => {
+  it('[RM-04] décrit l’acharnement avec son pas et son maximum', () => {
+    expect(towerSpecials(TOWERS.flamethrower)).toContain('acharnement +10 % par coup, jusqu’à +150 %');
+    expect(towerSpecials(TOWERS.dragonbreath)).toContain('acharnement +10 % par coup, jusqu’à +250 %');
+  });
+});
+
+describe('flaque de braise', () => {
+  it('[RM-02] décrit la flaque de braise avec son rayon, sa durée et ses dégâts par seconde', () => {
+    // Accord français : un rayon inférieur à 2 prend « case » au singulier (1 case, 1,5 case).
+    expect(towerSpecials(TOWERS.brazier)).toContain('flaque de braise 1 case, 3 s, 6/s');
+    expect(towerSpecials(TOWERS.steam)).toContain('flaque de braise 1,5 case, 3 s, 12/s, ralentit de 35 %');
+  });
+});

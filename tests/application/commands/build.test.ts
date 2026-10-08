@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { newWorld } from '../../support/helpers';
-import { MAP_GATED_STONES, MAP_LOOP, MAP_TWO_STONES } from '../../support/maps';
+import { MAP_GATED_STONES, MAP_ICE, MAP_LOOP, MAP_TWO_STONES } from '../../support/maps';
 import { MAP_CROSSING } from '../../support/maps';
 import { CommandType } from '../../../src/domain/model/types';
 
@@ -90,6 +90,20 @@ describe('build', () => {
     expect(w.gold).toBe(gold - 3);
   });
 
+  it('[RM-03] accepte une construction sur une case couverte par une flaque et garde le même trajet', () => {
+    const w = newWorld();
+    const témoin = newWorld();
+    w.embers.push({ id: w.id(), towerId: 1, x: 10.5, y: 8.5, radius: 1, dps: 6, expires: w.tick + 180 });
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y: 8 });
+    const rTémoin = dispatch(témoin, { c: CommandType.Build, def: 'wall', x: 10, y: 8 });
+
+    expect(r.ok).toBe(true);
+    expect(rTémoin.ok).toBe(true);
+    expect(w.mazeLength()).toBe(témoin.mazeLength());
+    expect(w.embers).toHaveLength(1);
+  });
+
   it('[CU-03] construit la base de sa famille et sa base signature', () => {
     const w = newWorld('normal', 42, MAP_CROSSING, 'bastion');
     w.gold = 10_000;
@@ -144,6 +158,38 @@ describe('build', () => {
 
     expect(r).toEqual({ ok: false, reason: 'Impossible de bloquer le chemin.' });
     expect(w.towers).toHaveLength(0);
+  });
+});
+
+describe('build : glace', () => {
+  it('[CU-01] refuse une tour dont l’emprise recouvre une case de glace, sans rien changer', () => {
+    const w = newWorld('normal', 42, MAP_ICE);
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'archer', x: 4, y: 3 });
+
+    expect(r.ok).toBe(false);
+    expect(w.gold).toBe(gold);
+    expect(w.towers).toHaveLength(0);
+    expect(w.log).toHaveLength(0);
+  });
+
+  it('[CU-01] refuse un mur posé sur la glace', () => {
+    const w = newWorld('normal', 42, MAP_ICE);
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 6, y: 2 });
+
+    expect(r.ok).toBe(false);
+    expect(w.towers).toHaveLength(0);
+  });
+
+  it('[CU-01] accepte une tour posée contre une plaque de glace', () => {
+    const w = newWorld('normal', 42, MAP_ICE);
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'archer', x: 3, y: 3 });
+
+    expect(r.ok).toBe(true);
+    expect(w.towers).toHaveLength(1);
   });
 });
 

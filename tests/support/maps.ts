@@ -102,6 +102,28 @@ export const MAP_LOOP: MapDef = {
   ],
 };
 
+// Champ ouvert avec une plaque de glace (*) 2×2 sur le plus court chemin
+// portail → pierre 1 (ligne 3). Glace : praticable, non constructible.
+// Coordonnées utiles : S=(1,3) pierre1=(9,3) plaque=(5..6, 3..4).
+//   TOWER_ON_ICE = (4, 3)  tour 2×2 dont la colonne 5 recouvre la plaque
+//   WALL_ON_ICE  = (6, 2)  mur dont la case (6,3) recouvre la plaque
+//   TOWER_BESIDE = (3, 3)  tour 2×2 juste contre la plaque (colonnes 3-4), ne ferme rien
+export const MAP_ICE: MapDef = {
+  id: 'ice',
+  name: 'Plaque de Glace',
+  width: 11,
+  height: 7,
+  rows: [
+    '###########',
+    '#.........#',
+    '#.........#',
+    '#S...**..1#',
+    '#....**...#',
+    '#........E#',
+    '###########',
+  ],
+};
+
 // Portail (S) et pierre 1 séparés par une colonne de rochers : aucun passage entre eux.
 export const MAP_WALLED: MapDef = {
   id: 'walled',

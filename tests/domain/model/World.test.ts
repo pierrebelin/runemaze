@@ -7,7 +7,7 @@ import { launchWave, spawnCreep } from '../../../src/domain/systems/waves';
 import { CREEPS } from '../../../src/domain/catalog/creeps';
 import { creepSpeed } from '../../../src/domain/rules/speed';
 import { newDuelWorld, newWorld, observeSpawns, run } from '../../support/helpers';
-import { MAP_BENT_STONES, MAP_CORRIDOR, MAP_CROSSING, MAP_SEALS, MAP_SPIRAL, MAP_TWO_STONES } from '../../support/maps';
+import { MAP_BENT_STONES, MAP_CORRIDOR, MAP_CROSSING, MAP_ICE, MAP_SEALS, MAP_SPIRAL, MAP_TWO_STONES } from '../../support/maps';
 
 describe('World', () => {
   it('[RM-01] garde le bâtisseur choisi à la création de la partie', () => {
@@ -350,6 +350,11 @@ describe('World', () => {
     // Couloir 1D : spawn(2,1)→pierre 1(4,1) = 2 cases, pierre1→pierre2(3,1) = 1 case,
     // pierre2→sortie(1,1) = 2 cases.
     expect(w.mazeLength()).toBe(5);
+  });
+
+  it('[RM-03] mesure le même trajet avec ou sans glace', () => {
+    const sansGlace = { ...MAP_ICE, rows: MAP_ICE.rows.map((r) => r.replaceAll('*', '.')) };
+    expect(newWorld('normal', 42, MAP_ICE).mazeLength()).toBe(newWorld('normal', 42, sansGlace).mazeLength());
   });
 
   it("[RM-07] rejoue à l'identique une partie à deux pierres quand carte, graine et journal sont les mêmes", () => {

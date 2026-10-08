@@ -362,6 +362,16 @@ describe('readClientMessage — salon', () => {
     expect(read).toMatchObject({ map: { biome: 'snow' } });
   });
 
+  it('[RM-12] accepte une carte Neige transmise au salon', () => {
+    const map = drawMap(7, 'snow', MAP_RECIPE);
+
+    expect(map.rows.join('')).toContain('*');
+    expect(readClientMessage(JSON.stringify({ t: 'chooseMap', map }))).toEqual({
+      t: ClientMessageType.ChooseMap,
+      map,
+    });
+  });
+
   it('[CU-02] refuse un changement de carte sans carte valide', () => {
     expect(readClientMessage(JSON.stringify({ t: 'chooseMap', map: MAP_TWO_STONES }))).not.toBeNull();
     expect(readClientMessage(JSON.stringify({ t: 'chooseMap' }))).toBeNull();

@@ -2,14 +2,19 @@ import type { World } from '../model/World';
 import type { Creep } from '../model/types';
 import { GameEventType } from '../model/types';
 import { realigns } from '../rules/heading';
+import { TERRAIN } from '../catalog/map';
 import { creepSpeed } from '../rules/speed';
 
 export function updateMovement(world: World, dt: number): void {
   for (const c of world.creeps) {
     if (!c.alive || c.frozen > 0) continue;
-    const speed = creepSpeed(c);
-    if (c.def.air) moveAir(world, c, speed * dt);
-    else moveGround(world, c, speed * dt);
+    if (c.def.air) {
+      moveAir(world, c, creepSpeed(c) * dt);
+    } else {
+      const g = world.grid;
+      const onIce = g.kind[g.idx(Math.floor(c.x), Math.floor(c.y))] === 'ice';
+      moveGround(world, c, creepSpeed(c, onIce ? TERRAIN.ice.speed : 1) * dt);
+    }
   }
 }
 

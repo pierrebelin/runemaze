@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { updateMovement } from '../../../src/domain/systems/movement';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { newWorld } from '../../support/helpers';
-import { MAP_TWO_STONES } from '../../support/maps';
+import { MAP_ICE, MAP_TWO_STONES } from '../../support/maps';
 import { dispatch } from '../../../src/application/dispatch';
 import { CommandType } from '../../../src/domain/model/types';
 
@@ -47,6 +47,38 @@ describe('movement', () => {
     const distanceTemoin = remaining0Temoin - cTemoin.remaining;
 
     expect(distance).toBeCloseTo(distanceTemoin * 1.5, 5);
+  });
+});
+
+describe('movement : glace', () => {
+  const MAP_NO_ICE = { ...MAP_ICE, rows: MAP_ICE.rows.map((r) => r.replaceAll('*', '.')) };
+  const DT = 1 / 60;
+
+  /** Ticks pour qu'un rat sorte du monde par la porte (la plaque est sur son plus court chemin S → pierre 1). */
+  const ticksToExit = (map: typeof MAP_ICE) => {
+    const w = newWorld('normal', 42, map);
+    const c = spawnCreep(w, 'rat', 0);
+    let ticks = 0;
+    while (c.alive && ticks < 60 * 60) {
+      updateMovement(w, DT);
+      ticks++;
+    }
+    return ticks;
+  };
+
+  it('[RM-03] atteint la sortie plus tôt quand le trajet traverse la glace', () => {
+    expect(ticksToExit(MAP_ICE)).toBeLessThan(ticksToExit(MAP_NO_ICE));
+  });
+
+  it('[RM-03] laisse un volant à la même vitesse au-dessus de la glace', () => {
+    const fly = (map: typeof MAP_ICE) => {
+      const w = newWorld('normal', 42, map);
+      const c = spawnCreep(w, 'rat', 0);
+      c.def = { ...c.def, air: true };
+      for (let i = 0; i < 120; i++) updateMovement(w, DT);
+      return { x: c.x, y: c.y };
+    };
+    expect(fly(MAP_ICE)).toEqual(fly(MAP_NO_ICE));
   });
 });
 

@@ -302,6 +302,49 @@ describe('snapshot', () => {
     expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
   });
 
+  it('[RM-14] continue à l’identique quand la partie est restaurée avec des flaques au sol', () => {
+    const w = newWorld('normal', 42, undefined, 'pyromancers');
+    const t = buildTowerChain(w, ['brazier']);
+    const c = spawnDummy(w, t.cx + 2, t.cy);
+    for (let i = 0; i < 180 && w.embers.length === 0; i++) w.step();
+    expect(w.embers.length).toBeGreaterThan(0);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+
+    expect(restored.embers).toEqual(w.embers);
+
+    run(w, 2);
+    run(restored, 2);
+
+    expect(restored.embers).toEqual(w.embers);
+    expect(restored.creeps[0].hp).toBe(c.hp);
+    expect(restored.id()).toBe(w.id());
+    expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
+  });
+
+  it('[RM-14] garde l’acharnement en cours quand la partie est restaurée', () => {
+    const w = newWorld('normal', 42, undefined, 'pyromancers');
+    const t = buildTowerChain(w, ['brazier', 'flamethrower']);
+    const c = spawnDummy(w, t.cx + 1, t.cy);
+    run(w, 2);
+    expect(t.relentless?.targetId).toBe(c.id);
+    expect(t.relentless!.hits).toBeGreaterThan(1);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+    const direct = restore(snapshot(w));
+
+    expect(restored.towerById.get(t.id)!.relentless).toEqual(t.relentless);
+    expect(direct.towerById.get(t.id)!.relentless).toEqual(t.relentless);
+    expect(direct.towerById.get(t.id)!.relentless).not.toBe(t.relentless);
+
+    run(w, 2);
+    run(restored, 2);
+
+    expect(restored.creeps[0].hp).toBe(c.hp);
+    expect(restored.towerById.get(t.id)!.relentless).toEqual(t.relentless);
+    expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
+  });
+
   it('garde le cap retenu d’une créature, sans partager l’objet', () => {
     const w = newWorld('normal', 42);
     const c = spawnCreep(w, 'rat', 0);

@@ -16,6 +16,14 @@ describe('catalogue des hybrides', () => {
     }
   });
 
+  it("n'a jamais deux hybrides pour la même paire de familles", () => {
+    const paires = infusions.map((d) => [...d.elements!].sort().join('+'));
+    expect(new Set(paires).size).toBe(paires.length);
+    const de = (paire: string) => infusions.filter((d) => [...d.elements!].sort().join('+') === paire).map((d) => d.id);
+    expect(de('fire+frost')).toEqual(['steam']);
+    expect(de('fire+storm')).toEqual(['plasma']);
+  });
+
   it('offre à chaque tour de niveau 2 toutes les infusions de sa famille', () => {
     // Exception : le Grand dissipateur est une fin de lignée, il n'ouvre aucune infusion.
     for (const d of all.filter((d) => d.tier === 2 && !d.elements && d.id !== 'greatdispeller')) {

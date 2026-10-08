@@ -1,7 +1,7 @@
 import type { CellKind, MapDef } from './types';
 
 const KIND: Record<string, CellKind> = {
-  '.': 'build', '#': 'rock', S: 'spawn', E: 'exit', '~': 'road',
+  '.': 'build', '#': 'rock', S: 'spawn', E: 'exit', '~': 'road', '*': 'ice',
   '1': 'checkpoint', '2': 'checkpoint', '3': 'checkpoint', '4': 'checkpoint', '5': 'checkpoint',
   '6': 'checkpoint', '7': 'checkpoint', '8': 'checkpoint', '9': 'checkpoint',
 };

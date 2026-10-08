@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { drawMap, emptyLegs } from '../../../src/domain/rules/mapDraw';
 import { MAP_RECIPE } from '../../../src/domain/catalog/map';
 import { MAP_BENT_STONES, MAP_WALLED } from '../../support/maps';
@@ -6,15 +6,21 @@ import { newWorld } from '../../support/helpers';
 
 const SEEDS = Array.from({ length: 200 }, (_, i) => i + 1);
 
-/** Cartes 'earth' des graines SEEDS, tirées une seule fois (une carte coûte jusqu'à ~30 ms). */
-const earthCache = new Map<number, ReturnType<typeof drawMap>>();
-function earthMap(seed: number): ReturnType<typeof drawMap> {
-  let map = earthCache.get(seed);
+type Biome = 'earth' | 'snow' | 'space';
+
+/** Cartes des graines SEEDS par biome, tirées une seule fois (une carte coûte jusqu'à ~30 ms). */
+const mapCache = new Map<string, ReturnType<typeof drawMap>>();
+function drawnMap(seed: number, biome: Biome): ReturnType<typeof drawMap> {
+  const key = `${biome}:${seed}`;
+  let map = mapCache.get(key);
   if (!map) {
-    map = drawMap(seed, 'earth', MAP_RECIPE);
-    earthCache.set(seed, map);
+    map = drawMap(seed, biome, MAP_RECIPE);
+    mapCache.set(key, map);
   }
   return map;
+}
+function earthMap(seed: number): ReturnType<typeof drawMap> {
+  return drawnMap(seed, 'earth');
 }
 
 /** Cases (x, y) portant l'un des caractères donnés. */
@@ -53,7 +59,49 @@ function centerOf(cells: { x: number; y: number }[]): { x: number; y: number } {
   return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
 }
 
+/** Composantes de cases `*`, reliées par 4 côtés ou par 8 voisins (diagonales comprises). */
+function iceComponents(rows: string[], links: 4 | 8): { x: number; y: number }[][] {
+  const left = new Map(cellsOf(rows, '*').map((c) => [`${c.x},${c.y}`, c]));
+  const out: { x: number; y: number }[][] = [];
+  while (left.size > 0) {
+    const [first] = left.values();
+    left.delete(`${first.x},${first.y}`);
+    const stack = [first];
+    const patch: { x: number; y: number }[] = [];
+    while (stack.length > 0) {
+      const c = stack.pop()!;
+      patch.push(c);
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if ((dx === 0 && dy === 0) || (links === 4 && dx !== 0 && dy !== 0)) continue;
+          const n = left.get(`${c.x + dx},${c.y + dy}`);
+          if (n) {
+            left.delete(`${n.x},${n.y}`);
+            stack.push(n);
+          }
+        }
+      }
+    }
+    out.push(patch);
+  }
+  return out;
+}
+
+/** Grille minimale (36 × 24) ne portant que les cases données en `*`. */
+function patchRows(cells: { x: number; y: number }[]): string[] {
+  const rows = Array.from({ length: 24 }, () => '.'.repeat(36).split(''));
+  for (const c of cells) rows[c.y][c.x] = '*';
+  return rows.map((r) => r.join(''));
+}
+
 describe('mapDraw', () => {
+  // Remplit le cache une fois : aucun `it` ne paie le tirage (lent sous charge).
+  beforeAll(() => {
+    for (const biome of ['earth', 'snow', 'space'] as const) {
+      for (const seed of SEEDS) drawnMap(seed, biome);
+    }
+  }, 60_000);
+
   it('[RM-02] rend exactement la même carte quand la graine est la même', () => {
     for (const seed of SEEDS) {
       expect(drawMap(seed, 'earth', MAP_RECIPE)).toEqual(earthMap(seed));
@@ -133,7 +181,7 @@ describe('mapDraw', () => {
     expect(atCenter).toBeGreaterThan(0);
   });
 
-  it('[RM-05] sème de 12 à 24 rochers intérieurs d’1 ou 2 cases chacun', () => {
+  it('[RM-01] sème de 12 à 24 rochers intérieurs d’1 ou 2 cases quand le biome est Terre', () => {
     for (const seed of SEEDS) {
       const { rows, width, height } = earthMap(seed);
       const inner = cellsOf(rows, '#').filter((c) => c.x >= 1 && c.y >= 1 && c.x <= width - 2 && c.y <= height - 2);
@@ -162,14 +210,15 @@ describe('mapDraw', () => {
         sizes.push(size);
       }
 
-      expect(sizes.length, `graine ${seed}`).toBeGreaterThanOrEqual(MAP_RECIPE.rocks.min);
-      expect(sizes.length, `graine ${seed}`).toBeLessThanOrEqual(MAP_RECIPE.rocks.max);
+      expect(sizes.length, `graine ${seed}`).toBeGreaterThanOrEqual(12);
+      expect(sizes.length, `graine ${seed}`).toBeLessThanOrEqual(24);
       expect(sizes.every((s) => s === 1 || s === 2), `graine ${seed}`).toBe(true);
     }
   });
 
-  it('[RM-05] laisse un anneau de 2 cases sans rocher autour de chaque repère', () => {
-    const m = MAP_RECIPE.rockMargin;
+  it('[RM-01] laisse un anneau de 2 cases sans rocher autour de chaque repère quand le biome est Terre', () => {
+    const m = MAP_RECIPE.landmarkMargin;
+    expect(m).toBe(2);
     for (const seed of SEEDS) {
       const { rows, width, height } = earthMap(seed);
       const rocks = cellsOf(rows, '#').filter((c) => c.x >= 1 && c.y >= 1 && c.x <= width - 2 && c.y <= height - 2);
@@ -187,16 +236,90 @@ describe('mapDraw', () => {
     }
   });
 
-  it('[RM-08] garde le biome demandé sans changer la disposition', () => {
+  it('[RM-01] ne pose aucun rocher hors de la bordure quand le biome est Neige ou Espace', () => {
     for (const seed of SEEDS) {
-      const earth = earthMap(seed);
-      const snow = drawMap(seed, 'snow', MAP_RECIPE);
-      const space = drawMap(seed, 'space', MAP_RECIPE);
+      for (const biome of ['snow', 'space'] as const) {
+        const { rows, width, height } = drawnMap(seed, biome);
+        const inner = cellsOf(rows, '#').filter((c) => c.x >= 1 && c.y >= 1 && c.x <= width - 2 && c.y <= height - 2);
+
+        expect(inner, `graine ${seed}, biome ${biome}`).toEqual([]);
+      }
+    }
+  });
+
+  it('[RM-11] dessine une autre disposition pour la même graine quand le biome change', () => {
+    for (const seed of SEEDS) {
+      const snow = drawnMap(seed, 'snow');
 
       expect(snow.biome).toBe('snow');
-      expect(space.biome).toBe('space');
-      expect(snow.rows).toEqual(earth.rows);
-      expect(space.rows).toEqual(earth.rows);
+      expect(snow.rows, `graine ${seed}`).not.toEqual(earthMap(seed).rows);
+    }
+  });
+
+  it('[RM-02] pose de 3 à 5 plaques de 4 à 8 cases reliées par un côté quand le biome est Neige', () => {
+    for (const seed of SEEDS) {
+      const patches = iceComponents(drawnMap(seed, 'snow').rows, 8);
+
+      expect(patches.length, `graine ${seed}`).toBeGreaterThanOrEqual(3);
+      expect(patches.length, `graine ${seed}`).toBeLessThanOrEqual(5);
+      for (const patch of patches) {
+        expect(patch.length, `graine ${seed}`).toBeGreaterThanOrEqual(4);
+        expect(patch.length, `graine ${seed}`).toBeLessThanOrEqual(8);
+        expect(iceComponents(patchRows(patch), 4), `graine ${seed}`).toHaveLength(1);
+      }
+    }
+  });
+
+  it('[RM-02] ne pose aucune case de glace à moins de 2 cases d’un repère', () => {
+    const m = MAP_RECIPE.landmarkMargin;
+    for (const seed of SEEDS) {
+      const { rows } = drawnMap(seed, 'snow');
+      const ice = cellsOf(rows, '*');
+
+      expect(ice.length, `graine ${seed}`).toBeGreaterThan(0);
+      for (const cells of landmarks(rows)) {
+        const x0 = Math.min(...cells.map((c) => c.x)) - m;
+        const x1 = Math.max(...cells.map((c) => c.x)) + m;
+        const y0 = Math.min(...cells.map((c) => c.y)) - m;
+        const y1 = Math.max(...cells.map((c) => c.y)) + m;
+
+        expect(ice.filter((c) => c.x >= x0 && c.x <= x1 && c.y >= y0 && c.y <= y1), `graine ${seed}`).toEqual([]);
+      }
+    }
+  });
+
+  it('[RM-02] sépare les plaques d’au moins une case, diagonales comprises', () => {
+    for (const seed of SEEDS) {
+      const patches = iceComponents(drawnMap(seed, 'snow').rows, 4);
+
+      expect(patches.length, `graine ${seed}`).toBeGreaterThan(0);
+      for (let i = 0; i < patches.length; i++) {
+        for (let j = i + 1; j < patches.length; j++) {
+          for (const a of patches[i]) {
+            for (const b of patches[j]) {
+              expect(Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y)), `graine ${seed}`).toBeGreaterThanOrEqual(2);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Vert d'office aujourd'hui : garde contre une glace qui fuirait vers Terre ou Espace.
+  it('[RM-02] ne pose aucune glace quand le biome est Terre ou Espace', () => {
+    for (const seed of SEEDS) {
+      for (const biome of ['earth', 'space'] as const) {
+        expect(cellsOf(drawnMap(seed, biome).rows, '*'), `graine ${seed}, biome ${biome}`).toEqual([]);
+      }
+    }
+  });
+
+  it('[RM-12] rend exactement la même carte Neige quand la graine est la même', () => {
+    for (const seed of SEEDS) {
+      const first = drawnMap(seed, 'snow');
+
+      expect(cellsOf(first.rows, '*').length, `graine ${seed}`).toBeGreaterThan(0);
+      expect(drawMap(seed, 'snow', MAP_RECIPE)).toEqual(first);
     }
   });
 

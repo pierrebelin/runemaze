@@ -1,5 +1,6 @@
 import { damageMultiplier } from '../rules/Damage';
 import { auraBonus } from '../rules/aura';
+import { relentlessBonus } from '../rules/relentless';
 import { attackCooldown, rampBonus } from '../rules/attackSpeed';
 import type { World } from '../model/World';
 import type { AttackDef, AttackType, Creep, TargetMode, Tower } from '../model/types';
@@ -64,10 +65,16 @@ export function updateCombat(world: World, dt: number): void {
     t.cooldown = attackCooldown(a.cooldown, bonus.attackSpeed + (a.rampUp ? rampBonus(t.ramp, a.rampUp.max) : 0));
     t.aim = Math.atan2(targets[0].y - t.cy, targets[0].x - t.cx);
     world.emit({ t: GameEventType.Fire, towerId: t.id, family: t.def.family });
+    let relentless = 0;
+    if (a.relentless) {
+      if (t.relentless?.targetId !== targets[0].id) t.relentless = { targetId: targets[0].id, hits: 0 };
+      relentless = relentlessBonus(t.relentless.hits, a.relentless.step, a.relentless.max);
+      t.relentless.hits++;
+    }
     for (const target of targets) {
       const roll = world.rng.range(a.dmg[0], a.dmg[1]);
       const crit = !!a.crit && world.rng.next() < a.crit.chance;
-      const dmg = (crit ? roll * a.crit!.mult : roll) * (1 + bonus.damage);
+      const dmg = (crit ? roll * a.crit!.mult : roll) * (1 + bonus.damage) * (1 + relentless);
       if (a.projectileSpeed === 0) {
         if (a.chain) fireChain(world, t, a, target, dmg);
         else if (a.area) hitCreep(world, t.id, t.def.id, a, target, dmg);
@@ -97,6 +104,7 @@ function fireChain(world: World, t: Tower, a: AttackDef, first: Creep, dmg: numb
     hit.add(cur.id);
     points.push({ x: cur.x, y: cur.y });
     hitCreep(world, t.id, t.def.id, a, cur, d);
+    if (!cur.def.air) dropEmber(world, t.id, a, cur.x, cur.y);
     d *= chain.decay;
     const from: Creep = cur;
     let best: Creep | undefined;
@@ -146,8 +154,15 @@ export function updateProjectiles(world: World, dt: number): void {
     } else if (target) {
       hitCreep(world, p.towerId, p.defId, a, target, p.dmgRoll);
     }
+    dropEmber(world, p.towerId, a, p.x, p.y);
     world.emit({ t: GameEventType.Hit, x: p.x, y: p.y, family: p.family, splash: a.splash?.radius ?? 0, crit: p.crit, dmg: Math.round(p.dmgRoll) });
   }
+}
+
+function dropEmber(world: World, towerId: number, a: AttackDef, x: number, y: number): void {
+  if (!a.ember) return;
+  const { radius, duration, dps, slow } = a.ember;
+  world.embers.push({ id: world.id(), towerId, x, y, radius, dps, slow, expires: world.tick + Math.round(duration * 60) });
 }
 
 export function hitCreep(world: World, towerId: number, defId: string, a: AttackDef, c: Creep, raw: number): void {

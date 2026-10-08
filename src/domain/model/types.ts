@@ -5,7 +5,7 @@ export type AttackType = 'normal' | 'pierce' | 'siege' | 'magic' | 'chaos';
 export type ArmorType = 'unarmored' | 'light' | 'medium' | 'heavy' | 'fortified' | 'hero';
 export type TargetMode = 'first' | 'last' | 'strong' | 'weak' | 'close';
 export type TargetLayer = 'ground' | 'air' | 'both';
-export type Family = 'wall' | 'archer' | 'cannon' | 'frost' | 'storm' | 'venom';
+export type Family = 'wall' | 'archer' | 'cannon' | 'frost' | 'storm' | 'venom' | 'fire';
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export type GateUpgrade = 'shot' | 'ramparts';
 
@@ -35,8 +35,24 @@ export interface AttackDef {
   stun?: { duration: number };
   /** Montée en puissance : bonus de vitesse d'attaque plafonné à `max`. */
   rampUp?: { max: number };
+  /** Acharnement : bonus de dégâts par coup consécutif sur la même cible, plafonné à `max`. */
+  relentless?: { step: number; max: number };
   /** Part des dégâts magiques infligée quand même aux immunisés à la magie. */
   dispel?: number;
+  /** Flaque déposée à l'impact. */
+  ember?: { radius: number; duration: number; dps: number; slow?: { pct: number; duration: number } };
+}
+
+/** Flaque de braise au sol ; `expires` en ticks. */
+export interface Ember {
+  id: number;
+  towerId: number;
+  x: number;
+  y: number;
+  radius: number;
+  dps: number;
+  slow?: { pct: number; duration: number };
+  expires: number;
 }
 
 export interface TowerDef {
@@ -104,7 +120,7 @@ export interface WaveDef {
   groups: WaveGroup[];
 }
 
-export type CellKind = 'build' | 'rock' | 'spawn' | 'checkpoint' | 'exit' | 'road';
+export type CellKind = 'build' | 'rock' | 'spawn' | 'checkpoint' | 'exit' | 'road' | 'ice';
 
 export type Biome = 'earth' | 'snow' | 'space';
 
@@ -118,13 +134,18 @@ export interface MapDef {
   biome?: Biome;
 }
 
+export interface BiomeRecipe {
+  rocks?: { min: number; max: number };
+  ice?: { patches: { min: number; max: number }; size: { min: number; max: number } };
+}
+
 export interface MapRecipe {
   width: number;
   height: number;
   landmark: number;
   landmarkGap: number;
-  rocks: { min: number; max: number };
-  rockMargin: number;
+  landmarkMargin: number;
+  biomes: Record<Biome, BiomeRecipe>;
   minLeg: number;
   route: { min: number; max: number };
 }
@@ -193,6 +214,8 @@ export interface Tower {
   aim: number;
   /** Secondes cumulées avec une cible à portée. */
   ramp: number;
+  /** Cible de l'acharnement et coups consécutifs sur elle. */
+  relentless?: { targetId: number; hits: number };
   fate: TowerFate;
 }
 

@@ -41,6 +41,12 @@ export function updateStatuses(world: World, dt: number): void {
   }
 }
 
+export function applySlow(c: Creep, slow: { pct: number; duration: number }): void {
+  if (c.def.magicImmune || slow.pct < c.slowPct) return;
+  c.slowPct = slow.pct;
+  c.slowTimer = Math.max(c.slowTimer, slow.duration);
+}
+
 export function applyOnHit(world: World, c: Creep, a: AttackDef, towerId: number, defId: string): void {
   if (!c.alive) return;
   const canFreeze = !c.def.boss && !c.def.magicImmune && c.frozen <= 0 && c.freezeGuard <= 0;
@@ -49,12 +55,7 @@ export function applyOnHit(world: World, c: Creep, a: AttackDef, towerId: number
     c.freezeGuard = a.freeze.guard;
   }
   if (a.stun) c.frozen = Math.max(c.frozen, stunDuration(a.stun.duration, c.def));
-  if (a.slow && !c.def.magicImmune) {
-    if (a.slow.pct >= c.slowPct) {
-      c.slowPct = a.slow.pct;
-      c.slowTimer = Math.max(c.slowTimer, a.slow.duration);
-    }
-  }
+  if (a.slow) applySlow(c, a.slow);
   if (a.armorShred && a.armorShred.amount >= c.shred) {
     c.shred = a.armorShred.amount;
     c.shredTimer = Math.max(c.shredTimer, a.armorShred.duration);

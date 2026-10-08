@@ -25,6 +25,14 @@ export const BUILDERS: Record<string, BuilderDef> = {
     roots: ['venom', 'bramble'],
     hybrids: ['stinger', 'plagueshell'],
   },
+  pyromancers: {
+    id: 'pyromancers',
+    name: 'Pyromanciens',
+    style: 'braise au sol, salve, acharnement',
+    weakness: 'volants et créatures rapides',
+    roots: ['brazier', 'hearth'],
+    hybrids: ['steam', 'plasma'],
+  },
   sanctuary: {
     id: 'sanctuary',
     name: 'Sanctuaire',
