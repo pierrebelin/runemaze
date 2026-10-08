@@ -6,7 +6,7 @@ import { spawnCreep } from '../../../src/domain/systems/waves';
 import { dispatch } from '../../../src/application/dispatch';
 import type { AttackDef } from '../../../src/domain/model/types';
 import { TOWERS } from '../../../src/domain/catalog/towers';
-import { newWorld } from '../../support/helpers';
+import { newWorld, spawnDummy } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
 const PLAIN_ATTACK: AttackDef = {
@@ -270,5 +270,77 @@ describe('status', () => {
     advance(w, 1);
 
     expect(c.hp).toBe(c.maxHp);
+  });
+
+  it('transmet le poison de la Peste noire aux créatures à 1,5 case quand la créature empoisonnée meurt', () => {
+    const w = newWorld();
+    const attack = TOWERS.blackplague.attack!;
+    const c = spawnCreep(w, 'rat', 0);
+    c.x = 10;
+    c.y = 10;
+    const voisine = spawnDummy(w, 11.4, 10);
+    applyOnHit(w, c, attack, 1, 'blackplague');
+
+    hitCreep(w, 1, 'archer', PLAIN_ATTACK, c, 1e6);
+
+    expect(c.alive).toBe(false);
+    expect(voisine.poisons).toHaveLength(1);
+    expect(voisine.poisons[0]).toMatchObject({ dps: attack.poison!.dps, t: attack.poison!.duration, towerId: 1, defId: 'blackplague' });
+  });
+
+  it('transmet à la voisine le temps de poison qui restait à la créature morte', () => {
+    const w = newWorld();
+    const attack = TOWERS.blackplague.attack!;
+    const c = spawnCreep(w, 'rat', 0);
+    c.x = 10;
+    c.y = 10;
+    c.hp = c.maxHp = 1000;
+    const voisine = spawnDummy(w, 11.4, 10);
+    applyOnHit(w, c, attack, 1, 'blackplague');
+    expect(attack.poison!.duration).toBe(4);
+
+    updateStatuses(w, 2);
+    hitCreep(w, 1, 'archer', PLAIN_ATTACK, c, 1e6);
+
+    expect(c.alive).toBe(false);
+    expect(voisine.poisons).toHaveLength(1);
+    expect(voisine.poisons[0].t).toBeCloseTo(2, 5);
+  });
+
+  it('ne transmet rien aux créatures à plus de 1,5 case', () => {
+    const w = newWorld();
+    const c = spawnCreep(w, 'rat', 0);
+    c.x = 10;
+    c.y = 10;
+    const loin = spawnDummy(w, 11.6, 10);
+    const proche = spawnDummy(w, 11.4, 10);
+    applyOnHit(w, c, TOWERS.blackplague.attack!, 1, 'blackplague');
+
+    hitCreep(w, 1, 'archer', PLAIN_ATTACK, c, 1e6);
+
+    expect(c.alive).toBe(false);
+    expect(proche.poisons).toHaveLength(1);
+    expect(loin.poisons).toHaveLength(0);
+  });
+
+  it('ne transmet pas un poison ordinaire', () => {
+    const w = newWorld();
+    const c = spawnCreep(w, 'rat', 0);
+    c.x = 10;
+    c.y = 10;
+    const voisine = spawnDummy(w, 10.5, 10);
+    const temoin = spawnCreep(w, 'rat', 0);
+    temoin.x = 3;
+    temoin.y = 3;
+    const voisineTemoin = spawnDummy(w, 3.5, 3);
+    applyOnHit(w, c, TOWERS.plague.attack!, 1, 'plague');
+    applyOnHit(w, temoin, TOWERS.blackplague.attack!, 1, 'blackplague');
+
+    hitCreep(w, 1, 'archer', PLAIN_ATTACK, c, 1e6);
+    hitCreep(w, 1, 'archer', PLAIN_ATTACK, temoin, 1e6);
+
+    expect(c.alive).toBe(false);
+    expect(voisineTemoin.poisons).toHaveLength(1);
+    expect(voisine.poisons).toHaveLength(0);
   });
 });

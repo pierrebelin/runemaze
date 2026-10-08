@@ -4,8 +4,10 @@ import { updateStatuses, applyOnHit } from '../../../src/domain/systems/status';
 import { creepHp, spawnCreep } from '../../../src/domain/systems/waves';
 import { TOWERS } from '../../../src/domain/catalog/towers';
 import { CREEPS, bountyFor } from '../../../src/domain/catalog/creeps';
-import type { AttackDef } from '../../../src/domain/model/types';
-import { damageMultiplier } from '../../../src/domain/rules/Damage';
+import { CommandType, GameEventType, type AttackDef } from '../../../src/domain/model/types';
+import { armorValueMultiplier, damageMultiplier } from '../../../src/domain/rules/Damage';
+import { MAP_CRYSTAL } from '../../support/maps';
+import { dispatch } from '../../../src/application/dispatch';
 import { buildTowerChain, newWorld, run, spawnDummy } from '../../support/helpers';
 import type { Creep, Tower } from '../../../src/domain/model/types';
 import type { World } from '../../../src/domain/model/World';
@@ -575,6 +577,35 @@ describe('combat', () => {
     expect(db[0]).toBeCloseTo(da[0], 6);
   });
 
+  it('[RM-07] un Autel avec 5 cumuls inflige 50 % de dégâts en plus', () => {
+    const firstHit = (cumuls: number): number => {
+      const w = newWorld('normal', 42, undefined, 'necromancers');
+      const t = buildTowerChain(w, ['altar']);
+      t.def = { ...t.def, attack: { ...t.def.attack!, dmg: [10, 10] } };
+      t.offerings = Array.from({ length: cumuls }, () => w.tick + 100000);
+      const c = spawnDummy(w, t.cx + 1, t.cy);
+      return hitDamages(w, c, 1)[0];
+    };
+
+    const sans = firstHit(0);
+    const avec = firstHit(5);
+
+    expect(sans).toBeGreaterThan(0);
+    expect(avec / sans).toBeCloseTo(1.5, 6);
+  });
+
+  it('[RM-11] le Comptoir ne tire jamais, même avec une créature à portée', () => {
+    const w = newWorld('normal', 42, undefined, 'guild');
+    const t = buildTowerChain(w, ['counter']);
+    const c = spawnDummy(w, t.cx + 1, t.cy);
+
+    run(w, 3);
+
+    expect(t.def.id).toBe('counter');
+    expect(c.hp).toBe(c.maxHp);
+    expect(w.projectiles).toHaveLength(0);
+  });
+
   it('[RM-08] le Carillon étourdit 0,4 s et ralentit de 30 %', () => {
     const w = newWorld('normal', 42, undefined, 'sanctuary');
     const t = buildTowerChain(w, ['gong', 'chime']);
@@ -586,5 +617,79 @@ describe('combat', () => {
     expect(c.frozen).toBeGreaterThan(0.3);
     expect(c.frozen).toBeLessThanOrEqual(0.4);
     expect(c.slowPct).toBe(0.3);
+  });
+
+  it('[RM-01] l\'Ossuaire inflige les mêmes dégâts à toutes les armures', () => {
+    const a = TOWERS.ossuary.attack!;
+    for (const id of Object.keys(CREEPS)) {
+      const w = newWorld();
+      const c = spawnCreep(w, id, 0);
+      c.shield = 0;
+      c.hp = c.maxHp = 1e6;
+
+      hitCreep(w, 1, 'ossuary', a, c, 10);
+
+      expect(1e6 - c.hp, id).toBeCloseTo(10 * armorValueMultiplier(c.def.armor), 6);
+    }
+  });
+
+  it('[RM-10] verse deux fois la prime quand le Percepteur achève la créature', () => {
+    const w = newWorld('normal', 42, undefined, 'guild');
+    const t = buildTowerChain(w, ['crossbow', 'taxman']);
+    const c = spawnCreep(w, 'rat', 0);
+    const gold = w.gold;
+
+    applyDamage(w, c, c.hp, 'normal', t.id, false);
+
+    expect(c.bounty).toBeGreaterThan(0);
+    expect(w.gold - gold).toBe(2 * c.bounty);
+  });
+
+  it('[RM-10] verse la prime normale quand une autre tour achève une créature touchée par le Percepteur', () => {
+    const w = newWorld('normal', 42, undefined, 'guild');
+    const taxman = buildTowerChain(w, ['crossbow', 'taxman']);
+    const other = buildTowerChain(w, ['crossbow'], 12, 8);
+    const a = spawnCreep(w, 'rat', 0);
+    const b = spawnCreep(w, 'rat', 0);
+    const start = w.gold;
+
+    hitCreep(w, taxman.id, 'taxman', TOWERS.taxman.attack!, a, 1);
+    const g0 = w.gold;
+    applyDamage(w, a, a.hp, 'normal', other.id, false);
+    expect(w.gold - g0).toBe(a.bounty);
+
+    const g1 = w.gold;
+    applyDamage(w, b, b.hp, 'normal', taxman.id, false);
+    expect(w.gold - g1).toBe(2 * b.bounty);
+
+    expect(w.gold - start).toBe(a.bounty + 2 * b.bounty);
+  });
+
+  it('[RM-10] annonce la prime majorée dans l\'événement de mort', () => {
+    const w = newWorld('normal', 42, undefined, 'guild');
+    const t = buildTowerChain(w, ['crossbow', 'taxman']);
+    const c = spawnCreep(w, 'rat', 0);
+
+    applyDamage(w, c, c.hp, 'normal', t.id, false);
+
+    const kill = w.events.find((e) => e.t === GameEventType.Kill) as { bounty: number } | undefined;
+    expect(kill?.bounty).toBe(2 * c.bounty);
+  });
+
+  it('[CU-02] touche une créature à 1,15 × la portée quand la tour est sur un cristal', () => {
+    const range = TOWERS.archer.attack!.range;
+    const hit = (x: number, y: number): boolean => {
+      const w = newWorld('normal', 42, MAP_CRYSTAL);
+      w.gold = 100000;
+      const built = dispatch(w, { c: CommandType.Build, def: 'archer', x, y }) as { ok: true; id: number };
+      expect(built.ok).toBe(true);
+      const t = w.towerById.get(built.id)!;
+      const c = spawnDummy(w, t.cx + 1.15 * range, t.cy);
+      run(w, 3);
+      return c.hp < c.maxHp;
+    };
+
+    expect(hit(5, 6)).toBe(false);
+    expect(hit(5, 3)).toBe(true);
   });
 });

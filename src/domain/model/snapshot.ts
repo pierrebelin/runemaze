@@ -2,7 +2,7 @@ import { CREEPS } from '../catalog/creeps';
 import { TOWERS } from '../catalog/towers';
 import type { Spawner } from '../systems/waves';
 import { World } from './World';
-import type { Command, Creep, Difficulty, Ember, MapDef, Phase, Projectile, Tower, WaveTally } from './types';
+import type { Command, Corpse, Creep, Difficulty, Ember, MapDef, Phase, Projectile, Skeleton, Tower, WaveTally } from './types';
 
 /** Tour sans référence de classe : sa définition est stockée par id, résolue via `TOWERS`. */
 type StoredTower = Omit<Tower, 'def'> & { defId: string };
@@ -38,6 +38,8 @@ export interface WorldSnapshot {
   creeps: StoredCreep[];
   projectiles: Projectile[];
   embers: Ember[];
+  corpses: Corpse[];
+  skeletons: Skeleton[];
   log: { tick: number; cmd: Command }[];
   stats: {
     kills: number;
@@ -52,7 +54,7 @@ export interface WorldSnapshot {
 
 function storeTower(t: Tower): StoredTower {
   const { def, ...rest } = t;
-  return { ...rest, defId: def.id, relentless: rest.relentless ? { ...rest.relentless } : rest.relentless };
+  return { ...rest, defId: def.id, offerings: [...rest.offerings], relentless: rest.relentless ? { ...rest.relentless } : rest.relentless };
 }
 
 function storeCreep(c: Creep): StoredCreep {
@@ -68,7 +70,7 @@ function storeCreep(c: Creep): StoredCreep {
 
 function loadTower(s: StoredTower): Tower {
   const { defId, ...rest } = s;
-  return { ...rest, def: TOWERS[defId], relentless: rest.relentless ? { ...rest.relentless } : rest.relentless };
+  return { ...rest, def: TOWERS[defId], offerings: [...rest.offerings], relentless: rest.relentless ? { ...rest.relentless } : rest.relentless };
 }
 
 function loadCreep(s: StoredCreep): Creep {
@@ -116,6 +118,8 @@ export function snapshot(world: World): WorldSnapshot {
     creeps: world.creeps.map(storeCreep),
     projectiles: world.projectiles.map((p) => ({ ...p })),
     embers: world.embers.map(copyEmber),
+    corpses: world.corpses.map((k) => ({ ...k })),
+    skeletons: world.skeletons.map((k) => ({ ...k })),
     log: world.log.map((e) => ({ ...e })),
     stats: {
       kills: world.stats.kills,
@@ -157,8 +161,11 @@ export function restore(snap: WorldSnapshot): World {
   world.creeps = snap.creeps.map(loadCreep);
   world.projectiles = snap.projectiles.map((p) => ({ ...p }));
   world.embers = snap.embers.map(copyEmber);
+  world.corpses = snap.corpses.map((k) => ({ ...k }));
 
   world.refreshPaths();
+  // Après refreshPaths : il réaffecte `step`, que la sauvegarde doit garder.
+  world.skeletons = snap.skeletons.map((k) => ({ ...k }));
 
   world.stats = {
     kills: snap.stats.kills,

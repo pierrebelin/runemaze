@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
+import { MAP_CRYSTAL } from '../../support/maps';
 import { newWorld } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
@@ -30,5 +31,19 @@ describe('sell', () => {
     expect(entry.fate).toBe('sold');
     expect(entry.damage).toBe(123);
     expect(entry.kills).toBe(4);
+  });
+
+  it('[CU-02] laisse le cristal constructible quand la tour posée dessus est vendue', () => {
+    const w = newWorld('normal', 42, MAP_CRYSTAL);
+    w.gold = 100000;
+    const built = dispatch(w, { c: CommandType.Build, def: 'archer', x: 5, y: 3 }) as { ok: true; id: number };
+    expect(w.towerById.get(built.id)!.rangeBonus).toBe(0.2);
+
+    expect(dispatch(w, { c: CommandType.Sell, tower: built.id }).ok).toBe(true);
+
+    expect(w.grid.kind[w.grid.idx(5, 3)]).toBe('crystal');
+    const again = dispatch(w, { c: CommandType.Build, def: 'archer', x: 5, y: 3 }) as { ok: true; id: number };
+    expect(again.ok).toBe(true);
+    expect(w.towerById.get(again.id)!.rangeBonus).toBe(0.2);
   });
 });

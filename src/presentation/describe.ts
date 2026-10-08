@@ -4,10 +4,11 @@ import { ARMOR_LABEL, ATTACK_LABEL, ATTACK_TABLE } from '../domain/rules/Damage'
 import type { AuraKind, BuilderDef, ArmorType, AttackType, Creep, CreepDef, Result, TargetMode, Tower, TowerDef, TowerFate } from '../domain/model/types';
 import type { breakerLosses, familyDamage, waveCurve } from '../domain/rules/debrief';
 import { towerYield } from '../domain/rules/debrief';
+import { towerRange } from '../domain/rules/crystal';
 import { builderTowers } from '../domain/rules/builder';
 import { CREEPS } from '../domain/catalog/creeps';
 import { TOWERS, tower } from '../domain/catalog/towers';
-import { GATE, GLEANER } from '../domain/catalog/ether';
+import { GATE } from '../domain/catalog/ether';
 import { gateLevelCost, gateLevelIncome, refundValue } from '../domain/rules/pricing';
 import { creepSpeed } from '../domain/rules/speed';
 import { Mode, Team, Verdict } from '../application/online/protocol';
@@ -68,7 +69,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const LAYER: Record<string, string> = { ground: 'Sol', air: 'Air', both: 'Sol et air' };
 
 export const FAMILY_LABEL: Record<string, string> = {
-  wall: 'Maçonnerie', archer: 'Archers', cannon: 'Artillerie', frost: 'Givre', storm: 'Foudre', venom: 'Venin', fire: 'Feu',
+  wall: 'Maçonnerie', archer: 'Archers', cannon: 'Artillerie', frost: 'Givre', storm: 'Foudre', venom: 'Venin', fire: 'Feu', chaos: 'Chaos', gold: 'Or',
   hybrid: 'Hybrides',
 };
 
@@ -93,7 +94,13 @@ const AURA_LABEL: Record<AuraKind, string> = { damage: 'de dégâts', attackSpee
 export function towerSpecials(def: TowerDef): string[] {
   const a = def.attack;
   const s: string[] = [];
-  if (def.aura) s.push(`aura ${AURA_LABEL[def.aura.kind]} +${Math.round(def.aura.pct * 100)} % à ${fmt1(def.aura.radius)} cases`);
+  if (def.altar) s.push(`+${Math.round(def.altar.pct * 100)} % de dégâts par cadavre pendant ${fmt1(def.altar.duration)} s, jusqu’à ${def.altar.maxStacks} cumuls`);
+  if (def.aura) {
+    const bonus = def.aura.share !== undefined ? `${Math.round(def.aura.share * 100)} % du bonus de l’Autel` : `+${Math.round((def.aura.pct ?? 0) * 100)} %`;
+    s.push(`aura ${AURA_LABEL[def.aura.kind]} ${bonus} à ${fmt1(def.aura.radius)} cases`);
+  }
+  if (def.trade) s.push(`revenu ${def.trade} or / vague`);
+  if (def.bounty) s.push(`prime ×${fmtM(def.bounty)}`);
   if (!a) return s;
   if (a.area) s.push(a.range === 1.5 && a.targets === 'ground' ? 'corps à corps' : 'frappe toute la zone');
   if (a.stun) s.push(`étourdit ${fmt1(a.stun.duration)} s`);
@@ -101,7 +108,11 @@ export function towerSpecials(def: TowerDef): string[] {
   if (a.relentless) s.push(`acharnement +${Math.round(a.relentless.step * 100)} % par coup, jusqu’à +${Math.round(a.relentless.max * 100)} %`);
   if (a.splash) s.push(`zone ${fmt1(a.splash.radius)} cases`);
   if (a.slow) s.push(`ralentit de ${Math.round(a.slow.pct * 100)} % pendant ${fmt1(a.slow.duration)} s`);
-  if (a.poison) s.push(`poison ${a.poison.dps}/s pendant ${a.poison.duration} s (×${a.poison.maxStacks})`);
+  if (def.raise) s.push(`relève un squelette toutes les ${fmt1(def.raise.every)} s, explosion ${def.raise.damage} sur ${fmt1(def.raise.radius)} ${def.raise.radius < 2 ? 'case' : 'cases'}`);
+  if (a.poison) {
+    const spread = a.poison.spread ? `, contagion à ${fmt1(a.poison.spread)} ${a.poison.spread < 2 ? 'case' : 'cases'}` : '';
+    s.push(`poison ${a.poison.dps}/s pendant ${a.poison.duration} s (×${a.poison.maxStacks})${spread}`);
+  }
   if (a.chain) s.push(`rebondit sur ${a.chain.bounces} cibles`);
   if (a.multishot) s.push(`${a.multishot} cibles par salve`);
   if (a.crit) s.push(`${Math.round(a.crit.chance * 100)} % de critiques ×${fmt1(a.crit.mult)}`);
@@ -119,7 +130,7 @@ export function elementsLabel(def: TowerDef): string {
   return def.elements ? def.elements.map((f) => FAMILY_LABEL[f]).join(' · ') : '';
 }
 
-export function towerInfo(def: TowerDef, cost: number | null, heading = def.name): string {
+export function towerInfo(def: TowerDef, cost: number | null, heading = def.name, range = def.attack?.range ?? 0): string {
   const a = def.attack;
   const costLine = cost !== null ? ` · ${cost} or` : '';
   if (!a) return `<h3>${esc(heading)}${costLine}</h3><p>${esc(def.desc)}</p>`;
@@ -130,7 +141,7 @@ export function towerInfo(def: TowerDef, cost: number | null, heading = def.name
       ${stat('Attaque', ATTACK_LABEL[a.type])}
       ${stat('Dégâts', `${a.dmg[0]}–${a.dmg[1]}`)}
       ${stat('Cadence', `${fmt1(1 / a.cooldown)}/s`)}
-      ${stat('Portée', fmt1(a.range))}
+      ${stat('Portée', fmt1(range))}
       ${stat('Cibles', LAYER[a.targets])}
       ${stat('DPS', `≈ ${fmt0(dps)}`)}
     </div>
@@ -143,7 +154,8 @@ export function placedTowerInfo(t: Tower, own: boolean): string {
   const extra = t.def.attack
     ? `<p>${fmt0(t.kills)} éliminations · ${fmt0(t.damage)} dégâts infligés · ciblage ${TARGET_LABEL[t.targetMode].toLowerCase()} · revente ${refundValue(t)} or</p>`
     : `<p>Revente ${refundValue(t)} or.${own ? ' Sélectionnez une tour à transformer.' : ''}</p>`;
-  return towerInfo(t.def, null) + extra;
+  const crystal = t.def.attack && t.rangeBonus > 0 ? `<p>+${Math.round(t.rangeBonus * 100)} % de portée (cristal)</p>` : '';
+  return towerInfo(t.def, null, t.def.name, towerRange(t)) + crystal + extra;
 }
 
 export function creepTags(def: CreepDef): string {
@@ -294,9 +306,9 @@ export function sendPanel(ether: number, income: number): string {
   return `<h3>Revenu ${fmt0(income)}</h3><div class="sends">${rows}</div>`;
 }
 
-export function gleanerPanel(ether: number, gleaners: number, buy: Result): string {
+export function gleanerPanel(ether: number, gleaners: number, buy: Result, cost: number): string {
   const attrs = buy.ok ? '' : ` disabled title="${esc(buy.reason)}"`;
-  return `<h3>Glaneurs : ${fmt0(gleaners)}</h3><p>Éther : ${fmt0(ether)}</p><div class="sends"><button type="button" data-gleaner${attrs}>Glaneur<span class="cost">${GLEANER.cost} or</span></button></div>`;
+  return `<h3>Glaneurs : ${fmt0(gleaners)}</h3><p>Éther : ${fmt0(ether)}</p><div class="sends"><button type="button" data-gleaner${attrs}>Glaneur<span class="cost">${cost} or</span></button></div>`;
 }
 
 export function gatePanel(ether: number, gate: World['gate']): string {

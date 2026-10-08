@@ -5,7 +5,7 @@ export type AttackType = 'normal' | 'pierce' | 'siege' | 'magic' | 'chaos';
 export type ArmorType = 'unarmored' | 'light' | 'medium' | 'heavy' | 'fortified' | 'hero';
 export type TargetMode = 'first' | 'last' | 'strong' | 'weak' | 'close';
 export type TargetLayer = 'ground' | 'air' | 'both';
-export type Family = 'wall' | 'archer' | 'cannon' | 'frost' | 'storm' | 'venom' | 'fire';
+export type Family = 'wall' | 'archer' | 'cannon' | 'frost' | 'storm' | 'venom' | 'fire' | 'chaos' | 'gold';
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export type GateUpgrade = 'shot' | 'ramparts';
 
@@ -23,7 +23,7 @@ export interface AttackDef {
   targets: TargetLayer;
   splash?: { radius: number; falloff: number };
   slow?: { pct: number; duration: number };
-  poison?: { dps: number; duration: number; maxStacks: number };
+  poison?: { dps: number; duration: number; maxStacks: number; spread?: number };
   chain?: { bounces: number; range: number; decay: number };
   multishot?: number;
   /** Frappe d'un coup toutes les créatures à portée. */
@@ -55,6 +55,14 @@ export interface Ember {
   expires: number;
 }
 
+/** Cadavre laissé au sol par une créature terrestre tuée ; `expires` en ticks. */
+export interface Corpse {
+  id: number;
+  x: number;
+  y: number;
+  expires: number;
+}
+
 export interface TowerDef {
   id: string;
   name: string;
@@ -64,10 +72,17 @@ export interface TowerDef {
   cost: number;
   desc: string;
   attack?: AttackDef;
-  aura?: { kind: AuraKind; pct: number; radius: number };
+  aura?: { kind: AuraKind; pct?: number; share?: number; radius: number };
   upgrades: string[];
   /** Familles d'origine pour une tour hybride issue d'une infusion. */
   elements?: [Family, Family];
+  /** Autel : bonus de dégâts par cumul, plafond et durée (secondes) de chaque cumul. */
+  altar?: { pct: number; maxStacks: number; duration: number };
+  raise?: { every: number; damage: number; radius: number };
+  /** Coefficient de la prime versée quand cette tour achève une créature. */
+  bounty?: number;
+  /** Revenu versé au joueur à chaque fin de vague. */
+  trade?: number;
 }
 
 export interface CreepDef {
@@ -120,7 +135,7 @@ export interface WaveDef {
   groups: WaveGroup[];
 }
 
-export type CellKind = 'build' | 'rock' | 'spawn' | 'checkpoint' | 'exit' | 'road' | 'ice';
+export type CellKind = 'build' | 'rock' | 'spawn' | 'checkpoint' | 'exit' | 'road' | 'ice' | 'crystal' | 'wormhole';
 
 export type Biome = 'earth' | 'snow' | 'space';
 
@@ -137,6 +152,8 @@ export interface MapDef {
 export interface BiomeRecipe {
   rocks?: { min: number; max: number };
   ice?: { patches: { min: number; max: number }; size: { min: number; max: number } };
+  crystals?: { count: { min: number; max: number }; gap: number };
+  wormholes?: { count: { min: number; max: number }; gap: number };
 }
 
 export interface MapRecipe {
@@ -171,7 +188,7 @@ export interface Creep {
   slowTimer: number;
   shred: number;
   shredTimer: number;
-  poisons: { dps: number; t: number; towerId: number; defId: string }[];
+  poisons: { dps: number; t: number; towerId: number; defId: string; spread?: number }[];
   frozen: number;
   freezeGuard: number;
   shield: number;
@@ -212,10 +229,17 @@ export interface Tower {
   kills: number;
   damage: number;
   aim: number;
+  rangeBonus: number;
   /** Secondes cumulées avec une cible à portée. */
   ramp: number;
   /** Cible de l'acharnement et coups consécutifs sur elle. */
   relentless?: { targetId: number; hits: number };
+  /** Ticks d'expiration des cumuls de l'Autel (un par cadavre consommé). */
+  offerings: number[];
+  /** Secondes avant la prochaine relève du Charnier (absent = 0). */
+  raiseTimer?: number;
+  /** Tick de la dernière consommation d'un cadavre par l'Autel. */
+  offeredAt?: number;
   fate: TowerFate;
 }
 
@@ -263,7 +287,7 @@ export type GameEvent =
   | { t: GameEventType.Sold; x: number; y: number; refund: number }
   | { t: GameEventType.Destroyed; x: number; y: number }
   | { t: GameEventType.WaveStart; wave: number; creep: string; boss: boolean }
-  | { t: GameEventType.WaveCleared; wave: number; bonus: number; interest: number; income: number }
+  | { t: GameEventType.WaveCleared; wave: number; bonus: number; interest: number; income: number; trade: number }
   | { t: GameEventType.Defeat };
 
 export enum Phase {
@@ -306,4 +330,7 @@ export interface BuilderDef {
   weakness: string;
   roots: string[];
   hybrids: [string, string];
+  gleanerCost?: number;
 }
+
+export interface Skeleton { id: number; towerId: number; x: number; y: number; step: number; damage: number; radius: number; expires: number }

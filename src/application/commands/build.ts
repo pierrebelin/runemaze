@@ -1,6 +1,8 @@
 import { TOWERS } from '../../domain/catalog/towers';
 import type { Command, Result, Tower } from '../../domain/model/types';
 import type { World } from '../../domain/model/World';
+import { TERRAIN } from '../../domain/catalog/map';
+import { crystalBonus } from '../../domain/rules/crystal';
 import { canBuild, nextSteps } from '../queries/canBuild';
 import { motion } from '../../domain/rules/heading';
 import { CommandType, GameEventType } from '../../domain/model/types';
@@ -12,7 +14,7 @@ export function build(world: World, cmd: Extract<Command, { c: CommandType.Build
   const t: Tower = {
     id: world.id(), def, x: cmd.x, y: cmd.y, cx: cmd.x + 1, cy: cmd.y + 1,
     cooldown: 0.2, targetMode: 'first', spent: def.cost,
-    kills: 0, damage: 0, aim: -Math.PI / 2, ramp: 0, fate: 'standing',
+    kills: 0, damage: 0, aim: -Math.PI / 2, rangeBonus: crystalBonus(world.grid, world.grid.footprint(cmd.x, cmd.y), TERRAIN.crystal.range), ramp: 0, offerings: [], fate: 'standing',
   };
   const ground = world.creeps.filter((c) => c.alive && !c.def.air);
   const nextBefore = nextSteps(world, ground);

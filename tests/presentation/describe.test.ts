@@ -94,7 +94,7 @@ describe('fiche d’une tour hybride', () => {
 
 const towerFixture = (extra: Partial<Tower>): Tower => ({
   id: 1, def: TOWERS.archer, x: 0, y: 0, cx: 0, cy: 0, cooldown: 0,
-  targetMode: 'first', spent: 0, kills: 0, damage: 0, aim: 0, ramp: 0, fate: 'standing', ...extra,
+  targetMode: 'first', spent: 0, kills: 0, damage: 0, aim: 0, rangeBonus: 0, ramp: 0, offerings: [], fate: 'standing', ...extra,
 });
 
 describe('bilan de partie', () => {
@@ -271,7 +271,7 @@ describe('panneau d’envois', () => {
 
 describe('panneau des glaneurs', () => {
   it('[CU-01] affiche le nombre de glaneurs, l’éther et le prix d’un glaneur', () => {
-    const html = gleanerPanel(1234, 7, { ok: true });
+    const html = gleanerPanel(1234, 7, { ok: true }, GLEANER.cost);
 
     expect(html).toContain(`Glaneurs : ${fmt0(7)}`);
     expect(html).toContain(`Éther : ${fmt0(1234)}`);
@@ -280,11 +280,18 @@ describe('panneau des glaneurs', () => {
   });
 
   it('[CU-01] grise l’achat et donne la raison du refus quand l’achat est refusé', () => {
-    const refused = gleanerPanel(0, 0, { ok: false, reason: 'Pas assez d’or.' });
+    const refused = gleanerPanel(0, 0, { ok: false, reason: 'Pas assez d’or.' }, GLEANER.cost);
 
     expect(refused).toContain('disabled');
     expect(refused).toContain('title="Pas assez d’or."');
-    expect(gleanerPanel(0, 0, { ok: true })).not.toContain('disabled');
+    expect(gleanerPanel(0, 0, { ok: true }, GLEANER.cost)).not.toContain('disabled');
+  });
+
+  it('[RM-12] affiche le prix du glaneur du bâtisseur', () => {
+    const html = gleanerPanel(0, 0, { ok: true }, 40);
+
+    expect(html).toContain('40 or');
+    expect(html).not.toContain('50 or');
   });
 });
 
@@ -430,7 +437,7 @@ describe('effets des tours signature', () => {
       const def = tower(id);
       const specials = towerSpecials(def).join(' · ');
       expect(specials).toContain('aura');
-      expect(specials).toContain(`${Math.round(def.aura!.pct * 100)} %`);
+      expect(specials).toContain(`${Math.round(def.aura!.pct! * 100)} %`);
       expect(specials).toContain(`${fmt1(def.aura!.radius)} cases`);
     }
   });
@@ -523,6 +530,34 @@ describe('placedTowerInfo', () => {
     const t = towerFixture({ def: TOWERS.wall, spent: 10 });
 
     expect(placedTowerInfo(t, true)).toContain('Sélectionnez une tour à transformer');
+  });
+
+  it('[CU-02] affiche la portée bonifiée et la mention du cristal quand la tour est sur un cristal', () => {
+    const t = towerFixture({ def: TOWERS.archer, rangeBonus: 0.2 });
+    const boosted = TOWERS.archer.attack!.range * 1.2;
+    expect(fmt1(boosted)).not.toBe(fmt1(TOWERS.archer.attack!.range));
+
+    const html = placedTowerInfo(t, true);
+
+    expect(html).toContain(`<em>Portée</em>${fmt1(boosted)}`);
+    expect(html.toLowerCase()).toContain('cristal');
+  });
+
+  it('[RM-05] n’affiche aucune mention du cristal pour un mur posé sur un cristal', () => {
+    const t = towerFixture({ def: TOWERS.wall, rangeBonus: 0.2, spent: 10 });
+
+    const html = placedTowerInfo(t, true);
+
+    expect(html.toLowerCase()).not.toContain('cristal');
+  });
+
+  it('[CU-02] affiche la portée du catalogue quand la tour n’est pas sur un cristal', () => {
+    const t = towerFixture({ def: TOWERS.archer, rangeBonus: 0 });
+
+    const html = placedTowerInfo(t, true);
+
+    expect(html).toContain(`<em>Portée</em>${fmt1(TOWERS.archer.attack!.range)}`);
+    expect(html.toLowerCase()).not.toContain('cristal');
   });
 });
 
@@ -756,5 +791,52 @@ describe('flaque de braise', () => {
     // Accord français : un rayon inférieur à 2 prend « case » au singulier (1 case, 1,5 case).
     expect(towerSpecials(TOWERS.brazier)).toContain('flaque de braise 1 case, 3 s, 6/s');
     expect(towerSpecials(TOWERS.steam)).toContain('flaque de braise 1,5 case, 3 s, 12/s, ralentit de 35 %');
+  });
+});
+
+describe('Autel', () => {
+  it('[RM-07] décrit l’Autel avec son bonus par cadavre et son maximum de cumuls', () => {
+    const altar = towerSpecials(TOWERS.altar).join(' · ');
+    expect(altar).toMatch(/10 %.*cadavre/);
+    expect(altar).toMatch(/\b10 cumuls/);
+
+    const blood = towerSpecials(TOWERS.bloodaltar).join(' · ');
+    expect(blood).toMatch(/10 %.*cadavre/);
+    expect(blood).toMatch(/\b20 cumuls/);
+
+    const aura = towerSpecials(TOWERS.reliquary).join(' · ');
+    expect(aura).toContain('50 % du bonus');
+    expect(aura).not.toContain('+0 %');
+
+    const forty = towerSpecials({ ...TOWERS.reliquary, aura: { ...TOWERS.reliquary.aura!, share: 0.4 } }).join(' · ');
+    expect(forty).toContain('40 % du bonus');
+  });
+});
+
+describe('Charnier et Peste noire', () => {
+  it('[RM-08] décrit la relève de squelettes du Charnier', () => {
+    const specials = towerSpecials(TOWERS.charnel).join(' · ');
+    expect(specials).toContain('squelette');
+    expect(specials).toContain('toutes les 4 s');
+    expect(specials).toContain('60');
+  });
+
+  it('décrit la contagion du poison de la Peste noire', () => {
+    const specials = towerSpecials(TOWERS.blackplague).join(' · ');
+    expect(specials).toContain('contagion');
+    expect(specials).toContain('1,5 case');
+  });
+});
+
+describe('Comptoir', () => {
+  it('décrit le revenu de comptoir par vague', () => {
+    expect(towerSpecials(TOWERS.counter).join(' · ')).toContain('revenu 6 or / vague');
+    expect(towerSpecials(TOWERS.bank).join(' · ')).toContain('revenu 18 or / vague');
+  });
+});
+
+describe('Percepteur', () => {
+  it('décrit le multiplicateur de prime', () => {
+    expect(towerSpecials(TOWERS.taxman).join(' · ')).toContain('prime ×2');
   });
 });

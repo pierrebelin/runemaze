@@ -6,7 +6,7 @@ import type { AuraKind, Tower } from '../../../src/domain/model/types';
 function tower(id: number, cx: number, cy: number, aura?: { kind: AuraKind; pct: number; radius: number }): Tower {
   return {
     id, def: { ...TOWERS.wall, aura }, x: cx - 0.5, y: cy - 0.5, cx, cy,
-    cooldown: 0, targetMode: 'first', spent: 0, kills: 0, damage: 0, aim: 0, ramp: 0, fate: 'standing',
+    cooldown: 0, targetMode: 'first', spent: 0, kills: 0, damage: 0, aim: 0, rangeBonus: 0, ramp: 0, offerings: [], fate: 'standing',
   };
 }
 
@@ -51,5 +51,22 @@ describe('aura', () => {
 
     expect(auraBonus(t, [t, near]).damage).toBe(0.2);
     expect(auraBonus(t, [t, far]).damage).toBe(0);
+  });
+
+  it('[RM-07] une tour près d\'un Reliquaire à 4 cumuls gagne 20 % de dégâts', () => {
+    const t = tower(1, 5, 5);
+    const reliquary: Tower = { ...tower(2, 7, 5), def: TOWERS.reliquary, offerings: [1, 2, 3, 4] };
+
+    expect(auraBonus(t, [t, reliquary]).damage).toBeCloseTo(0.2);
+  });
+
+  it('[RM-07] ne garde que la plus forte entre un Reliquaire et un Porte-étendard', () => {
+    const t = tower(1, 5, 5);
+    const standard: Tower = { ...tower(2, 5, 7), def: TOWERS.standard };
+    const strongRelic: Tower = { ...tower(3, 7, 5), def: TOWERS.reliquary, offerings: [1, 2, 3, 4, 5, 6, 7, 8] };
+    const weakRelic: Tower = { ...strongRelic, offerings: [1, 2] };
+
+    expect(auraBonus(t, [t, standard, strongRelic]).damage).toBeCloseTo(0.4);
+    expect(auraBonus(t, [t, standard, weakRelic]).damage).toBeCloseTo(0.2);
   });
 });

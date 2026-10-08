@@ -63,7 +63,7 @@ export function applyOnHit(world: World, c: Creep, a: AttackDef, towerId: number
   if (a.poison) {
     const mine = c.poisons.filter((p) => p.defId === defId);
     if (mine.length < a.poison.maxStacks) {
-      c.poisons.push({ dps: a.poison.dps, t: a.poison.duration, towerId, defId });
+      c.poisons.push({ dps: a.poison.dps, t: a.poison.duration, towerId, defId, spread: a.poison.spread });
     } else {
       // Au maximum de cumuls : on rafraîchit la dose la plus ancienne.
       let oldest = mine[0];

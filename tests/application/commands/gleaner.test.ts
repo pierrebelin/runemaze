@@ -58,6 +58,40 @@ describe('gleaner', () => {
     expect(w.log).toHaveLength(0);
   });
 
+  it('[RM-12] retire 40 or quand un joueur de la Guilde achète un glaneur', () => {
+    const w = newDuelWorld('normal', 42, undefined, 'guild');
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Gleaner });
+
+    expect(r.ok).toBe(true);
+    expect(gold - w.gold).toBe(40);
+  });
+
+  it('[RM-12] accepte l\'achat avec 45 or pour la Guilde', () => {
+    const w = newDuelWorld('normal', 42, undefined, 'guild');
+    w.gold = 45;
+
+    const r = dispatch(w, { c: CommandType.Gleaner });
+
+    expect(r.ok).toBe(true);
+    expect(w.gold).toBe(5);
+  });
+
+  it('[RM-12] refuse l\'achat avec 45 or pour le Bastion mais l\'accepte pour la Guilde', () => {
+    const bastion = newDuelWorld('normal', 42, undefined, 'bastion');
+    bastion.gold = 45;
+    const guild = newDuelWorld('normal', 42, undefined, 'guild');
+    guild.gold = 45;
+
+    const refused = dispatch(bastion, { c: CommandType.Gleaner });
+    const accepted = dispatch(guild, { c: CommandType.Gleaner });
+
+    expect(refused).toEqual({ ok: false, reason: 'Pas assez d\'or.' });
+    expect(bastion.gold).toBe(45);
+    expect(accepted.ok).toBe(true);
+  });
+
   it('[RM-12] donne la même empreinte quand le même journal avec achats de glaneurs est rejoué sur la même graine', () => {
     const play = () => {
       const w = newDuelWorld('normal', 42);

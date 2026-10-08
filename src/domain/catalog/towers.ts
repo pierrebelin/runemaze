@@ -9,7 +9,7 @@ const T: TowerDef[] = [
   {
     id: 'wall', name: 'Mur de pierre', family: 'wall', tier: 0, cost: 3,
     desc: "Bloc de labyrinthe bon marché. N'attaque pas, mais peut devenir n'importe quelle tour de base.",
-    upgrades: ['archer', 'cannon', 'frost', 'storm', 'venom', 'pylon', 'guard', 'bramble', 'gong', 'anvil', 'dispeller', 'brazier', 'hearth'],
+    upgrades: ['archer', 'cannon', 'frost', 'storm', 'venom', 'pylon', 'guard', 'bramble', 'gong', 'anvil', 'dispeller', 'brazier', 'hearth', 'ossuary', 'altar', 'crossbow', 'counter'],
   },
 
   // Garde et Ronces : attaque de zone instantanée, frappe tout le sol à portée.
@@ -104,7 +104,7 @@ const T: TowerDef[] = [
     id: 'sniper', name: 'Tour de guet', family: 'archer', tier: 2, cost: 40,
     desc: 'Longue portée, tirs lourds et coups critiques.',
     attack: { type: 'pierce', dmg: [40, 50], cooldown: 1.5, range: 7.5, projectileSpeed: 26, targets: 'both', crit: { chance: 0.2, mult: 2.5 } },
-    upgrades: ['hawkeye', 'ballista', 'frostarrow', 'thunderarrow', 'stinger'],
+    upgrades: ['hawkeye', 'ballista', 'frostarrow', 'thunderarrow', 'stinger', 'darkarrows', 'bountyhunter'],
   },
   {
     id: 'hawkeye', name: 'Œil du faucon', family: 'archer', tier: 3, cost: 120,
@@ -116,7 +116,7 @@ const T: TowerDef[] = [
     id: 'volley', name: 'Tour à volées', family: 'archer', tier: 2, cost: 35,
     desc: 'Tire sur trois cibles à la fois.',
     attack: { type: 'pierce', dmg: [12, 15], cooldown: 0.7, range: 5, projectileSpeed: 18, targets: 'both', multishot: 3 },
-    upgrades: ['arrowstorm', 'ballista', 'frostarrow', 'thunderarrow', 'stinger'],
+    upgrades: ['arrowstorm', 'ballista', 'frostarrow', 'thunderarrow', 'stinger', 'darkarrows', 'bountyhunter'],
   },
   {
     id: 'arrowstorm', name: 'Pluie de flèches', family: 'archer', tier: 3, cost: 110,
@@ -136,7 +136,7 @@ const T: TowerDef[] = [
     id: 'mortar', name: 'Mortier', family: 'cannon', tier: 2, cost: 50,
     desc: 'Grande portée et large zone d’impact.',
     attack: { type: 'siege', dmg: [55, 70], cooldown: 2.2, range: 6.5, projectileSpeed: 8, targets: 'ground', splash: { radius: 2, falloff: 0.5 } },
-    upgrades: ['bombard', 'ballista', 'cryoshell', 'teslacannon', 'plagueshell'],
+    upgrades: ['bombard', 'ballista', 'cryoshell', 'teslacannon', 'plagueshell', 'firebomb', 'coincannon'],
   },
   {
     id: 'bombard', name: 'Bombarde', family: 'cannon', tier: 3, cost: 140,
@@ -148,7 +148,7 @@ const T: TowerDef[] = [
     id: 'flak', name: 'Canon anti-aérien', family: 'cannon', tier: 2, cost: 45,
     desc: 'Éclats perçants contre les volants uniquement.',
     attack: { type: 'pierce', dmg: [45, 55], cooldown: 1, range: 6, projectileSpeed: 18, targets: 'air', splash: { radius: 1.5, falloff: 0.5 } },
-    upgrades: ['skybattery', 'ballista', 'cryoshell', 'teslacannon', 'plagueshell'],
+    upgrades: ['skybattery', 'ballista', 'cryoshell', 'teslacannon', 'plagueshell', 'firebomb', 'coincannon'],
   },
   {
     id: 'skybattery', name: 'Batterie céleste', family: 'cannon', tier: 3, cost: 130,
@@ -168,7 +168,7 @@ const T: TowerDef[] = [
     id: 'glacier', name: 'Glacier', family: 'frost', tier: 2, cost: 45,
     desc: 'Ralentissement de zone de 40 %.',
     attack: { type: 'magic', dmg: [16, 20], cooldown: 1.2, range: 4.5, projectileSpeed: 11, targets: 'both', splash: { radius: 1.6, falloff: 0.2 }, slow: { pct: 0.4, duration: 2.5 } },
-    upgrades: ['winterheart', 'frostarrow', 'cryoshell', 'hail', 'blightfrost', 'steam'],
+    upgrades: ['winterheart', 'frostarrow', 'cryoshell', 'hail', 'blightfrost', 'steam', 'lich'],
   },
   {
     id: 'winterheart', name: "Cœur de l'hiver", family: 'frost', tier: 3, cost: 120,
@@ -180,7 +180,7 @@ const T: TowerDef[] = [
     id: 'iceshard', name: 'Éclat de glace', family: 'frost', tier: 2, cost: 45,
     desc: 'Pointes de glace lourdes, ralentissement de 35 %.',
     attack: { type: 'magic', dmg: [40, 50], cooldown: 1.1, range: 5, projectileSpeed: 16, targets: 'both', slow: { pct: 0.35, duration: 2 } },
-    upgrades: ['frostlance', 'frostarrow', 'cryoshell', 'hail', 'blightfrost', 'steam'],
+    upgrades: ['frostlance', 'frostarrow', 'cryoshell', 'hail', 'blightfrost', 'steam', 'lich'],
   },
   {
     id: 'frostlance', name: 'Lance de givre', family: 'frost', tier: 3, cost: 130,
@@ -266,7 +266,7 @@ const T: TowerDef[] = [
     id: 'acid', name: 'Tour acide', family: 'venom', tier: 2, cost: 45,
     desc: 'Poison puissant qui ronge 3 points d’armure.',
     attack: { type: 'normal', dmg: [6, 8], cooldown: 0.9, range: 4.5, projectileSpeed: 12, targets: 'both', poison: { dps: 15, duration: 4, maxStacks: 3 }, armorShred: { amount: 3, duration: 4 } },
-    upgrades: ['corrosion', 'stinger', 'plagueshell', 'blightfrost', 'acidarc'],
+    upgrades: ['corrosion', 'stinger', 'plagueshell', 'blightfrost', 'acidarc', 'naphtha', 'blackplague'],
   },
   {
     id: 'corrosion', name: 'Corrosion', family: 'venom', tier: 3, cost: 130,
@@ -278,7 +278,7 @@ const T: TowerDef[] = [
     id: 'plague', name: 'Nid de peste', family: 'venom', tier: 2, cost: 45,
     desc: 'Nuage toxique de zone. Sol uniquement.',
     attack: { type: 'normal', dmg: [5, 7], cooldown: 1.1, range: 4.5, projectileSpeed: 9, targets: 'ground', splash: { radius: 1.6, falloff: 0 }, poison: { dps: 11, duration: 5, maxStacks: 2 } },
-    upgrades: ['blight', 'stinger', 'plagueshell', 'blightfrost', 'acidarc'],
+    upgrades: ['blight', 'stinger', 'plagueshell', 'blightfrost', 'acidarc', 'naphtha', 'blackplague'],
   },
   {
     id: 'blight', name: 'Fléau', family: 'venom', tier: 3, cost: 130,
@@ -298,7 +298,7 @@ const T: TowerDef[] = [
     id: 'blaze', name: 'Fournaise', family: 'fire', tier: 2, cost: 48,
     desc: 'Braises plus lourdes et plus lointaines. Sol uniquement.',
     attack: { type: 'siege', dmg: [24, 30], cooldown: 1.4, range: 4.5, projectileSpeed: 9, targets: 'ground' , ember: { radius: 1.5, duration: 4, dps: 16 } },
-    upgrades: ['volcano', 'steam', 'plasma'],
+    upgrades: ['volcano', 'steam', 'plasma', 'firebomb', 'naphtha'],
   },
   {
     id: 'volcano', name: 'Volcan', family: 'fire', tier: 3, cost: 135,
@@ -310,7 +310,7 @@ const T: TowerDef[] = [
     id: 'flamethrower', name: 'Lance-flammes', family: 'fire', tier: 2, cost: 45,
     desc: 'Jet de flammes rapide à courte portée. Sol uniquement.',
     attack: { type: 'normal', dmg: [14, 18], cooldown: 0.5, range: 2.5, projectileSpeed: 14, targets: 'ground', splash: { radius: 1, falloff: 0.5 }, relentless: { step: 0.1, max: 1.5 } },
-    upgrades: ['dragonbreath', 'steam', 'plasma'],
+    upgrades: ['dragonbreath', 'steam', 'plasma', 'firebomb', 'naphtha'],
   },
   {
     id: 'dragonbreath', name: 'Souffle du dragon', family: 'fire', tier: 3, cost: 130,
@@ -334,6 +334,94 @@ const T: TowerDef[] = [
     id: 'ashfield', name: 'Champ de cendres', family: 'fire', tier: 3, cost: 50,
     desc: 'Salve de feu magique qui ralentit de 25 % tout le sol à portée.',
     attack: { type: 'magic', dmg: [30, 36], cooldown: 2, range: 2.5, projectileSpeed: 0, targets: 'ground', area: true, slow: { pct: 0.25, duration: 2 } },
+    upgrades: [],
+  },
+
+  // Nécromanciens : chaos qui ignore le type d'armure, sol et air.
+  {
+    id: 'ossuary', name: 'Ossuaire', family: 'chaos', tier: 1, cost: 18,
+    desc: 'Dégâts chaotiques : les types d’armure ne comptent pas. Touche les volants.',
+    attack: { type: 'chaos', dmg: [8, 10], cooldown: 1, range: 4, projectileSpeed: 12, targets: 'both' },
+    upgrades: ['crypt', 'charnel'],
+  },
+  {
+    id: 'crypt', name: 'Crypte', family: 'chaos', tier: 2, cost: 50,
+    desc: 'Dégâts chaotiques bien plus forts, à plus longue portée.',
+    attack: { type: 'chaos', dmg: [30, 36], cooldown: 1, range: 4.5, projectileSpeed: 12, targets: 'both' },
+    upgrades: ['necropolis', 'blackplague', 'lich', 'darkarrows'],
+  },
+  {
+    id: 'necropolis', name: 'Nécropole', family: 'chaos', tier: 3, cost: 140,
+    desc: 'Les morts eux-mêmes frappent : dégâts chaotiques dévastateurs.',
+    attack: { type: 'chaos', dmg: [95, 110], cooldown: 1, range: 5, projectileSpeed: 14, targets: 'both' },
+    upgrades: [],
+  },
+  {
+    id: 'charnel', name: 'Charnier', family: 'chaos', tier: 2, cost: 50,
+    desc: 'Relève les morts en squelettes qui explosent. Dégâts chaotiques.',
+    attack: { type: 'chaos', dmg: [14, 18], cooldown: 1.2, range: 4, projectileSpeed: 12, targets: 'both' },
+    raise: { every: 4, damage: 60, radius: 1 },
+    upgrades: ['legion', 'blackplague', 'lich', 'darkarrows'],
+  },
+  {
+    id: 'legion', name: 'Légion des morts', family: 'chaos', tier: 3, cost: 135,
+    desc: 'Relève les morts en squelettes qui explosent plus fort et plus souvent. Dégâts chaotiques lourds.',
+    attack: { type: 'chaos', dmg: [35, 42], cooldown: 1.2, range: 4.5, projectileSpeed: 14, targets: 'both' },
+    raise: { every: 2.5, damage: 180, radius: 1.5 },
+    upgrades: [],
+  },
+  {
+    id: 'altar', name: 'Autel', family: 'chaos', tier: 1, cost: 20,
+    desc: 'Dégâts chaotiques : les types d’armure ne comptent pas. Touche les volants.',
+    attack: { type: 'chaos', dmg: [10, 12], cooldown: 1, range: 4, projectileSpeed: 12, targets: 'both' },
+    altar: { pct: 0.1, maxStacks: 10, duration: 8 },
+    upgrades: ['bloodaltar', 'reliquary'],
+  },
+  {
+    id: 'bloodaltar', name: 'Autel de sang', family: 'chaos', tier: 3, cost: 55,
+    desc: 'Dégâts chaotiques nourris de sang, à plus longue portée.',
+    attack: { type: 'chaos', dmg: [28, 34], cooldown: 1, range: 4.5, projectileSpeed: 12, targets: 'both' },
+    altar: { pct: 0.1, maxStacks: 20, duration: 8 },
+    upgrades: [],
+  },
+  {
+    id: 'reliquary', name: 'Reliquaire', family: 'chaos', tier: 3, cost: 55,
+    desc: 'Dégâts chaotiques réguliers.',
+    attack: { type: 'chaos', dmg: [20, 24], cooldown: 1, range: 4, projectileSpeed: 12, targets: 'both' },
+    altar: { pct: 0.1, maxStacks: 10, duration: 8 },
+    aura: { kind: 'damage', share: 0.5, radius: 3 },
+    upgrades: [],
+  },
+
+  // Peste noire : infusion hybride chaos/venin.
+  {
+    id: 'blackplague', name: 'Peste noire', family: 'chaos', tier: 1, cost: 70,
+    desc: 'Dégâts chaotiques qui empoisonnent ; le poison ignore la valeur d’armure.',
+    elements: ['chaos', 'venom'],
+    attack: { type: 'chaos', dmg: [20, 24], cooldown: 1, range: 4.5, projectileSpeed: 12, targets: 'both', poison: { dps: 15, duration: 4, maxStacks: 3, spread: 1.5 } },
+    upgrades: ['pandemic'],
+  },
+  {
+    id: 'pandemic', name: 'Pandémie', family: 'chaos', tier: 2, cost: 155,
+    desc: 'Dégâts chaotiques qui empoisonnent, en plus dévastateur.',
+    elements: ['chaos', 'venom'],
+    attack: { type: 'chaos', dmg: [60, 70], cooldown: 1, range: 5, projectileSpeed: 14, targets: 'both', poison: { dps: 40, duration: 4, maxStacks: 3, spread: 2 } },
+    upgrades: [],
+  },
+
+  // Liche : infusion hybride chaos/givre.
+  {
+    id: 'lich', name: 'Liche', family: 'chaos', tier: 1, cost: 70,
+    desc: 'Dégâts chaotiques lourds qui ralentissent de 30 %.',
+    elements: ['chaos', 'frost'],
+    attack: { type: 'chaos', dmg: [45, 55], cooldown: 1.2, range: 5, projectileSpeed: 12, targets: 'both', slow: { pct: 0.3, duration: 2 } },
+    upgrades: ['lichking'],
+  },
+  {
+    id: 'lichking', name: 'Roi-liche', family: 'chaos', tier: 2, cost: 155,
+    desc: 'Dégâts chaotiques lourds qui ralentissent de 40 %, en plus dévastateur.',
+    elements: ['chaos', 'frost'],
+    attack: { type: 'chaos', dmg: [130, 150], cooldown: 1.2, range: 5.5, projectileSpeed: 14, targets: 'both', slow: { pct: 0.4, duration: 2.5 } },
     upgrades: [],
   },
 
@@ -417,6 +505,22 @@ const T: TowerDef[] = [
     upgrades: [],
   },
 
+  // Flèches noires : infusion hybride archer/chaos.
+  {
+    id: 'darkarrows', name: 'Flèches noires', family: 'archer', tier: 1, cost: 70,
+    desc: 'Deux flèches chaotiques par salve : les types d’armure ne comptent pas.',
+    elements: ['archer', 'chaos'],
+    attack: { type: 'chaos', dmg: [30, 36], cooldown: 0.8, range: 5, projectileSpeed: 18, targets: 'both', multishot: 2 },
+    upgrades: ['doomvolley'],
+  },
+  {
+    id: 'doomvolley', name: 'Volée funeste', family: 'archer', tier: 2, cost: 155,
+    desc: 'Trois flèches chaotiques par salve, en plus dévastateur.',
+    elements: ['archer', 'chaos'],
+    attack: { type: 'chaos', dmg: [90, 105], cooldown: 0.7, range: 5.5, projectileSpeed: 20, targets: 'both', multishot: 3 },
+    upgrades: [],
+  },
+
   // Flèche foudroyante : infusion hybride archer/foudre.
   {
     id: 'thunderarrow', name: 'Flèche foudroyante', family: 'archer', tier: 1, cost: 70,
@@ -496,6 +600,38 @@ const T: TowerDef[] = [
     attack: { type: 'magic', dmg: [60, 75], cooldown: 1.2, range: 5, projectileSpeed: 0, targets: 'both', chain: { bounces: 6, range: 2.8, decay: 0.85 }, poison: { dps: 26, duration: 3, maxStacks: 2 }, armorShred: { amount: 5, duration: 4 } },
     upgrades: [],
   },
+  // Obus incendiaire : infusion hybride canon/feu.
+  {
+    id: 'firebomb', name: 'Obus incendiaire', family: 'cannon', tier: 1, cost: 70,
+    desc: 'Obus de zone qui laisse une flaque de feu à l’impact. Sol uniquement.',
+    elements: ['cannon', 'fire'],
+    attack: { type: 'siege', dmg: [50, 60], cooldown: 1.8, range: 5, projectileSpeed: 9, targets: 'ground', splash: { radius: 1.5, falloff: 0.4 }, ember: { radius: 1.5, duration: 3, dps: 15 } },
+    upgrades: ['napalm'],
+  },
+  {
+    id: 'napalm', name: 'Bombe au napalm', family: 'cannon', tier: 2, cost: 155,
+    desc: 'Obus de zone qui laisse une large flaque de feu, en plus dévastateur. Sol uniquement.',
+    elements: ['cannon', 'fire'],
+    attack: { type: 'siege', dmg: [150, 180], cooldown: 1.8, range: 5.5, projectileSpeed: 10, targets: 'ground', splash: { radius: 2, falloff: 0.4 }, ember: { radius: 2, duration: 3, dps: 40 } },
+    upgrades: [],
+  },
+
+  // Naphte : infusion hybride venin/feu.
+  {
+    id: 'naphtha', name: 'Naphte', family: 'venom', tier: 1, cost: 70,
+    desc: 'Éclat de zone qui empoisonne et laisse une flaque de feu. Sol uniquement.',
+    elements: ['venom', 'fire'],
+    attack: { type: 'normal', dmg: [10, 12], cooldown: 1, range: 4.5, projectileSpeed: 9, targets: 'ground', splash: { radius: 1.5, falloff: 0.4 }, poison: { dps: 14, duration: 4, maxStacks: 3 }, ember: { radius: 1.5, duration: 4, dps: 8 } },
+    upgrades: ['naphthatide'],
+  },
+  {
+    id: 'naphthatide', name: 'Marée de naphte', family: 'venom', tier: 2, cost: 155,
+    desc: 'Éclat de zone qui empoisonne et laisse une large flaque de feu, en plus dévastateur. Sol uniquement.',
+    elements: ['venom', 'fire'],
+    attack: { type: 'normal', dmg: [30, 36], cooldown: 1, range: 5, projectileSpeed: 10, targets: 'ground', splash: { radius: 2, falloff: 0.4 }, poison: { dps: 35, duration: 4, maxStacks: 3 }, ember: { radius: 2, duration: 4, dps: 20 } },
+    upgrades: [],
+  },
+
   // Vapeur : infusion hybride feu/givre.
   {
     id: 'steam', name: 'Vapeur', family: 'fire', tier: 1, cost: 70,
@@ -525,6 +661,95 @@ const T: TowerDef[] = [
     desc: 'Arc de plasma instantané qui rebondit sur 5 cibles, en plus dévastateur.',
     elements: ['fire', 'storm'],
     attack: { type: 'magic', dmg: [120, 140], cooldown: 1.3, range: 5.5, projectileSpeed: 0, targets: 'both', chain: { bounces: 5, range: 2.8, decay: 0.85 } , ember: { radius: 1, duration: 2, dps: 25 } },
+    upgrades: [],
+  },
+
+  // Guilde marchande : arbalétriers et comptoirs. Les primes et revenus viennent aux cycles suivants.
+  {
+    id: 'crossbow', name: 'Arbalétrier', family: 'gold', tier: 1, cost: 15,
+    desc: 'Carreaux réguliers. Touche les volants.',
+    attack: { type: 'normal', dmg: [10, 12], cooldown: 1, range: 4.5, projectileSpeed: 16, targets: 'both' },
+    upgrades: ['taxman', 'mercenary'],
+  },
+  {
+    id: 'taxman', name: 'Percepteur', family: 'gold', tier: 2, cost: 45,
+    desc: 'Carreaux lourds. Touche les volants.',
+    attack: { type: 'normal', dmg: [26, 32], cooldown: 1, range: 5, projectileSpeed: 16, targets: 'both' },
+    bounty: 2,
+    upgrades: ['collector', 'bountyhunter', 'coincannon'],
+  },
+  {
+    id: 'collector', name: "Collecteur d'impôts", family: 'gold', tier: 3, cost: 125,
+    desc: 'Carreaux très lourds. Touche les volants.',
+    attack: { type: 'normal', dmg: [70, 85], cooldown: 1, range: 5.5, projectileSpeed: 18, targets: 'both' },
+    bounty: 3,
+    upgrades: [],
+  },
+  {
+    id: 'mercenary', name: "Mercenaire d'élite", family: 'gold', tier: 2, cost: 45,
+    desc: 'Tirs perçants. Touche les volants.',
+    attack: { type: 'pierce', dmg: [32, 38], cooldown: 0.9, range: 5.5, projectileSpeed: 18, targets: 'both' },
+    upgrades: ['captain', 'bountyhunter', 'coincannon'],
+  },
+  {
+    id: 'captain', name: 'Capitaine mercenaire', family: 'gold', tier: 3, cost: 125,
+    desc: 'Tirs perçants et coups critiques. Touche les volants.',
+    attack: { type: 'pierce', dmg: [95, 110], cooldown: 0.9, range: 6, projectileSpeed: 20, targets: 'both', crit: { chance: 0.2, mult: 2 } },
+    upgrades: [],
+  },
+  {
+    id: 'counter', name: 'Comptoir', family: 'gold', tier: 1, cost: 30,
+    desc: "N'attaque pas.",
+    trade: 6,
+    upgrades: ['bank', 'caravan'],
+  },
+  {
+    id: 'bank', name: 'Banque', family: 'gold', tier: 3, cost: 60,
+    desc: "N'attaque pas.",
+    trade: 18,
+    upgrades: [],
+  },
+  {
+    id: 'caravan', name: 'Caravane', family: 'gold', tier: 3, cost: 50,
+    desc: 'Carreaux réguliers. Touche les volants.',
+    attack: { type: 'normal', dmg: [20, 24], cooldown: 1, range: 4, projectileSpeed: 16, targets: 'both' },
+    trade: 10,
+    upgrades: [],
+  },
+
+  // Chasseur de primes : infusion hybride or/archers.
+  {
+    id: 'bountyhunter', name: 'Chasseur de primes', family: 'gold', tier: 1, cost: 70,
+    desc: 'Tirs perçants lourds, parfois critiques. Touche les volants.',
+    elements: ['gold', 'archer'],
+    attack: { type: 'pierce', dmg: [45, 55], cooldown: 1.1, range: 6.5, projectileSpeed: 20, targets: 'both', crit: { chance: 0.2, mult: 2 } },
+    bounty: 2,
+    upgrades: ['hitman'],
+  },
+  {
+    id: 'hitman', name: 'Tueur à gages', family: 'gold', tier: 2, cost: 155,
+    desc: 'Tirs perçants lourds, souvent critiques, en plus dévastateur. Touche les volants.',
+    elements: ['gold', 'archer'],
+    attack: { type: 'pierce', dmg: [140, 165], cooldown: 1.1, range: 7, projectileSpeed: 24, targets: 'both', crit: { chance: 0.25, mult: 2.5 } },
+    bounty: 2,
+    upgrades: [],
+  },
+
+  // Canon à pièces : infusion hybride or/canons.
+  {
+    id: 'coincannon', name: 'Canon à pièces', family: 'gold', tier: 1, cost: 70,
+    desc: 'Obus de zone. Sol uniquement.',
+    elements: ['gold', 'cannon'],
+    attack: { type: 'siege', dmg: [45, 55], cooldown: 1.8, range: 5, projectileSpeed: 9, targets: 'ground', splash: { radius: 1.5, falloff: 0.4 } },
+    bounty: 1.5,
+    upgrades: ['goldbombard'],
+  },
+  {
+    id: 'goldbombard', name: "Bombarde d'or", family: 'gold', tier: 2, cost: 155,
+    desc: 'Obus de zone, en plus dévastateur. Sol uniquement.',
+    elements: ['gold', 'cannon'],
+    attack: { type: 'siege', dmg: [140, 165], cooldown: 1.8, range: 5.5, projectileSpeed: 10, targets: 'ground', splash: { radius: 2, falloff: 0.4 } },
+    bounty: 2,
     upgrades: [],
   },
 ];

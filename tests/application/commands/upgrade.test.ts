@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
+import { MAP_CRYSTAL } from '../../support/maps';
 import { newWorld } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 import { refundValue, upgradeCost } from '../../../src/domain/rules/pricing';
@@ -232,5 +233,19 @@ describe('upgrade — bâtisseur', () => {
     dispatch(w, { c: CommandType.Upgrade, tower: wall.id, def: 'archer' });
 
     expect(w.log.some((e) => e.cmd.c === CommandType.Upgrade)).toBe(false);
+  });
+});
+
+describe('upgrade — cristal', () => {
+  it('[CU-02] donne le bonus quand un mur posé sur un cristal devient une tour', () => {
+    const w = newWorld('normal', 42, MAP_CRYSTAL);
+    w.gold = 100000;
+    const wall = dispatch(w, { c: CommandType.Build, def: 'wall', x: 5, y: 3 }) as { ok: true; id: number };
+
+    expect(dispatch(w, { c: CommandType.Upgrade, tower: wall.id, def: 'guard' }).ok).toBe(true);
+
+    const tower = w.towerById.get(wall.id)!;
+    expect(tower.def.id).toBe('guard');
+    expect(tower.rangeBonus).toBe(0.2);
   });
 });

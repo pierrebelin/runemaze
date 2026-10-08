@@ -1,8 +1,11 @@
 import { damageMultiplier } from '../rules/Damage';
 import { auraBonus } from '../rules/aura';
+import { altarBonus } from '../rules/altar';
+import { bountyPaid } from '../rules/bounty';
+import { towerRange } from '../rules/crystal';
 import { relentlessBonus } from '../rules/relentless';
 import { attackCooldown, rampBonus } from '../rules/attackSpeed';
-import type { World } from '../model/World';
+import { TICK, type World } from '../model/World';
 import type { AttackDef, AttackType, Creep, TargetMode, Tower } from '../model/types';
 import { applyOnHit } from './status';
 import { spawnOffspring } from './waves';
@@ -24,11 +27,14 @@ function score(mode: TargetMode, t: Pick<Tower, 'cx' | 'cy'>, c: Creep): number 
   }
 }
 
-function isTargetInRange(t: Pick<Tower, 'cx' | 'cy'>, a: AttackDef, c: Creep): boolean {
-  return canTarget(a, c) && Math.hypot(c.x - t.cx, c.y - t.cy) <= a.range + c.def.radius;
+// `rangeBonus` absent : tireur sans tour (porte de sortie), pas de cristal.
+type Shooter = Pick<Tower, 'cx' | 'cy'> & Partial<Pick<Tower, 'rangeBonus'>>;
+
+function isTargetInRange(t: Shooter, a: AttackDef, c: Creep): boolean {
+  return canTarget(a, c) && Math.hypot(c.x - t.cx, c.y - t.cy) <= a.range * (1 + (t.rangeBonus ?? 0)) + c.def.radius;
 }
 
-export function acquireTargets(world: World, t: Pick<Tower, 'cx' | 'cy' | 'targetMode'>, a: AttackDef, n: number): Creep[] {
+export function acquireTargets(world: World, t: Shooter & Pick<Tower, 'targetMode'>, a: AttackDef, n: number): Creep[] {
   const inRange: Creep[] = [];
   for (const c of world.creeps) {
     if (isTargetInRange(t, a, c)) inRange.push(c);
@@ -71,10 +77,11 @@ export function updateCombat(world: World, dt: number): void {
       relentless = relentlessBonus(t.relentless.hits, a.relentless.step, a.relentless.max);
       t.relentless.hits++;
     }
+    const altar = t.def.altar ? altarBonus(t.offerings.length, t.def.altar.pct) : 0;
     for (const target of targets) {
       const roll = world.rng.range(a.dmg[0], a.dmg[1]);
       const crit = !!a.crit && world.rng.next() < a.crit.chance;
-      const dmg = (crit ? roll * a.crit!.mult : roll) * (1 + bonus.damage) * (1 + relentless);
+      const dmg = (crit ? roll * a.crit!.mult : roll) * (1 + bonus.damage) * (1 + relentless) * (1 + altar);
       if (a.projectileSpeed === 0) {
         if (a.chain) fireChain(world, t, a, target, dmg);
         else if (a.area) hitCreep(world, t.id, t.def.id, a, target, dmg);
@@ -90,7 +97,7 @@ export function updateCombat(world: World, dt: number): void {
         });
       }
     }
-    if (a.area) world.emit({ t: GameEventType.Hit, x: t.cx, y: t.cy, family: t.def.family, splash: a.range, crit: false, dmg: 0 });
+    if (a.area) world.emit({ t: GameEventType.Hit, x: t.cx, y: t.cy, family: t.def.family, splash: towerRange(t), crit: false, dmg: 0 });
   }
 }
 
@@ -193,12 +200,26 @@ export function applyDamage(world: World, c: Creep, raw: number, type: AttackTyp
   if (c.hp <= 0) {
     c.alive = false;
     c.hp = 0;
-    world.addGold(c.bounty);
+    const bounty = bountyPaid(c.bounty, tower?.def.bounty);
+    world.addGold(bounty);
     world.stats.kills++;
     if (tower) tower.kills++;
     world.creepGone(c);
+    spreadPoison(world, c);
+    if (!c.def.air) world.corpses.push({ id: world.id(), x: c.x, y: c.y, expires: world.tick + Math.round(5 / TICK) });
     if (c.def.split) spawnOffspring(world, c, c.def.split.creep, c.def.split.count);
-    world.emit({ t: GameEventType.Kill, x: c.x, y: c.y, bounty: c.bounty, creepId: c.id, boss: !!c.def.boss });
+    world.emit({ t: GameEventType.Kill, x: c.x, y: c.y, bounty, creepId: c.id, boss: !!c.def.boss });
   }
   return dmg;
+}
+
+/** Contagion : le poison porteur de `spread` passe aux créatures vivantes proches du mort. */
+function spreadPoison(world: World, dead: Creep): void {
+  for (const p of dead.poisons) {
+    if (!p.spread) continue;
+    for (const c of world.creeps) {
+      if (!c.alive || Math.hypot(c.x - dead.x, c.y - dead.y) > p.spread) continue;
+      c.poisons.push({ ...p });
+    }
+  }
 }

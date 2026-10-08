@@ -7,12 +7,13 @@ import { updateAbilities } from '../systems/abilities';
 import { updateGleaners } from '../systems/gleaners';
 import { updateGate } from '../systems/gate';
 import { updateEmbers } from '../systems/embers';
+import { nearestStep, updateNecromancy, updateSkeletons } from '../systems/necromancy';
 import { updateCombat, updateProjectiles } from '../systems/combat';
 import { updateMovement } from '../systems/movement';
 import { updateStatuses } from '../systems/status';
 import { updateWaves, type Spawner } from '../systems/waves';
 import { GameEventType, Phase } from './types';
-import type { BuilderDef, Command, Creep, Ember, Difficulty, GameEvent, MapDef, Projectile, Tower, WaveTally } from './types';
+import type { BuilderDef, Command, Corpse, Creep, Ember, Difficulty, GameEvent, MapDef, Projectile, Skeleton, Tower, WaveTally } from './types';
 
 export const TICK = 1 / 60;
 export const FIRST_WAVE_DELAY = 35;
@@ -81,6 +82,10 @@ export class World {
   offspring: Creep[] = [];
   projectiles: Projectile[] = [];
   embers: Ember[] = [];
+  corpses: Corpse[] = [];
+  skeletons: Skeleton[] = [];
+  /** Tracé terrestre à plat (indices de cases, du portail vers la sortie). */
+  route: number[] = [];
   events: GameEvent[] = [];
   readonly log: { tick: number; cmd: Command }[] = [];
   stats: Stats = { kills: 0, leaked: 0, goldEarned: 0, towersBuilt: 0, longestMaze: 0, towers: new Map(), waves: [] };
@@ -134,6 +139,12 @@ export class World {
   refreshPaths(): void {
     for (const f of this.fields) f.compute();
     this.updateLegRest();
+    const before = this.route;
+    this.route = this.groundRoute().flat();
+    // Un simple aperçu recalcule sans changer le tracé : les squelettes ne doivent pas bouger.
+    if (this.route.length !== before.length || this.route.some((c, i) => c !== before[i])) {
+      for (const s of this.skeletons) s.step = nearestStep(this, s.x, s.y);
+    }
     this.stats.longestMaze = Math.max(this.stats.longestMaze, this.mazeLength());
   }
 
@@ -208,6 +219,8 @@ export class World {
     updateGleaners(this);
     updateStatuses(this, dt);
     updateEmbers(this, dt);
+    updateSkeletons(this, dt);
+    updateNecromancy(this);
     updateAbilities(this, dt);
     updateMovement(this, dt);
     updateCombat(this, dt);

@@ -124,6 +124,30 @@ export const MAP_ICE: MapDef = {
   ],
 };
 
+// Champ ouvert avec deux cristaux (+) voisins sur le trajet portail → pierre 1 (ligne 4).
+// Cristal : praticable, constructible ; une tour dont l'emprise le recouvre gagne en portée.
+// Coordonnées utiles : S=(1,4) pierre1=(28,4) cristaux=(5,3) et (5,4).
+// Tour sur cristal : (5, 3), 2×2, la colonne 5 recouvre les deux cristaux.
+// Tour hors cristal : (5, 6), même colonne, aucun cristal sous l'emprise.
+export const MAP_CRYSTAL: MapDef = {
+  id: 'crystal',
+  name: 'Veine de Cristal',
+  width: 30,
+  height: 10,
+  rows: [
+    '##############################',
+    '#............................#',
+    '#............................#',
+    '#....+.......................#',
+    '#S...+......................1#',
+    '#............................#',
+    '#............................#',
+    '#............................#',
+    '#...........................E#',
+    '##############################',
+  ],
+};
+
 // Portail (S) et pierre 1 séparés par une colonne de rochers : aucun passage entre eux.
 export const MAP_WALLED: MapDef = {
   id: 'walled',
@@ -242,5 +266,230 @@ export const MAP_SEALS: MapDef = {
     '#EEE..............222..................#',
     '#EEE..............222..................#',
     '########################################',
+  ],
+};
+
+// Mur de rochers (colonne 10) coupant le champ en deux, ouvert seulement par la
+// ligne 10 (en bas). Un trou de ver relie les deux faces du mur : bout `a` à
+// l'ouest, bout `A` à l'est, chacun un carré 2×2 plaqué contre le mur.
+// Le portail (ouest) et la pierre 1 (est) sont séparés par le mur : le trou de
+// ver raccourcit nettement le tronçon portail → pierre 1 (détour par le bas sinon).
+// Coordonnées utiles : S=(1..2,1..2) a=(8..9,4..5) A=(11..12,4..5) pierre1=(17..18,4..5)
+//   E=(17..18,9..10) passage du mur=(10,10)
+export const MAP_WORMHOLE: MapDef = {
+  id: 'wormhole',
+  name: 'Trou de Ver',
+  width: 20,
+  height: 12,
+  rows: [
+    '####################',
+    '#SS.......#........#',
+    '#SS.......#........#',
+    '#.........#........#',
+    '#.......aa#AA....11#',
+    '#.......aa#AA....11#',
+    '#.........#........#',
+    '#.........#........#',
+    '#.........#........#',
+    '#.........#......EE#',
+    '#................EE#',
+    '####################',
+  ],
+};
+
+// Même mur et même trou de ver, mais la porte est à l'ouest : le tronçon
+// portail → pierre 1 traverse de `a` vers `A`, le tronçon pierre 1 → porte de `A` vers `a`.
+// Coordonnées utiles : S=(1..2,1..2) a=(8..9,4..5) A=(11..12,4..5) pierre1=(17..18,4..5) E=(1..2,9..10)
+export const MAP_WORMHOLE_BOTH: MapDef = {
+  id: 'wormhole-both',
+  name: 'Trou de Ver à Double Sens',
+  width: 20,
+  height: 12,
+  rows: [
+    '####################',
+    '#SS.......#........#',
+    '#SS.......#........#',
+    '#.........#........#',
+    '#.......aa#AA....11#',
+    '#.......aa#AA....11#',
+    '#.........#........#',
+    '#.........#........#',
+    '#.........#........#',
+    '#EE.......#........#',
+    '#EE................#',
+    '####################',
+  ],
+};
+
+// Champ ouvert sans mur : le bout `a` barre la ligne droite portail → pierre 1,
+// l'autre bout `A` est collé au bord gauche, loin derrière le portail.
+// Vérification à la main (8 directions, diagonale √2) : le contournement de `a`
+// ne coûte qu'une petite diagonale en plus. Passer par le trou de ver imposerait
+// de marcher du portail (x=10) jusqu'à `A` (x=3), soit ≥ 7 pas, puis de ressortir
+// en x=13 ou 16 : bien plus cher. Tronçon pierre 1 → porte (côté est, sans rapport
+// avec `A`) : entrer par `a` puis ressortir à l'ouest éloigne de la porte, rien gagné.
+// Coordonnées utiles : S=(10..11,3..4) a=(14..15,3..4) A=(1..2,3..4) pierre1=(21..22,3..4) E=(21..22,6..7)
+export const MAP_WORMHOLE_USELESS: MapDef = {
+  id: 'wormhole-useless',
+  name: 'Trou de Ver Inutile',
+  width: 24,
+  height: 9,
+  rows: [
+    '########################',
+    '#......................#',
+    '#......................#',
+    '#AA.......SS..aa.....11#',
+    '#AA.......SS..aa.....11#',
+    '#......................#',
+    '#....................EE#',
+    '#....................EE#',
+    '########################',
+  ],
+};
+
+// Mur de rochers (colonne 10) ouvert par un passage de 2 cases (lignes 9-10) que
+// la pose d'une tour en (10, 9) referme : seul le trou de ver relie alors
+// l'ouest (`a`) à l'est (`A`). Une alcôve sans issue (colonnes 15-18, lignes 9-10)
+// est fermable par une tour en (15, 9) ; la porte est en haut à droite.
+// Coordonnées utiles : S=(1..2,1..2) a=(8..9,4..5) A=(11..12,4..5) pierre1=(17..18,4..5) E=(17..18,1..2)
+export const MAP_WORMHOLE_GAP: MapDef = {
+  id: 'wormhole-gap',
+  name: 'Trou de Ver et Passage',
+  width: 20,
+  height: 12,
+  rows: [
+    '####################',
+    '#SS.......#......EE#',
+    '#SS.......#......EE#',
+    '#.........#........#',
+    '#.......aa#AA....11#',
+    '#.......aa#AA....11#',
+    '#.........#........#',
+    '#.........#........#',
+    '#.........#....#####',
+    '#..................#',
+    '#..................#',
+    '####################',
+  ],
+};
+
+// Même mur et même trou de ver, mais la porte est dans l'alcôve du bas à droite
+// (colonnes 15-18, lignes 9-10), qu'une tour en (15, 9) isole de tout trajet.
+// Coordonnées utiles : S=(1..2,1..2) a=(8..9,4..5) A=(11..12,4..5) pierre1=(17..18,4..5) E=(17..18,9..10)
+export const MAP_WORMHOLE_SEALABLE_GATE: MapDef = {
+  id: 'wormhole-sealable-gate',
+  name: 'Trou de Ver et Porte Isolable',
+  width: 20,
+  height: 12,
+  rows: [
+    '####################',
+    '#SS.......#........#',
+    '#SS.......#........#',
+    '#.........#........#',
+    '#.......aa#AA....11#',
+    '#.......aa#AA....11#',
+    '#.........#........#',
+    '#.........#........#',
+    '#.........#....#####',
+    '#................EE#',
+    '#................EE#',
+    '####################',
+  ],
+};
+
+// Comme `MAP_WORMHOLE`, mais le mur (colonne 10) est plein : le bout `A` et tout
+// le côté est sont une poche que seul le trou de ver relie au portail.
+// Coordonnées utiles : S=(1..2,1..2) a=(8..9,4..5) A=(11..12,4..5)
+export const MAP_WORMHOLE_POCKET: MapDef = {
+  id: 'wormhole-pocket',
+  name: 'Trou de Ver et Poche',
+  width: 20,
+  height: 12,
+  rows: [
+    '####################',
+    '#SS.......#........#',
+    '#SS.......#........#',
+    '#.........#........#',
+    '#.......aa#AA....11#',
+    '#.......aa#AA....11#',
+    '#.........#........#',
+    '#.........#........#',
+    '#.........#........#',
+    '#.........#......EE#',
+    '#.........#......EE#',
+    '####################',
+  ],
+};
+
+// Le bout `A` est dans une alcôve de roc (colonnes 12-13, lignes 1-2) dont seul le
+// côté sud est libre : une tour en (12, 3) en ferme les deux cases. Le trajet à pied
+// reste ouvert par le bas du mur (lignes 9-10).
+// Coordonnées utiles : S=(1..2,1..2) a=(8..9,4..5) A=(12..13,1..2) pierre1=(17..18,4..5) E=(17..18,9..10)
+export const MAP_WORMHOLE_NOOK: MapDef = {
+  id: 'wormhole-nook',
+  name: 'Trou de Ver en Alcôve',
+  width: 20,
+  height: 12,
+  rows: [
+    '####################',
+    '#SS.......##AA#....#',
+    '#SS.......##AA#....#',
+    '#.........#........#',
+    '#.......aa#......11#',
+    '#.......aa#......11#',
+    '#.........#........#',
+    '#.........#........#',
+    '#.........#........#',
+    '#................EE#',
+    '#................EE#',
+    '####################',
+  ],
+};
+
+// Le bout `A` est dans une poche de roc (colonnes 12-15, lignes 1-5) ouverte au sud
+// sur 4 cases : deux tours, en (12, 5) puis (14, 5), la ferment sans fermer le trajet.
+// Coordonnées utiles : S=(1..2,1..2) a=(8..9,4..5) A=(12..13,1..2) pierre1=(17..18,4..5) E=(17..18,9..10)
+export const MAP_WORMHOLE_RING: MapDef = {
+  id: 'wormhole-ring',
+  name: 'Trou de Ver en Poche',
+  width: 20,
+  height: 12,
+  rows: [
+    '####################',
+    '#SS.......##AA..#..#',
+    '#SS.......##AA..#..#',
+    '#.........##....#..#',
+    '#.......aa##....#11#',
+    '#.......aa##....#11#',
+    '#.........#........#',
+    '#.........#........#',
+    '#.........#........#',
+    '#................EE#',
+    '#................EE#',
+    '####################',
+  ],
+};
+
+// Le bout `A` est dans une salle de roc close (colonnes 11-14, lignes 1-6) sans aucun
+// repère : portail, pierre et porte sont tous ailleurs. Seul le trou de ver y mène.
+// Coordonnées utiles : S=(1..2,1..2) a=(8..9,4..5) A=(11..12,1..2) pierre1=(17..18,1..2) E=(17..18,9..10)
+export const MAP_WORMHOLE_ISLAND: MapDef = {
+  id: 'wormhole-island',
+  name: 'Trou de Ver en Salle Close',
+  width: 20,
+  height: 12,
+  rows: [
+    '####################',
+    '#SS.......#AA..#.11#',
+    '#SS.......#AA..#.11#',
+    '#.........#....#...#',
+    '#.......aa#....#...#',
+    '#.......aa#....#...#',
+    '#.........#....#...#',
+    '#.........######...#',
+    '#.........#........#',
+    '#.........#......EE#',
+    '#.........#......EE#',
+    '####################',
   ],
 };

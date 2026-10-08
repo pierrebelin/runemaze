@@ -58,6 +58,18 @@ function moveGround(world: World, c: Creep, budget: number): void {
         if (!advanceLeg(world, c)) return;
         continue;
       }
+      if (g.kind[cell] === 'wormhole') {
+        // Passage instantané (coût 0) : on réapparaît à l'autre bout et on vise son repère de sortie.
+        const arrive = field.next[cell];
+        const out = field.exit[arrive];
+        if (arrive < 0 || out < 0) return;
+        c.x = g.cx(arrive) + 0.5;
+        c.y = g.cy(arrive) + 0.5;
+        c.heading = undefined;
+        c.tx = g.cx(out);
+        c.ty = g.cy(out);
+        continue;
+      }
       const nxt = field.next[cell];
       if (nxt < 0) return; // Aucun chemin : impossible en jeu normal (constructions validées).
       if (c.heading && realigns(c.heading, { x: g.cx(nxt) - c.tx, y: g.cy(nxt) - c.ty })) c.heading = undefined;

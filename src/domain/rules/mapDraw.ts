@@ -18,8 +18,8 @@ function drawSpot(rng: Rng, recipe: MapRecipe, placed: Spot[]): Spot {
   }
 }
 
-/** Une disposition : repères (portail, pierres, porte dans l'ordre de `placed`) puis rochers, sans garantie de passage. */
-function drawRows(rng: Rng, recipe: MapRecipe, biome: Biome, stones: number): { rows: string[]; placed: Spot[] } {
+/** Une disposition : repères (portail, pierres, porte dans l'ordre de `placed`) puis, selon la recette du biome, rochers, glace, trous de ver (`ends`) et cristaux, sans garantie de passage. */
+function drawRows(rng: Rng, recipe: MapRecipe, biome: Biome, stones: number, wormholes: number): { rows: string[]; placed: Spot[]; ends: Spot[][] } {
   const { width, height, landmark } = recipe;
   const grid: string[][] = Array.from({ length: height }, (_, y) =>
     Array.from({ length: width }, (_, x) => (x === 0 || y === 0 || x === width - 1 || y === height - 1 ? '#' : '.')),
@@ -94,18 +94,56 @@ function drawRows(rng: Rng, recipe: MapRecipe, biome: Biome, stones: number): { 
     }
   }
 
-  return { rows: grid.map((r) => r.join('')), placed };
+  const ends: Spot[][] = [];
+  const wormholesRecipe = recipe.biomes[biome].wormholes;
+  if (wormholesRecipe) {
+    // Bout de 2 × 2 : coin haut-gauche tiré par rejet tant qu'une des 4 cases n'est pas admise.
+    const drawEnd = (far?: Spot): Spot => {
+      for (;;) {
+        const e = { x: 1 + rng.int(width - 2), y: 1 + rng.int(height - 2) };
+        const fits = [0, 1].every((dy) => [0, 1].every((dx) => admissible(e.x + dx, e.y + dy, [])));
+        if (fits && (!far || Math.hypot(far.x - e.x, far.y - e.y) >= wormholesRecipe.gap)) return e;
+      }
+    };
+    for (let i = 0; i < wormholes; i++) {
+      const pair = [drawEnd()];
+      pair.push(drawEnd(pair[0]));
+      ends.push(pair);
+      pair.forEach((e, k) => {
+        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) grid[e.y + dy][e.x + dx] = 'aAbB'[i * 2 + k];
+      });
+    }
+  }
+
+  const crystalsRecipe = recipe.biomes[biome].crystals;
+  if (crystalsRecipe) {
+    const count = crystalsRecipe.count.min + rng.int(crystalsRecipe.count.max - crystalsRecipe.count.min + 1);
+    const crystals: Spot[] = [];
+    while (crystals.length < count) {
+      const c = { x: 1 + rng.int(width - 2), y: 1 + rng.int(height - 2) };
+      const m = recipe.landmarkMargin;
+      const nearEnd = ends.some((pair) => pair.some((e) => c.x >= e.x - m && c.x <= e.x + 1 + m && c.y >= e.y - m && c.y <= e.y + 1 + m));
+      if (!admissible(c.x, c.y, []) || nearEnd || crystals.some((o) => Math.hypot(o.x - c.x, o.y - c.y) < crystalsRecipe.gap)) continue;
+      crystals.push(c);
+      grid[c.y][c.x] = '+';
+    }
+  }
+
+  return { rows: grid.map((r) => r.join('')), placed, ends };
 }
 
-/** Nombre de pierres tiré une fois (sinon le filtre des tronçons favorise 2 pierres), puis on recommence jusqu'à ce que chaque tronçon et le total respectent la recette. */
+/** Nombre de pierres tiré une fois (sinon le filtre des tronçons favorise 2 pierres), puis on recommence jusqu'à ce que chaque tronçon et le total respectent la recette. Les rejets sans FlowField reposent sur `shortcutLegs`, borne basse valide même avec des trous de ver. */
 export function drawMap(seed: number, biome: Biome, recipe: MapRecipe): MapDef {
   const rng = new Rng(seed);
   const stones = 1 + rng.int(2);
+  const wormholesRecipe = recipe.biomes[biome].wormholes;
+  // Tiré une fois, comme les pierres : sinon le rejet des cartes à 2 trous de ver fausse la répartition.
+  const wormholes = wormholesRecipe ? wormholesRecipe.count.min + rng.int(wormholesRecipe.count.max - wormholesRecipe.count.min + 1) : 0;
   for (;;) {
-    const { rows, placed } = drawRows(rng, recipe, biome, stones);
+    const { rows, placed, ends } = drawRows(rng, recipe, biome, stones, wormholes);
     // Écarte sans FlowField les dispositions dont le trajet en ligne libre est déjà trop court (un rocher ne rallonge jamais assez un tronçon pour le sauver) ou trop long.
-    const straight = straightLegs(placed, recipe.landmark);
-    if (straight.some((l) => l < recipe.minLeg) || straight.reduce((a, b) => a + b, 0) > recipe.route.max) continue;
+    const bound = shortcutLegs(placed, recipe.landmark, ends);
+    if (bound.some((l) => l < recipe.minLeg) || bound.reduce((x, y) => x + y, 0) > recipe.route.max) continue;
     const map: MapDef = {
       id: `tirage-${seed}`,
       name: 'Carte tirée',
@@ -118,19 +156,6 @@ export function drawMap(seed: number, biome: Biome, recipe: MapRecipe): MapDef {
     const total = legs.reduce((a, b) => a + b, 0);
     if (legs.every((l) => l >= recipe.minLeg) && total >= recipe.route.min && total <= recipe.route.max) return map;
   }
-}
-
-/** Distance à vol d'oiseau (8 directions) de chaque tronçon : de la case centrale du portail à la 1re pierre, puis entre cases les plus proches des repères suivants. */
-function straightLegs(placed: Spot[], size: number): number[] {
-  const octile = (dx: number, dy: number) => Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
-  const gap = (a: number, b: number) => Math.max(0, b - (a + size - 1), a - (b + size - 1));
-  return placed.slice(1).map((b, k) => {
-    const a = placed[k];
-    if (k > 0) return octile(gap(a.x, b.x), gap(a.y, b.y));
-    const cx = a.x + 1;
-    const cy = a.y + 1;
-    return octile(Math.max(0, b.x - cx, cx - (b.x + size - 1)), Math.max(0, b.y - cy, cy - (b.y + size - 1)));
-  });
 }
 
 /** Longueur de chaque tronçon (portail → pierres → porte) sur la carte sans construction ; Infinity si fermé. S'arrête au premier tronçon fermé ou < `minLeg` : la liste est alors tronquée. */
@@ -148,4 +173,30 @@ export function emptyLegs(map: MapDef, minLeg = 0): number[] {
     from = cells;
   }
   return legs;
+}
+
+/**
+ * Borne basse de chaque tronçon quand on peut emprunter les trous de ver (bouts 2 × 2, passage gratuit d'un bout à l'autre) : plus court chemin à vol d'oiseau entre les boîtes.
+ * Écarte sans FlowField les dispositions dont un trou de ver ramène un tronçon sous `minLeg`.
+ */
+function shortcutLegs(placed: Spot[], size: number, ends: Spot[][]): number[] {
+  type Box = { x0: number; y0: number; x1: number; y1: number };
+  const box = (s: Spot, n: number): Box => ({ x0: s.x, y0: s.y, x1: s.x + n - 1, y1: s.y + n - 1 });
+  const dist = (a: Box, b: Box) => {
+    const dx = Math.max(0, b.x0 - a.x1, a.x0 - b.x1);
+    const dy = Math.max(0, b.y0 - a.y1, a.y0 - b.y1);
+    return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
+  };
+  const holes = ends.map((pair) => pair.map((e) => box(e, 2)));
+  return placed.slice(1).map((b, k) => {
+    const a = placed[k];
+    const from = k === 0 ? box({ x: a.x + 1, y: a.y + 1 }, 1) : box(a, size);
+    const to = box(b, size);
+    const nodes = [from, to, ...holes.flat()];
+    const d = nodes.map((u) => nodes.map((v) => dist(u, v)));
+    for (let i = 0; i < holes.length; i++) d[2 + 2 * i][3 + 2 * i] = d[3 + 2 * i][2 + 2 * i] = 0;
+    for (let m = 0; m < nodes.length; m++)
+      for (let i = 0; i < nodes.length; i++) for (let j = 0; j < nodes.length; j++) d[i][j] = Math.min(d[i][j], d[i][m] + d[m][j]);
+    return d[0][1];
+  });
 }

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { snapshot, restore } from '../../../src/domain/model/snapshot';
-import { MAP_CROSSING } from '../../support/maps';
+import { MAP_CRYSTAL, MAP_CROSSING } from '../../support/maps';
 import { World } from '../../../src/domain/model/World';
 import { launchWave, spawnCreep } from '../../../src/domain/systems/waves';
+import { applyDamage } from '../../../src/domain/systems/combat';
 import { buildTowerChain, newDuelWorld, newWorld, run, spawnDummy } from '../../support/helpers';
 import { CommandType } from '../../../src/domain/model/types';
 
@@ -345,6 +346,68 @@ describe('snapshot', () => {
     expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
   });
 
+  it('[RM-14] garde les cadavres quand la partie est restaurée', () => {
+    const w = newWorld();
+    const c = spawnDummy(w, 5, 5);
+    applyDamage(w, c, 1e7, 'normal', 0, true);
+    expect(w.corpses).toHaveLength(1);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+    const direct = restore(snapshot(w));
+
+    expect(restored.corpses).toEqual(w.corpses);
+    expect(direct.corpses).toEqual(w.corpses);
+    expect(direct.corpses[0]).not.toBe(w.corpses[0]);
+  });
+
+  it('[RM-14] garde les cumuls de l\'Autel quand la partie est restaurée', () => {
+    const w = newWorld('normal', 42, undefined, 'necromancers');
+    const built = dispatch(w, { c: CommandType.Build, def: 'altar', x: 10, y: 8 }) as { ok: true; id: number };
+    const t = w.towerById.get(built.id)!;
+    launchWave(w);
+    applyDamage(w, spawnDummy(w, t.cx + 1, t.cy), 1e7, 'normal', 0, true);
+    run(w, 0.1);
+    expect(t.offerings).toHaveLength(1);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+    const direct = restore(snapshot(w));
+
+    expect(restored.towerById.get(t.id)!.offerings).toEqual(t.offerings);
+    expect(direct.towerById.get(t.id)!.offerings).toEqual(t.offerings);
+    expect(direct.towerById.get(t.id)!.offerings).not.toBe(t.offerings);
+  });
+
+  it('[RM-14] garde les squelettes quand la partie est restaurée', () => {
+    const w = newWorld('normal', 42, undefined, 'necromancers');
+    w.gold = 100000;
+    const built = dispatch(w, { c: CommandType.Build, def: 'ossuary', x: 10, y: 8 }) as { ok: true; id: number };
+    dispatch(w, { c: CommandType.Upgrade, tower: built.id, def: 'charnel' });
+    const t = w.towerById.get(built.id)!;
+    launchWave(w);
+    applyDamage(w, spawnDummy(w, t.cx + 1, t.cy), 1e7, 'normal', 0, true);
+    applyDamage(w, spawnDummy(w, t.cx + 3, t.cy), 1e7, 'normal', 0, true);
+    run(w, 2);
+    expect(w.skeletons).toHaveLength(1);
+    expect(t.raiseTimer).toBeGreaterThan(0);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+    const direct = restore(snapshot(w));
+
+    expect(restored.skeletons).toEqual(w.skeletons);
+    expect(direct.skeletons).toEqual(w.skeletons);
+    expect(direct.skeletons[0]).not.toBe(w.skeletons[0]);
+    expect(restored.towerById.get(t.id)!.raiseTimer).toBe(t.raiseTimer);
+
+    // La relève suivante tombe au même tick des deux côtés.
+    run(w, 2.5);
+    run(restored, 2.5);
+
+    expect(w.skeletons).toHaveLength(2);
+    expect(restored.skeletons).toEqual(w.skeletons);
+    expect(restored.towerById.get(t.id)!.raiseTimer).toBe(t.raiseTimer);
+    expect(JSON.stringify(snapshot(restored))).toBe(JSON.stringify(snapshot(w)));
+  });
+
   it('garde le cap retenu d’une créature, sans partager l’objet', () => {
     const w = newWorld('normal', 42);
     const c = spawnCreep(w, 'rat', 0);
@@ -354,5 +417,17 @@ describe('snapshot', () => {
 
     expect(restored.creeps[0].heading).toEqual({ x: 1, y: 0 });
     expect(restored.creeps[0].heading).not.toBe(c.heading);
+  });
+
+  it('[RM-05] garde le bonus de cristal quand la partie est figée puis restaurée', () => {
+    const w = newWorld('normal', 42, MAP_CRYSTAL);
+    const built = dispatch(w, { c: CommandType.Build, def: 'archer', x: 5, y: 3 }) as { ok: true; id: number };
+    expect(w.towerById.get(built.id)!.rangeBonus).toBe(0.2);
+
+    const restored = restore(JSON.parse(JSON.stringify(snapshot(w))));
+    const direct = restore(snapshot(w));
+
+    expect(restored.towerById.get(built.id)!.rangeBonus).toBe(0.2);
+    expect(direct.towerById.get(built.id)!.rangeBonus).toBe(0.2);
   });
 });

@@ -1,7 +1,7 @@
 import type { CellKind, MapDef } from './types';
 
 const KIND: Record<string, CellKind> = {
-  '.': 'build', '#': 'rock', S: 'spawn', E: 'exit', '~': 'road', '*': 'ice',
+  '.': 'build', '#': 'rock', S: 'spawn', E: 'exit', '~': 'road', '*': 'ice', '+': 'crystal', a: 'wormhole', A: 'wormhole', b: 'wormhole', B: 'wormhole',
   '1': 'checkpoint', '2': 'checkpoint', '3': 'checkpoint', '4': 'checkpoint', '5': 'checkpoint',
   '6': 'checkpoint', '7': 'checkpoint', '8': 'checkpoint', '9': 'checkpoint',
 };
@@ -17,6 +17,9 @@ export class Grid {
   /** Cases des pierres runiques, indexées par ordre (`checkpoints[0]` = pierre 1). */
   readonly checkpoints: number[][] = [];
   readonly exitCells: number[] = [];
+  /** Cases de chaque bout, par paire de trous de ver (`a`/`A` puis `b`/`B`). */
+  readonly wormholes: [number[], number[]][] = [];
+  private readonly partners = new Map<number, number[]>();
 
   constructor(map: MapDef) {
     this.w = map.width;
@@ -37,8 +40,16 @@ export class Grid {
           (this.checkpoints[n] ??= []).push(i);
         }
         if (k === 'exit') this.exitCells.push(i);
+        if (k === 'wormhole') {
+          const o = 'aAbB'.indexOf(ch);
+          (this.wormholes[o >> 1] ??= [[], []])[o & 1].push(i);
+        }
       });
     });
+    for (const [a, b] of this.wormholes) {
+      for (const i of a) this.partners.set(i, b);
+      for (const i of b) this.partners.set(i, a);
+    }
   }
 
   idx(x: number, y: number): number {
@@ -54,10 +65,14 @@ export class Grid {
     return x >= 0 && y >= 0 && x < this.w && y < this.h;
   }
   walkable(i: number): boolean {
-    return this.kind[i] !== 'rock' && this.tower[i] === 0;
+    return this.kind[i] !== 'rock' && this.kind[i] !== 'wormhole' && this.tower[i] === 0;
+  }
+  /** Cases de l'autre bout du trou de ver auquel appartient la case `i`. */
+  partner(i: number): number[] | undefined {
+    return this.partners.get(i);
   }
   buildable(i: number): boolean {
-    return this.kind[i] === 'build' && this.tower[i] === 0;
+    return (this.kind[i] === 'build' || this.kind[i] === 'crystal') && this.tower[i] === 0;
   }
   /** Cases couvertes par une tour dont le coin haut-gauche est (x, y). */
   footprint(x: number, y: number): number[] {

@@ -7,7 +7,7 @@ export const BUILDERS: Record<string, BuilderDef> = {
     style: 'corps à corps et auras, au cœur du labyrinthe',
     weakness: 'peu de zone à distance',
     roots: ['archer', 'guard'],
-    hybrids: ['ballista', 'frostarrow'],
+    hybrids: ['ballista', 'darkarrows'],
   },
   forge: {
     id: 'forge',
@@ -15,7 +15,7 @@ export const BUILDERS: Record<string, BuilderDef> = {
     style: 'siège, zone, auras de vitesse',
     weakness: 'contre les chefs',
     roots: ['cannon', 'anvil'],
-    hybrids: ['cryoshell', 'teslacannon'],
+    hybrids: ['cryoshell', 'firebomb'],
   },
   sylve: {
     id: 'sylve',
@@ -23,7 +23,7 @@ export const BUILDERS: Record<string, BuilderDef> = {
     style: 'poison, épines, ralentissement',
     weakness: 'peu de dégâts directs',
     roots: ['venom', 'bramble'],
-    hybrids: ['stinger', 'plagueshell'],
+    hybrids: ['stinger', 'naphtha'],
   },
   pyromancers: {
     id: 'pyromancers',
@@ -32,6 +32,23 @@ export const BUILDERS: Record<string, BuilderDef> = {
     weakness: 'volants et créatures rapides',
     roots: ['brazier', 'hearth'],
     hybrids: ['steam', 'plasma'],
+  },
+  necromancers: {
+    id: 'necromancers',
+    name: 'Nécromanciens',
+    style: 'chaos qui ignore les armures, poison et lenteur',
+    weakness: 'dégâts modestes par coup',
+    roots: ['ossuary', 'altar'],
+    hybrids: ['blackplague', 'lich'],
+  },
+  guild: {
+    id: 'guild',
+    name: 'Guilde marchande',
+    style: 'or, primes, revenu',
+    weakness: 'défense médiocre',
+    roots: ['crossbow', 'counter'],
+    hybrids: ['bountyhunter', 'coincannon'],
+    gleanerCost: 40,
   },
   sanctuary: {
     id: 'sanctuary',

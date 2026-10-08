@@ -104,4 +104,33 @@ describe('embers', () => {
     expect(c.alive).toBe(false);
     expect(w.stats.towers.get(t.id)!.kills).toBe(1);
   });
+
+  it('[RM-02] l\'Obus incendiaire laisse une seule flaque à l\'impact, même quand son éclat touche plusieurs créatures', () => {
+    const w = newWorld('normal', 42, undefined, 'forge');
+    const t = buildTowerChain(w, ['cannon', 'mortar', 'firebomb']);
+    const a = spawnDummy(w, t.cx + 3, t.cy);
+    spawnDummy(w, t.cx + 3.8, t.cy);
+
+    for (let i = 0; i < 300 && w.embers.length === 0; i++) w.step();
+
+    expect(w.embers).toHaveLength(1);
+    expect(w.embers[0]).toMatchObject({ towerId: t.id, radius: 1.5, dps: 15 });
+    expect(Math.abs(w.embers[0].x - a.x)).toBeLessThan(1);
+    expect(w.embers[0].expires - w.tick).toBeLessThanOrEqual(3 * 60);
+  });
+
+  it('[RM-02] le Naphte empoisonne les créatures de son éclat et laisse une flaque', () => {
+    const w = newWorld('normal', 42, undefined, 'sylve');
+    const t = buildTowerChain(w, ['venom', 'plague', 'naphtha']);
+    const a = spawnDummy(w, t.cx + 3, t.cy);
+    const b = spawnDummy(w, t.cx + 3.8, t.cy);
+    const far = spawnDummy(w, t.cx + 3, t.cy + 4);
+
+    for (let i = 0; i < 300 && w.embers.length === 0; i++) w.step();
+
+    expect(w.embers).toHaveLength(1);
+    expect(w.embers[0]).toMatchObject({ towerId: t.id, radius: 1.5, dps: 8 });
+    for (const c of [a, b]) expect(c.poisons.map((p) => p.dps)).toContain(14);
+    expect(far.poisons).toHaveLength(0);
+  });
 });

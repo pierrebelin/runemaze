@@ -94,10 +94,13 @@ const FROST = FAMILY_COLOR.frost;
 const STORM = FAMILY_COLOR.storm;
 const VENOM = FAMILY_COLOR.venom;
 const FIRE = FAMILY_COLOR.fire;
+const CHAOS = FAMILY_COLOR.chaos;
+const GOLD = FAMILY_COLOR.gold;
 const IRON = '#1d1d20';
 const COPPER = '#c07a3a';
 const RUST = '#b5562a';
 const ACID = '#c9d94a';
+const STEEL_BLADE = '#aab3bd';
 
 function disc(ctx: Ctx, x: number, y: number, r: number, color: string): void {
   circle(ctx, x, y, r);
@@ -128,6 +131,13 @@ function line(ctx: Ctx, color: string, width: number, pts: number[]): void {
 
 function pulse(p: Pose, speed: number): number {
   return 0.5 + 0.5 * Math.sin(p.time * speed + p.cx);
+}
+
+/** Crâne vu de dessus : os clair, orbites sombres. */
+function skull(p: Pose, x: number, y: number, r: number): void {
+  disc(p.ctx, x, y, r, BONE);
+  disc(p.ctx, x - r * 0.4, y - r * 0.1, r * 0.25, IRON);
+  disc(p.ctx, x + r * 0.4, y - r * 0.1, r * 0.25, IRON);
 }
 
 /** Dessine dans le repère de la visée : x vers la cible. */
@@ -337,6 +347,114 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
     }
   },
 
+  // Guilde marchande
+  crossbow: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.5, GOLD.dark);
+    disc(p.ctx, p.cx, p.top, 0.4, ARCHER.dark);
+    aimed(p, (ctx) => {
+      line(ctx, GOLD.main, 0.08, [0.2, -0.38, 0.3, 0, 0.2, 0.38]);
+      line(ctx, '#3a2614', 0.09, [-0.15, 0, 0.7, 0]);
+      poly(ctx, IRON, [0.68, -0.08, 0.86, 0, 0.68, 0.08]);
+    });
+  },
+  taxman: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.52, GOLD.dark);
+    disc(p.ctx, p.cx, p.top, 0.42, ARCHER.dark);
+    aimed(p, (ctx) => {
+      line(ctx, GOLD.main, 0.1, [0.22, -0.46, 0.34, 0, 0.22, 0.46]);
+      line(ctx, '#3a2614', 0.1, [-0.2, 0, 0.8, 0]);
+      poly(ctx, IRON, [0.78, -0.1, 0.98, 0, 0.78, 0.1]);
+    });
+    disc(p.ctx, p.cx - 0.3, p.top + 0.3, 0.12, GOLD.glow);
+  },
+  collector: (p) => {
+    aura(p, '217, 169, 58', 0.88);
+    disc(p.ctx, p.cx, p.top, 0.58, GOLD.dark);
+    disc(p.ctx, p.cx, p.top, 0.48, ARCHER.dark);
+    aimed(p, (ctx) => {
+      line(ctx, GOLD.glow, 0.12, [0.25, -0.54, 0.38, 0, 0.25, 0.54]);
+      line(ctx, '#3a2614', 0.12, [-0.25, 0, 0.9, 0]);
+      poly(ctx, IRON, [0.88, -0.12, 1.1, 0, 0.88, 0.12]);
+    });
+    for (const [x, y] of [[-0.32, 0.32], [-0.18, 0.4], [-0.44, 0.18]]) disc(p.ctx, p.cx + x, p.top + y, 0.1, GOLD.glow);
+  },
+  mercenary: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.5, IRON);
+    disc(p.ctx, p.cx, p.top, 0.4, GOLD.dark);
+    aimed(p, (ctx) => {
+      poly(ctx, STEEL_BLADE, [0.05, -0.12, 0.9, 0, 0.05, 0.12]);
+      line(ctx, GOLD.main, 0.08, [0.05, -0.24, 0.05, 0.24]);
+    });
+  },
+  captain: (p) => {
+    aura(p, '217, 169, 58', 0.88);
+    disc(p.ctx, p.cx, p.top, 0.56, IRON);
+    disc(p.ctx, p.cx, p.top, 0.46, GOLD.dark);
+    aimed(p, (ctx) => {
+      poly(ctx, STEEL_BLADE, [0.05, -0.16, 1.05, 0, 0.05, 0.16]);
+      line(ctx, GOLD.glow, 0.1, [0.05, -0.32, 0.05, 0.32]);
+    });
+    poly(p.ctx, GOLD.main, [p.cx - 0.3, p.top - 0.3, p.cx - 0.15, p.top - 0.45, p.cx, p.top - 0.3, p.cx + 0.15, p.top - 0.45, p.cx + 0.3, p.top - 0.3]);
+  },
+  counter: (p) => {
+    p.ctx.fillStyle = ARCHER.dark;
+    roundRect(p.ctx, p.cx - 0.55, p.top - 0.3, 1.1, 0.8, 0.08);
+    p.ctx.fill();
+    p.ctx.fillStyle = GOLD.dark;
+    roundRect(p.ctx, p.cx - 0.5, p.top - 0.34, 1, 0.3, 0.06);
+    p.ctx.fill();
+    disc(p.ctx, p.cx - 0.2, p.top + 0.2, 0.12, GOLD.main);
+    disc(p.ctx, p.cx + 0.15, p.top + 0.2, 0.12, GOLD.glow);
+  },
+  bank: (p) => {
+    aura(p, '217, 169, 58', 0.88);
+    p.ctx.fillStyle = GOLD.dark;
+    roundRect(p.ctx, p.cx - 0.6, p.top - 0.1, 1.2, 0.65, 0.06);
+    p.ctx.fill();
+    poly(p.ctx, GOLD.main, [p.cx - 0.7, p.top - 0.1, p.cx, p.top - 0.6, p.cx + 0.7, p.top - 0.1]);
+    for (const x of [-0.4, -0.13, 0.13, 0.4]) line(p.ctx, GOLD.glow, 0.08, [p.cx + x, p.top, p.cx + x, p.top + 0.45]);
+  },
+  caravan: (p) => {
+    p.ctx.fillStyle = ARCHER.dark;
+    roundRect(p.ctx, p.cx - 0.6, p.top - 0.3, 1.2, 0.6, 0.1);
+    p.ctx.fill();
+    p.ctx.beginPath();
+    p.ctx.ellipse(p.cx, p.top - 0.3, 0.6, 0.3, 0, Math.PI, 0);
+    p.ctx.fillStyle = PAL.parchment;
+    p.ctx.fill();
+    for (const x of [-0.4, 0.4]) {
+      disc(p.ctx, p.cx + x, p.top + 0.36, 0.18, IRON);
+      disc(p.ctx, p.cx + x, p.top + 0.36, 0.08, GOLD.main);
+    }
+    bows(p, 1, 0, GOLD.glow, 0.2);
+  },
+  bountyhunter: (p) => {
+    deck(p, 0.52, GOLD.dark);
+    bows(p, 1, 0, GOLD.glow, 0.3);
+    aimed(p, (ctx) => line(ctx, GOLD.main, 0.06, [0.4, -0.2, 0.95, 0, 0.4, 0.2]));
+    roof(p, GOLD.dark, 0.46, 0.34, GOLD.glow);
+  },
+  hitman: (p) => {
+    aura(p, '217, 169, 58', 0.82);
+    deck(p, 0.56, GOLD.dark);
+    bows(p, 2, 0.8, GOLD.glow, 0.28);
+    roof(p, IRON, 0.5, 0.38, GOLD.glow);
+    skull(p, p.cx, p.top - 0.18, 0.1);
+  },
+  coincannon: (p) => {
+    turret(p, GOLD.dark);
+    barrel(p, 0.72, 0.26, IRON, GOLD.main);
+    disc(p.ctx, p.cx - Math.cos(p.aim) * 0.3, p.top - Math.sin(p.aim) * 0.3, 0.14, GOLD.main);
+    hub(p, GOLD.glow);
+  },
+  goldbombard: (p) => {
+    aura(p, '217, 169, 58', 0.88);
+    turret(p, GOLD.dark, 0.52);
+    barrel(p, 0.86, 0.32, IRON, GOLD.glow);
+    for (const s of [-1, 1]) disc(p.ctx, p.cx - Math.cos(p.aim) * 0.3 - Math.sin(p.aim) * s * 0.3, p.top - Math.sin(p.aim) * 0.3 + Math.cos(p.aim) * s * 0.3, 0.14, GOLD.main);
+    hub(p, GOLD.glow);
+  },
+
   // Pyromanciens
   brazier: (p) => {
     disc(p.ctx, p.cx, p.top + 0.1, 0.46, '#2d2a24');
@@ -406,6 +524,102 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
   solararc: (p) => {
     aura(p, '224, 97, 42', 0.9);
     orb(p, '#fff1c8', 'rgba(224, 97, 42, A)', STORM.glow, 2, 0.5);
+  },
+
+  // Nécromanciens
+  ossuary: (p) => {
+    disc(p.ctx, p.cx, p.top + 0.1, 0.46, CHAOS.dark);
+    line(p.ctx, BONE, 0.08, [p.cx - 0.34, p.top + 0.3, p.cx + 0.34, p.top - 0.1]);
+    line(p.ctx, BONE, 0.08, [p.cx + 0.34, p.top + 0.3, p.cx - 0.34, p.top - 0.1]);
+    skull(p, p.cx, p.top - 0.1, 0.2);
+  },
+  crypt: (p) => {
+    p.ctx.fillStyle = CHAOS.dark;
+    roundRect(p.ctx, p.cx - 0.5, p.top - 0.4, 1, 0.9, 0.08);
+    p.ctx.fill();
+    poly(p.ctx, IRON, [p.cx - 0.22, p.top + 0.5, p.cx - 0.22, p.top - 0.05, p.cx, p.top - 0.25, p.cx + 0.22, p.top - 0.05, p.cx + 0.22, p.top + 0.5]);
+    skull(p, p.cx, p.top - 0.55, 0.16);
+  },
+  necropolis: (p) => {
+    aura(p, '168, 50, 74', 0.9);
+    p.ctx.fillStyle = CHAOS.dark;
+    roundRect(p.ctx, p.cx - 0.6, p.top - 0.3, 1.2, 0.85, 0.08);
+    p.ctx.fill();
+    for (const x of [-0.5, 0, 0.5]) poly(p.ctx, CHAOS.main, [p.cx + x - 0.12, p.top - 0.3, p.cx + x, p.top - 0.85, p.cx + x + 0.12, p.top - 0.3]);
+    poly(p.ctx, IRON, [p.cx - 0.2, p.top + 0.55, p.cx - 0.2, p.top, p.cx, p.top - 0.2, p.cx + 0.2, p.top, p.cx + 0.2, p.top + 0.55]);
+    skull(p, p.cx, p.top - 0.55, 0.15);
+  },
+  charnel: (p) => {
+    disc(p.ctx, p.cx, p.top, 0.52, CHAOS.dark);
+    disc(p.ctx, p.cx, p.top, 0.38, IRON);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      line(p.ctx, BONE, 0.07, [p.cx + Math.cos(a) * 0.3, p.top + Math.sin(a) * 0.3, p.cx + Math.cos(a + 0.5) * 0.52, p.top + Math.sin(a + 0.5) * 0.52]);
+    }
+    bubbles(p, '242, 160, 180', 3, 0.15, 0.5);
+  },
+  legion: (p) => {
+    aura(p, '168, 50, 74', 0.9);
+    disc(p.ctx, p.cx, p.top, 0.58, CHAOS.dark);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      skull(p, p.cx + Math.cos(a) * 0.38, p.top + Math.sin(a) * 0.38, 0.12);
+    }
+    skull(p, p.cx, p.top, 0.2);
+  },
+  altar: (p) => {
+    p.ctx.fillStyle = IRON;
+    roundRect(p.ctx, p.cx - 0.5, p.top - 0.3, 1, 0.7, 0.08);
+    p.ctx.fill();
+    p.ctx.fillStyle = PAL.stoneDark;
+    roundRect(p.ctx, p.cx - 0.42, p.top - 0.24, 0.84, 0.5, 0.06);
+    p.ctx.fill();
+    disc(p.ctx, p.cx, p.top, 0.1 + 0.03 * pulse(p, 3), CHAOS.main);
+  },
+  bloodaltar: (p) => {
+    aura(p, '168, 50, 74', 0.86);
+    p.ctx.fillStyle = IRON;
+    roundRect(p.ctx, p.cx - 0.58, p.top - 0.36, 1.16, 0.8, 0.08);
+    p.ctx.fill();
+    p.ctx.fillStyle = CHAOS.dark;
+    roundRect(p.ctx, p.cx - 0.48, p.top - 0.28, 0.96, 0.6, 0.06);
+    p.ctx.fill();
+    disc(p.ctx, p.cx, p.top, 0.24 + 0.04 * pulse(p, 3), CHAOS.main);
+    drips(p.ctx, p.cx, p.top + 0.3, CHAOS.glow, p.time);
+  },
+  reliquary: (p) => {
+    p.ctx.fillStyle = CHAOS.dark;
+    roundRect(p.ctx, p.cx - 0.46, p.top - 0.3, 0.92, 0.64, 0.08);
+    p.ctx.fill();
+    poly(p.ctx, CHAOS.main, [p.cx - 0.46, p.top - 0.3, p.cx, p.top - 0.62, p.cx + 0.46, p.top - 0.3]);
+    line(p.ctx, PAL.gold, 0.07, [p.cx, p.top - 0.2, p.cx, p.top + 0.26]);
+    line(p.ctx, PAL.gold, 0.07, [p.cx - 0.16, p.top - 0.06, p.cx + 0.16, p.top - 0.06]);
+  },
+  blackplague: (p) => {
+    aura(p, '152, 201, 74', 0.7);
+    skull(p, p.cx, p.top, 0.32);
+    bubbles(p, '152, 201, 74', 4, 0.3, 0.6, p.top - 0.2);
+    drips(p.ctx, p.cx, p.top + 0.4, VENOM.main, p.time);
+  },
+  pandemic: (p) => {
+    aura(p, '152, 201, 74', 0.9);
+    disc(p.ctx, p.cx, p.top, 0.56, CHAOS.dark);
+    skull(p, p.cx, p.top, 0.4);
+    bubbles(p, '152, 201, 74', 6, 0.4, 0.8, p.top - 0.3);
+    drips(p.ctx, p.cx - 0.2, p.top + 0.5, VENOM.main, p.time);
+    drips(p.ctx, p.cx + 0.2, p.top + 0.5, VENOM.main, p.time + 0.3);
+  },
+  lich: (p) => {
+    aura(p, '143, 211, 242', 0.7);
+    skull(p, p.cx, p.top + 0.1, 0.3);
+    crystal(p.ctx, p.cx, p.top - 0.4, 0.3, 0.14, FROST.dark, FROST.main, FROST.glow);
+  },
+  lichking: (p) => {
+    aura(p, '143, 211, 242', 0.9);
+    disc(p.ctx, p.cx, p.top, 0.56, CHAOS.dark);
+    skull(p, p.cx, p.top + 0.1, 0.38);
+    for (const [x, h] of [[-0.3, 0.3], [0, 0.45], [0.3, 0.3]]) crystal(p.ctx, p.cx + x, p.top - 0.45, h, 0.12, FROST.dark, FROST.main, FROST.glow);
+    line(p.ctx, PAL.gold, 0.05, [p.cx - 0.36, p.top - 0.3, p.cx + 0.36, p.top - 0.3]);
   },
 
   // Garde et Ronces
@@ -571,6 +785,18 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
     bows(p, 4, 1.5, FROST.glow, 0.24);
     crystal(p.ctx, p.cx, p.top, 0.62, 0.32, FROST.dark, FROST.main, FROST.glow);
   },
+  darkarrows: (p) => {
+    deck(p, 0.52, CHAOS.dark);
+    bows(p, 2, 0.7, CHAOS.main);
+    roof(p, CHAOS.dark, 0.46, 0.34, CHAOS.main);
+  },
+  doomvolley: (p) => {
+    aura(p, '168, 50, 74', 0.82);
+    deck(p, 0.56, CHAOS.dark);
+    bows(p, 3, 1.2, CHAOS.glow, 0.24);
+    roof(p, CHAOS.dark, 0.5, 0.38, CHAOS.glow);
+    skull(p, p.cx, p.top - 0.18, 0.1);
+  },
   thunderarrow: (p) => {
     deck(p);
     bows(p, 1, 0, STORM.glow);
@@ -724,6 +950,32 @@ export const TOWER_ART: Record<string, (p: Pose) => void> = {
     }
     bowl(p, 0.36, PAL.bronze, '#2a3a14');
     bubbles(p, '214, 245, 154', 4, 0.15, 0.55, p.top + Math.sin(p.aim) * 0.12);
+  },
+
+  firebomb: (p) => {
+    turret(p, '#6a3a24');
+    barrel(p, 0.72, 0.26, IRON, FIRE.main);
+    disc(p.ctx, p.cx - Math.cos(p.aim) * 0.3, p.top - Math.sin(p.aim) * 0.3, 0.14, FIRE.main);
+    hub(p, FIRE.glow);
+  },
+  napalm: (p) => {
+    aura(p, '224, 97, 42', 0.86);
+    turret(p, '#6a3a24', 0.52);
+    barrel(p, 0.86, 0.32, IRON, FIRE.glow);
+    for (const s of [-1, 1]) disc(p.ctx, p.cx - Math.cos(p.aim) * 0.3 - Math.sin(p.aim) * s * 0.3, p.top - Math.sin(p.aim) * 0.3 + Math.cos(p.aim) * s * 0.3, 0.14, FIRE.main);
+    hub(p, FIRE.glow);
+  },
+  naphtha: (p) => {
+    cauldron(p, '#2a3a14');
+    disc(p.ctx, p.cx, p.top, 0.2 + 0.04 * pulse(p, 4), FIRE.main);
+    bubbles(p, '214, 245, 154', 3, 0.2, 0.6, p.top - 0.1);
+  },
+  naphthatide: (p) => {
+    aura(p, '224, 97, 42', 0.86);
+    cauldron(p, '#2a3a14', 0.5);
+    disc(p.ctx, p.cx, p.top, 0.3 + 0.05 * pulse(p, 5), FIRE.main);
+    disc(p.ctx, p.cx, p.top, 0.14, FIRE.glow);
+    bubbles(p, '214, 245, 154', 5, 0.3, 0.8, p.top - 0.1);
   },
 
   // Givre
@@ -950,6 +1202,8 @@ export function drawMapThumbnail(ctx: Ctx, map: MapDef, size: number): void {
     road: pal.dirt,
     checkpoint: PAL.gold,
     ice: PAL.ice,
+    crystal: PAL.ice,
+    wormhole: PAL.ice,
   };
   const grid = new Grid(map);
   const scale = size / Math.max(grid.w, grid.h);

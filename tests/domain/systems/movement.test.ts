@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { updateMovement } from '../../../src/domain/systems/movement';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { newWorld } from '../../support/helpers';
-import { MAP_ICE, MAP_TWO_STONES } from '../../support/maps';
+import { MAP_ICE, MAP_TWO_STONES, MAP_WORMHOLE } from '../../support/maps';
 import { dispatch } from '../../../src/application/dispatch';
 import { CommandType } from '../../../src/domain/model/types';
 
@@ -79,6 +79,66 @@ describe('movement : glace', () => {
       return { x: c.x, y: c.y };
     };
     expect(fly(MAP_ICE)).toEqual(fly(MAP_NO_ICE));
+  });
+});
+
+describe('movement : trou de ver', () => {
+  const DT = 1 / 60;
+  const sansBouts = (map: typeof MAP_WORMHOLE) => ({ ...map, rows: map.rows.map((r) => r.replace(/[aAbB]/g, '#')) });
+
+  /** Rat terrestre posé au centre de la case (8, 4), un des deux carrés du bout `a`, tronçon portail → pierre 1. */
+  const ratOnEntry = () => {
+    const w = newWorld('normal', 42, MAP_WORMHOLE);
+    const c = spawnCreep(w, 'rat', 0);
+    c.leg = 0;
+    c.x = 8.5;
+    c.y = 4.5;
+    c.tx = 8;
+    c.ty = 4;
+    return { w, c };
+  };
+
+  it('[RM-07] fait réapparaître une créature terrestre sur l’autre bout dans le tick où elle entre dans un bout', () => {
+    const { w, c } = ratOnEntry();
+
+    updateMovement(w, DT);
+
+    // Bout `A` : colonnes 11-12. Jamais entre les deux bouts (mur et case `a`, x entre 9 et 11).
+    expect(c.x).toBeGreaterThanOrEqual(11);
+    expect(c.x).toBeLessThan(14);
+  });
+
+  it('[CU-03] fait continuer la créature vers son prochain repère après le passage', () => {
+    const { w, c } = ratOnEntry();
+    const field = w.fields[0];
+    const arrivee = field.next[w.grid.idx(8, 4)];
+    const sortie = field.exit[arrivee];
+
+    updateMovement(w, DT);
+
+    expect([c.tx, c.ty]).toEqual([w.grid.cx(sortie), w.grid.cy(sortie)]);
+    let ticks = 0;
+    while (c.leg === 0 && ticks++ < 60 * 60) updateMovement(w, DT);
+    expect(c.leg).toBe(1);
+  });
+
+  it('[RM-07] fait arriver plus tôt la créature quand le trou de ver raccourcit', () => {
+    const ticksToExit = (map: typeof MAP_WORMHOLE) => {
+      const w = newWorld('normal', 42, map);
+      const c = spawnCreep(w, 'rat', 0);
+      let ticks = 0;
+      while (c.alive && ticks < 60 * 60) {
+        updateMovement(w, DT);
+        ticks++;
+      }
+      return ticks;
+    };
+
+    const avec = ticksToExit(MAP_WORMHOLE);
+    const sans = ticksToExit(sansBouts(MAP_WORMHOLE));
+
+    expect(avec).toBeLessThan(sans);
+    expect(avec).toBeLessThan(60 * 60);
   });
 });
 

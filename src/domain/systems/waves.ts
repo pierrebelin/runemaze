@@ -1,6 +1,7 @@
 import { baseHp, bountyFor, CAMPAIGN_LENGTH, clearBonus, CREEPS, DIFFICULTY, waveAt } from '../catalog/creeps';
 import type { World } from '../model/World';
 import { SEND_GAP, sendDelay } from '../rules/sendTiming';
+import { tradeIncome } from '../rules/trade';
 import { waveReward } from '../rules/waveReward';
 import type { Creep, CreepDef } from '../model/types';
 import { BreakerPhase, GameEventType, Phase } from '../model/types';
@@ -111,12 +112,13 @@ export function updateWaves(world: World, dt: number): void {
     world.pending.delete(wave);
     if (world.phase === Phase.Defeat) continue;
     const { bonus, interest, income } = waveReward(clearBonus(wave), wave, world.gold, world.income, world.duel);
-    world.addGold(bonus + interest + income);
+    const trade = tradeIncome(world.towers);
+    world.addGold(bonus + interest + income + trade);
     // Remparts : vies rendues, jamais au-delà des vies de départ.
     if (world.gate.ramparts > 0) {
       world.lives = Math.min(DIFFICULTY[world.difficulty].lives, world.lives + world.gate.ramparts);
     }
     world.stats.waves[wave].gold = world.gold;
-    world.emit({ t: GameEventType.WaveCleared, wave, bonus, interest, income });
+    world.emit({ t: GameEventType.WaveCleared, wave, bonus, interest, income, trade });
   }
 }

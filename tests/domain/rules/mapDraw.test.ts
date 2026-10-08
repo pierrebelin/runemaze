@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { drawMap, emptyLegs } from '../../../src/domain/rules/mapDraw';
+import { Grid } from '../../../src/domain/model/Grid';
+import { wormholesOpen } from '../../../src/domain/rules/wormhole';
 import { MAP_RECIPE } from '../../../src/domain/catalog/map';
 import { MAP_BENT_STONES, MAP_WALLED } from '../../support/maps';
 import { newWorld } from '../../support/helpers';
@@ -256,15 +258,15 @@ describe('mapDraw', () => {
     }
   });
 
-  it('[RM-02] pose de 3 à 5 plaques de 4 à 8 cases reliées par un côté quand le biome est Neige', () => {
+  it('[RM-02] pose de 5 à 7 plaques de 5 à 9 cases reliées par un côté quand le biome est Neige', () => {
     for (const seed of SEEDS) {
       const patches = iceComponents(drawnMap(seed, 'snow').rows, 8);
 
-      expect(patches.length, `graine ${seed}`).toBeGreaterThanOrEqual(3);
-      expect(patches.length, `graine ${seed}`).toBeLessThanOrEqual(5);
+      expect(patches.length, `graine ${seed}`).toBeGreaterThanOrEqual(5);
+      expect(patches.length, `graine ${seed}`).toBeLessThanOrEqual(7);
       for (const patch of patches) {
-        expect(patch.length, `graine ${seed}`).toBeGreaterThanOrEqual(4);
-        expect(patch.length, `graine ${seed}`).toBeLessThanOrEqual(8);
+        expect(patch.length, `graine ${seed}`).toBeGreaterThanOrEqual(5);
+        expect(patch.length, `graine ${seed}`).toBeLessThanOrEqual(9);
         expect(iceComponents(patchRows(patch), 4), `graine ${seed}`).toHaveLength(1);
       }
     }
@@ -314,12 +316,165 @@ describe('mapDraw', () => {
     }
   });
 
+  it('[RM-04] pose de 4 à 6 cristaux d’une case quand le biome est Espace', () => {
+    for (const seed of SEEDS) {
+      const crystals = cellsOf(drawnMap(seed, 'space').rows, '+');
+
+      expect(crystals.length, `graine ${seed}`).toBeGreaterThanOrEqual(4);
+      expect(crystals.length, `graine ${seed}`).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('[RM-04] écarte chaque cristal d’au moins 2 cases de tout repère et d’au moins 3 cases des autres cristaux', () => {
+    const m = MAP_RECIPE.landmarkMargin;
+    const gap = 3;
+    for (const seed of SEEDS) {
+      const { rows } = drawnMap(seed, 'space');
+      const crystals = cellsOf(rows, '+');
+
+      expect(crystals.length, `graine ${seed}`).toBeGreaterThan(0);
+      for (const cells of landmarks(rows)) {
+        const x0 = Math.min(...cells.map((c) => c.x)) - m;
+        const x1 = Math.max(...cells.map((c) => c.x)) + m;
+        const y0 = Math.min(...cells.map((c) => c.y)) - m;
+        const y1 = Math.max(...cells.map((c) => c.y)) + m;
+
+        expect(crystals.filter((c) => c.x >= x0 && c.x <= x1 && c.y >= y0 && c.y <= y1), `graine ${seed}`).toEqual([]);
+      }
+      for (let i = 0; i < crystals.length; i++) {
+        for (let j = i + 1; j < crystals.length; j++) {
+          const dist = Math.hypot(crystals[i].x - crystals[j].x, crystals[i].y - crystals[j].y);
+          expect(dist, `graine ${seed}`).toBeGreaterThanOrEqual(gap);
+        }
+      }
+    }
+  });
+
+  it('[RM-04] écarte chaque cristal d’au moins 2 cases de tout bout', () => {
+    const m = MAP_RECIPE.landmarkMargin;
+    let ends = 0;
+    for (const seed of SEEDS) {
+      const { rows } = drawnMap(seed, 'space');
+      const crystals = cellsOf(rows, '+');
+
+      expect(crystals.length, `graine ${seed}`).toBeGreaterThan(0);
+      for (const ch of 'aAbB') {
+        const cells = cellsOf(rows, ch);
+        if (cells.length === 0) continue;
+        ends++;
+        const x0 = Math.min(...cells.map((c) => c.x)) - m;
+        const x1 = Math.max(...cells.map((c) => c.x)) + m;
+        const y0 = Math.min(...cells.map((c) => c.y)) - m;
+        const y1 = Math.max(...cells.map((c) => c.y)) + m;
+
+        expect(
+          crystals.filter((c) => c.x >= x0 && c.x <= x1 && c.y >= y0 && c.y <= y1),
+          `graine ${seed}, bout ${ch}`,
+        ).toEqual([]);
+      }
+    }
+
+    expect(ends).toBeGreaterThan(0);
+  });
+
+  // Vert d'office aujourd'hui : garde contre des cristaux qui fuiraient vers Terre ou Neige.
+  it('[RM-04] ne pose aucun cristal quand le biome est Terre ou Neige', () => {
+    for (const seed of SEEDS) {
+      for (const biome of ['earth', 'snow'] as const) {
+        expect(cellsOf(drawnMap(seed, biome).rows, '+'), `graine ${seed}, biome ${biome}`).toEqual([]);
+      }
+    }
+  });
+
   it('[RM-12] rend exactement la même carte Neige quand la graine est la même', () => {
     for (const seed of SEEDS) {
       const first = drawnMap(seed, 'snow');
 
       expect(cellsOf(first.rows, '*').length, `graine ${seed}`).toBeGreaterThan(0);
       expect(drawMap(seed, 'snow', MAP_RECIPE)).toEqual(first);
+    }
+  });
+
+  it('[RM-06] pose 1 ou 2 trous de ver, chaque nombre dans environ la moitié des tirages', () => {
+    let twoWormholes = 0;
+    for (const seed of SEEDS) {
+      const { rows } = drawnMap(seed, 'space');
+      const ends = [...new Set(rows.join('').match(/[aAbB]/g) ?? [])].sort().join('');
+
+      expect(['Aa', 'ABab'], `graine ${seed}`).toContain(ends);
+      if (ends === 'ABab') twoWormholes++;
+    }
+
+    expect(twoWormholes).toBeGreaterThanOrEqual(60);
+    expect(twoWormholes).toBeLessThanOrEqual(140);
+  });
+
+  it('[RM-06] fait chaque bout de 2 × 2 cases, à au moins 2 cases de tout repère', () => {
+    const m = MAP_RECIPE.landmarkMargin;
+    for (const seed of SEEDS) {
+      const { rows } = drawnMap(seed, 'space');
+      let present = 0;
+
+      for (const ch of 'aAbB') {
+        const cells = cellsOf(rows, ch);
+        if (cells.length === 0) continue;
+        present++;
+        const x0 = Math.min(...cells.map((c) => c.x));
+        const y0 = Math.min(...cells.map((c) => c.y));
+
+        expect(cells, `graine ${seed}, bout ${ch}`).toHaveLength(4);
+        expect(
+          cells.every((c) => c.x >= x0 && c.x <= x0 + 1 && c.y >= y0 && c.y <= y0 + 1),
+          `graine ${seed}, bout ${ch}`,
+        ).toBe(true);
+        for (const lm of landmarks(rows)) {
+          const lx0 = Math.min(...lm.map((c) => c.x)) - m;
+          const lx1 = Math.max(...lm.map((c) => c.x)) + m;
+          const ly0 = Math.min(...lm.map((c) => c.y)) - m;
+          const ly1 = Math.max(...lm.map((c) => c.y)) + m;
+
+          expect(
+            cells.filter((c) => c.x >= lx0 && c.x <= lx1 && c.y >= ly0 && c.y <= ly1),
+            `graine ${seed}, bout ${ch}`,
+          ).toEqual([]);
+        }
+      }
+      expect(present, `graine ${seed}`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('[RM-06] écarte les deux bouts d’un trou de ver d’au moins 12 cases de centre à centre', () => {
+    for (const seed of SEEDS) {
+      const { rows } = drawnMap(seed, 'space');
+
+      expect(cellsOf(rows, 'a').length, `graine ${seed}`).toBeGreaterThan(0);
+      for (const [one, other] of [['a', 'A'], ['b', 'B']]) {
+        const first = cellsOf(rows, one);
+        if (first.length === 0) continue;
+        const c1 = centerOf(first);
+        const c2 = centerOf(cellsOf(rows, other));
+
+        expect(Math.hypot(c1.x - c2.x, c1.y - c2.y), `graine ${seed}, trou ${one}`).toBeGreaterThanOrEqual(12);
+      }
+    }
+  });
+
+  // Vert d'office aujourd'hui : garde contre des trous de ver qui fuiraient vers Terre ou Neige.
+  it('[RM-06] ne pose aucun trou de ver quand le biome est Terre ou Neige', () => {
+    for (const seed of SEEDS) {
+      for (const biome of ['earth', 'snow'] as const) {
+        expect(cellsOf(drawnMap(seed, biome).rows, 'aAbB'), `graine ${seed}, biome ${biome}`).toEqual([]);
+      }
+    }
+  });
+
+  it('[RM-12] rend exactement la même carte Espace quand la graine est la même', () => {
+    // Le déterminisme n'a pas besoin des 200 graines, et le tirage Espace est lent.
+    for (const seed of SEEDS.slice(0, 20)) {
+      const first = drawnMap(seed, 'space');
+
+      expect(cellsOf(first.rows, 'a').length, `graine ${seed}`).toBeGreaterThan(0);
+      expect(drawMap(seed, 'space', MAP_RECIPE)).toEqual(first);
     }
   });
 
@@ -347,6 +502,50 @@ describe('mapDraw', () => {
 
       expect(total, `graine ${seed}`).toBeGreaterThanOrEqual(MAP_RECIPE.route.min);
       expect(total, `graine ${seed}`).toBeLessThanOrEqual(MAP_RECIPE.route.max);
+    }
+  });
+
+  /** Tronçons à vide de la carte Espace sans ses trous de ver (bouts remplacés par des rochers). */
+  function legsWithoutWormholes(map: ReturnType<typeof drawMap>): number[] {
+    return emptyLegs({ ...map, rows: map.rows.map((r) => r.replace(/[aAbB]/g, '#')) });
+  }
+
+  /** Vrai si, sur au moins une graine, un trou de ver raccourcit strictement un tronçon. */
+  function someWormholeShortensALeg(): boolean {
+    return SEEDS.some((seed) => {
+      const map = drawnMap(seed, 'space');
+      const without = legsWithoutWormholes(map);
+      return emptyLegs(map).some((leg, i) => leg < without[i]);
+    });
+  }
+
+  // Vert d'office aujourd'hui : garde contre un tirage qui ignorerait les trous de ver (2000 graines essayées, 0 échec).
+  it('[RM-10] garde chaque tronçon d’au moins 14 cases en comptant les trous de ver', () => {
+    expect(someWormholeShortensALeg()).toBe(true);
+    for (const seed of SEEDS) {
+      for (const leg of emptyLegs(drawnMap(seed, 'space'))) {
+        expect(Number.isFinite(leg), `graine ${seed}`).toBe(true);
+        expect(leg, `graine ${seed}`).toBeGreaterThanOrEqual(MAP_RECIPE.minLeg);
+      }
+    }
+  });
+
+  // Vert d'office aujourd'hui : garde contre un tirage qui ignorerait les trous de ver (2000 graines essayées, 0 échec).
+  it('[RM-10] tire un trajet à vide entre 50 et 80 cases en comptant les trous de ver', () => {
+    expect(someWormholeShortensALeg()).toBe(true);
+    for (const seed of SEEDS) {
+      const total = emptyLegs(drawnMap(seed, 'space')).reduce((a, b) => a + b, 0);
+
+      expect(total, `graine ${seed}`).toBeGreaterThanOrEqual(MAP_RECIPE.route.min);
+      expect(total, `graine ${seed}`).toBeLessThanOrEqual(MAP_RECIPE.route.max);
+    }
+  });
+
+  // Vert d'office aujourd'hui : garde contre un tirage qui ignorerait les trous de ver (2000 graines essayées, 0 échec).
+  it('[RM-13] laisse chaque bout accessible à pied depuis le portail sur la carte tirée', () => {
+    expect(someWormholeShortensALeg()).toBe(true);
+    for (const seed of SEEDS) {
+      expect(wormholesOpen(new Grid(drawnMap(seed, 'space')), new Set()), `graine ${seed}`).toBe(true);
     }
   });
 

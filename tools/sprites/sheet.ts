@@ -51,7 +51,7 @@ const UI = {
   accent: '#d9dce1', 'accent-dim': '#8d939c', gold: '#e9b949', text: '#e7e8ea', 'text-dim': '#a8acb3', 'text-faint': '#777c84',
   good: '#8cc464', bad: '#e0664f', frost: '#8fd3f2',
 };
-const FAMILY_LABEL: Record<string, string> = { wall: 'Mur', archer: 'Archer', cannon: 'Canon', frost: 'Givre', storm: 'Foudre', venom: 'Venin' };
+const FAMILY_LABEL: Record<string, string> = { wall: 'Mur', archer: 'Archer', cannon: 'Canon', frost: 'Givre', storm: 'Foudre', venom: 'Venin', fire: 'Feu', chaos: 'Chaos', gold: 'Or' };
 
 function swatches(host: HTMLElement, title: string, entries: [string, string][]): void {
   const g = el('div', 'swgroup');
@@ -279,7 +279,7 @@ function creepTile(c: CreepLike, label: string, meta: string, px = 52, cells = 2
     const d = TOWERS[def];
     const t: Tower = {
       id: world.id(), def: d, x, y, cx: x + 1, cy: y + 1, cooldown: 0.2, targetMode: 'first', spent: d.cost,
-      kills: 0, damage: 0, aim: -Math.PI / 2, ramp: 0, fate: 'standing',
+      kills: 0, damage: 0, aim: -Math.PI / 2, rangeBonus: 0, ramp: 0, offerings: [], fate: 'standing',
     };
     world.towers.push(t);
     world.towerById.set(t.id, t);
@@ -287,8 +287,8 @@ function creepTile(c: CreepLike, label: string, meta: string, px = 52, cells = 2
   };
   const layout: [string, number, number][] = [
     ['volley', 7, 6], ['mortar', 12, 9], ['glacier', 16, 3], ['tempest', 20, 7], ['plague', 24, 4],
-    ['guard', 14, 13], ['greatgong', 20, 12], ['ballista', 26, 15], ['acid', 10, 16], ['flak', 18, 17],
-    ['standard', 28, 8], ['hail', 6, 11], ['pylon', 24, 10], ['briar', 8, 3],
+    ['guard', 14, 13], ['greatgong', 20, 12], ['ballista', 26, 15], ['acid', 10, 16], ['crypt', 18, 17],
+    ['charnel', 28, 8], ['hail', 6, 11], ['pylon', 24, 10], ['taxman', 8, 3],
   ];
   layout.forEach(([d, x, y]) => place(d, x, y));
   world.refreshPaths();

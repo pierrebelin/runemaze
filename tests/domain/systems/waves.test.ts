@@ -3,8 +3,10 @@ import { launchWave, waveDuration, WAVE_GAP } from '../../../src/domain/systems/
 import { applyDamage } from '../../../src/domain/systems/combat';
 import { WAVES, waveAt } from '../../../src/domain/catalog/creeps';
 import type { WaveDef } from '../../../src/domain/model/types';
-import { killAllCreeps, newDuelWorld, newWorld, run } from '../../support/helpers';
-import { GameEventType, Phase } from '../../../src/domain/model/types';
+import { MAP_CROSSING } from '../../support/maps';
+import { buildTowerChain, killAllCreeps, newDuelWorld, newWorld, run } from '../../support/helpers';
+import { dispatch } from '../../../src/application/dispatch';
+import { CommandType, GameEventType, Phase } from '../../../src/domain/model/types';
 
 // Vague de substitution : un seul Limon (se scinde en 2 petits Limons à sa mort).
 const SLIME_WAVE: WaveDef = {
@@ -187,6 +189,60 @@ describe('waves', () => {
 
     expect(sans.lives).toBe(10);
     expect(avec.lives).toBe(12);
+  });
+
+  /** Monde avec `n` Comptoirs bâtis, or fixé à 1000 pour égaliser les intérêts avec un monde témoin. */
+  function withCounters(w: ReturnType<typeof newWorld>, n: number): void {
+    for (let i = 0; i < n; i++) buildTowerChain(w, ['counter'], 10, 8 + 2 * i);
+    expect(w.towers.filter((t) => t.def.id === 'counter')).toHaveLength(n);
+    w.gold = 1000;
+  }
+
+  const waveCleared = (w: ReturnType<typeof newWorld>) =>
+    w.events.filter((e) => e.t === GameEventType.WaveCleared) as unknown as { bonus: number; interest: number; income: number; trade: number }[];
+
+  it('[RM-11] verse 6 or par Comptoir à la fin de la vague, en solo', () => {
+    const avec = newWorld('normal', 42, MAP_CROSSING, 'guild');
+    const sans = newWorld('normal', 42, MAP_CROSSING, 'guild');
+    withCounters(avec, 2);
+    sans.gold = 1000;
+
+    repousseVague(avec);
+    repousseVague(sans);
+
+    expect(waveCleared(avec)[0].trade).toBe(12);
+    expect(waveCleared(sans)[0].trade).toBe(0);
+    expect(avec.gold - sans.gold).toBe(12);
+  });
+
+  it('[RM-11] verse le revenu de comptoir en duel en plus du revenu des envois', () => {
+    const w = newDuelWorld('normal', 42, MAP_CROSSING, 'guild');
+    withCounters(w, 1);
+    w.income = 15;
+    const goldBefore = w.gold;
+
+    repousseVague(w);
+
+    const ev = waveCleared(w)[0];
+    expect(ev.income).toBe(15);
+    expect(ev.trade).toBe(6);
+    expect(w.gold - goldBefore).toBe(ev.bonus + 15 + 6);
+  });
+
+  it('[RM-11] ne verse rien pour un Comptoir vendu avant la fin de la vague', () => {
+    const w = newWorld('normal', 42, MAP_CROSSING, 'guild');
+    withCounters(w, 1);
+    launchWave(w);
+    run(w, 6);
+    dispatch(w, { c: CommandType.Sell, tower: w.towers.find((t) => t.def.id === 'counter')!.id });
+    const goldBefore = w.gold;
+
+    killAllCreeps(w);
+    run(w, 0.05);
+
+    const ev = waveCleared(w)[0];
+    expect(ev.trade).toBe(0);
+    expect(w.gold - goldBefore).toBe(ev.bonus + ev.interest);
   });
 
   it('[RM-02] ne termine pas la vague quand un groupe retardé n’est pas encore apparu', () => {

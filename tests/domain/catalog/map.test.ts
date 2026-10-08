@@ -68,6 +68,22 @@ describe('catalogue des cartes', () => {
     expect(g.buildable(i)).toBe(false);
   });
 
+  it('[RM-04] lit le cristal comme une case constructible et praticable', () => {
+    const map = {
+      id: 'crystal',
+      name: 'Cristal',
+      width: 5,
+      height: 3,
+      rows: ['#####', 'S.+1E', '#####'],
+    };
+    const g = new World({ map, difficulty: 'normal', seed: 1, builder: 'bastion' }).grid;
+    const i = g.idx(2, 1);
+
+    expect(g.kind[i]).toBe('crystal');
+    expect(g.walkable(i)).toBe(true);
+    expect(g.buildable(i)).toBe(true);
+  });
+
   it('[CU-01] propose Terre, Neige et Espace, Terre en premier', () => {
     expect(BIOMES).toEqual(['earth', 'snow', 'space']);
   });
@@ -88,5 +104,23 @@ describe('catalogue des cartes', () => {
     }
     expect(legs).toEqual([0, 1, 2]);
     expect(w.stats.leaked).toBeGreaterThan(0);
+  });
+
+  // Vert d'office aujourd'hui : le passage par trou de ver est déjà livré dans `moveGround` (F3). Garde-fou sur cartes tirées.
+  it('[CU-03] lance une partie Espace dont les créatures atteignent la porte', () => {
+    let shortcuts = 0;
+    for (const seed of SEEDS) {
+      const map = drawMap(seed, 'space', MAP_RECIPE);
+      const closed = { ...map, rows: map.rows.map((r) => r.replace(/[aAbB]/g, '#')) };
+      const w = new World({ map, difficulty: 'normal', seed: 1, builder: 'bastion' });
+      const without = new World({ map: closed, difficulty: 'normal', seed: 1, builder: 'bastion' });
+      if (w.mazeLength() < without.mazeLength()) shortcuts++;
+
+      launchWave(w);
+      for (let i = 0; i < 60 * 60 && w.stats.leaked === 0; i++) w.step();
+
+      expect(w.stats.leaked, `graine ${seed}`).toBeGreaterThan(0);
+    }
+    expect(shortcuts).toBeGreaterThan(0);
   });
 });

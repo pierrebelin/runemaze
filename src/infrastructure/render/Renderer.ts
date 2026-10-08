@@ -1,10 +1,11 @@
 import { Rng } from '../../domain/Rng';
+import { towerRange } from '../../domain/rules/crystal';
 import { TOWERS } from '../../domain/catalog/towers';
 import type { World } from '../../domain/model/World';
 import type { Biome, Projectile } from '../../domain/model/types';
 import { fittedView, MAX_ZOOM, type MapPlacement, type WorldView } from './commonWorld';
 import { BANNER_LIFE, type Effects } from './Effects';
-import { BIOME_PALETTE, FAMILY_COLOR, PAL, type TerrainPalette } from './palette';
+import { BIOME_PALETTE, CRYSTAL, FAMILY_COLOR, ICE, PAL, WORMHOLE, type TerrainPalette } from './palette';
 import { decorSeed, drawCreep, drawTower } from './sprites';
 
 export interface ViewState {
@@ -99,7 +100,7 @@ export class Renderer {
     ctx.setTransform(s, 0, 0, s, 0, 0);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const legs = route.filter((leg) => leg.length > 1).map((leg) => leg.map((i) => ({ x: g.cx(i) + 0.5, y: g.cy(i) + 0.5 })));
+    const legs = splitJumps(g, route).filter((leg) => leg.length > 1).map((leg) => leg.map((i) => ({ x: g.cx(i) + 0.5, y: g.cy(i) + 0.5 })));
     const smooth = (pts: { x: number; y: number }[]): void => {
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
@@ -117,18 +118,19 @@ export class Renderer {
       }
     };
     const cells = [...new Set(route.flat())];
+    const pal = BIOME_PALETTE[world.map.biome ?? 'earth'].trail;
 
-    // Herbe usée : un liseré à peine plus sombre, aux bords mordus.
+    // Sol usé : un liseré discret, aux bords mordus.
     for (const i of cells) {
       const rng = new Rng(i * 7919 + 13);
-      ctx.fillStyle = 'rgba(40, 34, 22, 0.14)';
+      ctx.fillStyle = pal.wear;
       ctx.beginPath();
       ctx.ellipse(g.cx(i) + 0.5 + (rng.next() - 0.5) * 0.3, g.cy(i) + 0.5 + (rng.next() - 0.5) * 0.3, 0.42 + rng.next() * 0.1, 0.38 + rng.next() * 0.08, rng.next() * 3, 0, Math.PI * 2);
       ctx.fill();
     }
-    // Terre qui affleure, translucide : l'herbe transparaît encore.
-    stroke(0.55, 'rgba(87, 70, 45, 0.32)');
-    stroke(0.3, 'rgba(106, 86, 57, 0.28)');
+    // Fond du sentier, translucide : le sol transparaît encore.
+    stroke(0.55, pal.bed);
+    stroke(0.3, pal.core);
     // Grain : quelques mottes et cailloux, épars.
     for (const i of cells) {
       const rng = new Rng(i * 104729 + 7);
@@ -137,19 +139,17 @@ export class Renderer {
         const x = g.cx(i) + 0.5 + (rng.next() - 0.5) * 0.55;
         const y = g.cy(i) + 0.5 + (rng.next() - 0.5) * 0.55;
         const pebble = rng.next() < 0.3;
-        ctx.fillStyle = pebble ? 'rgba(176, 162, 132, 0.3)' : 'rgba(60, 46, 30, 0.25)';
+        ctx.fillStyle = pebble ? pal.pebble : pal.clod;
         ctx.beginPath();
         ctx.ellipse(x, y, pebble ? 0.045 : 0.07, pebble ? 0.03 : 0.045, rng.next() * 3, 0, Math.PI * 2);
         ctx.fill();
       }
     }
     // La glace reste visible sous le sentier : c'est là que les créatures glissent.
-    ctx.fillStyle = PAL.ice;
-    for (let y = 0; y < g.h; y++) {
-      for (let x = 0; x < g.w; x++) {
-        if (g.kind[g.idx(x, y)] === 'ice') ctx.fillRect(x, y, 1, 1);
-      }
-    }
+    ctx.globalCompositeOperation = 'destination-out';
+    iceShape(ctx, g, 0);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
     return c;
   }
 
@@ -176,13 +176,8 @@ export class Renderer {
       ctx.ellipse(x, y, r, r * (0.6 + rng.next() * 0.4), rng.next() * 3, 0, Math.PI * 2);
       ctx.fill();
     }
-    // Plaques de glace : couleur provisoire unie, la même que la vignette.
-    ctx.fillStyle = PAL.ice;
-    for (let y = 0; y < g.h; y++) {
-      for (let x = 0; x < g.w; x++) {
-        if (g.kind[g.idx(x, y)] === 'ice') ctx.fillRect(x, y, 1, 1);
-      }
-    }
+    drawIce(ctx, g, s);
+    for (let i = 0; i < g.w * g.h; i++) if (g.kind[i] === 'crystal') drawCrystal(ctx, g.cx(i) + 0.5, g.cy(i) + 0.5, new Rng(i * 5381 + 17));
     // Terre battue autour du portail, de la pierre runique et de la porte.
     for (let y = 0; y < g.h; y++) {
       for (let x = 0; x < g.w; x++) {
@@ -298,7 +293,7 @@ export class Renderer {
     if (view.previewRoute) this.drawRoute(g, view.previewRoute, 'rgba(233, 185, 73, 0.85)', realTime, 1);
 
     const sel = view.selectedTower !== null ? w.towerById.get(view.selectedTower) : undefined;
-    if (sel?.def.attack) this.rangeCircle(sel.cx, sel.cy, sel.def.attack.range, 'rgba(233, 185, 73, 0.9)');
+    if (sel?.def.attack) this.rangeCircle(sel.cx, sel.cy, towerRange(sel), 'rgba(233, 185, 73, 0.9)');
 
     const towers = [...w.towers].sort((a, b) => a.cy - b.cy);
     for (const t of towers) {
@@ -338,6 +333,23 @@ export class Renderer {
       ctx.beginPath();
       ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
       ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(120, 120, 120, 0.45)';
+    for (const k of w.corpses) {
+      ctx.beginPath();
+      ctx.ellipse(k.x, k.y, 0.3, 0.15, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Squelettes : petite silhouette claire à contour sombre, sous les créatures.
+    ctx.fillStyle = PAL.bone;
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 0.05;
+    for (const s of w.skeletons) {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y - 0.12, 0.13, 0, Math.PI * 2);
+      ctx.rect(s.x - 0.1, s.y, 0.2, 0.2);
+      ctx.fill();
+      ctx.stroke();
     }
     for (const c of ground) this.creep(index, c, time);
     for (const p of w.projectiles) this.projectile(p, true);
@@ -443,6 +455,63 @@ export class Renderer {
     ctx.ellipse(sp.x, sp.y, 0.5, 0.4, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    // Trous de vers : vortex à cœur noir ; couleur et nombre d'éclats en orbite donnent la paire.
+    g.wormholes.forEach((pair, n) => {
+      const col = WORMHOLE[n % WORMHOLE.length];
+      pair.forEach((cells, k) => {
+        const c = g.regionCenter(cells);
+        const spin = t * (k === 0 ? 1.1 : -1.1);
+        const halo = ctx.createRadialGradient(c.x, c.y, 0.8, c.x, c.y, 1.7);
+        halo.addColorStop(0, col.glow);
+        halo.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 1.7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(4, 3, 8, 0.92)';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 0.92, 0, Math.PI * 2);
+        ctx.fill();
+        // Bras spiraux : s'enroulent vers le centre ; trois passes de plus en plus fines et vives.
+        ctx.strokeStyle = col.main;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        const turn = k === 0 ? 1 : -1;
+        for (const [from, width, alpha] of [[0, 0.16, 0.22], [0.25, 0.09, 0.5], [0.5, 0.045, 0.95]]) {
+          ctx.globalAlpha = alpha;
+          ctx.lineWidth = width;
+          ctx.beginPath();
+          for (let arm = 0; arm < 3; arm++) {
+            const a0 = spin + (arm / 3) * Math.PI * 2;
+            for (let u = from; u <= 1.001; u += 0.05) {
+              const r = 0.86 - u * 0.66;
+              const a = a0 + u * Math.PI * 1.7 * turn;
+              if (u === from) ctx.moveTo(c.x + Math.cos(a) * r, c.y + Math.sin(a) * r);
+              else ctx.lineTo(c.x + Math.cos(a) * r, c.y + Math.sin(a) * r);
+            }
+          }
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 0.7;
+        ctx.lineWidth = 0.06;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 0.92, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 0.17, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = PAL.parchment;
+        for (let m = 0; m <= n; m++) {
+          const a = -spin * 0.6 + (m / (n + 1)) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(c.x + Math.cos(a) * 1.15, c.y + Math.sin(a) * 1.15, 0.11, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+    });
+
     // Pierres runiques : un cercle de runes qui pulse par pierre, numéroté s'il y en a plusieurs.
     const pulse = 0.5 + 0.5 * Math.sin(t * 2);
     g.checkpoints.forEach((cells, k) => {
@@ -521,7 +590,7 @@ export class Renderer {
     ctx.lineJoin = 'round';
     ctx.setLineDash([0.28, 0.32]);
     ctx.lineDashOffset = -t * 1.2;
-    for (const leg of route) {
+    for (const leg of splitJumps(g, route)) {
       if (leg.length < 2) continue;
       ctx.beginPath();
       leg.forEach((i, k) => {
@@ -647,6 +716,28 @@ export class Renderer {
         ctx.fill();
         break;
       }
+      case 'chaos': {
+        ctx.fillStyle = col.dark;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = col.glow;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.05, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case 'gold': {
+        ctx.fillStyle = col.dark;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = col.main;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.08, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
       default:
         break;
     }
@@ -678,3 +769,183 @@ export class Renderer {
     }
   }
 }
+
+/** Cristal vu de dessus : lueur, assise sombre, éclats en étoile, chacun en deux facettes (claire au nord-ouest, sombre au sud-est). */
+function drawCrystal(ctx: CanvasRenderingContext2D, x: number, y: number, rng: Rng): void {
+  const glow = ctx.createRadialGradient(x, y, 0.15, x, y, 1);
+  glow.addColorStop(0, CRYSTAL.glow);
+  glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(x - 1, y - 1, 2, 2);
+  ctx.fillStyle = CRYSTAL.bed;
+  ctx.beginPath();
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    const r = 0.3 + rng.next() * 0.08;
+    ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.85);
+  }
+  ctx.closePath();
+  ctx.fill();
+  // Les éclats du fond d'abord : les plus longs, puis les courts par-dessus.
+  const n = 5 + rng.int(3);
+  const shards = Array.from({ length: n }, (_, k) => ({
+    a: (k / n) * Math.PI * 2 + (rng.next() - 0.5) * 1.1,
+    len: 0.3 + rng.next() * 0.22,
+    w: 0.08 + rng.next() * 0.05,
+    ox: (rng.next() - 0.5) * 0.18,
+    oy: (rng.next() - 0.5) * 0.18,
+  })).sort((p, q) => q.len - p.len);
+  for (const { a, len, w, ox, oy } of shards) {
+    const cx = x + ox;
+    const cy = y + oy;
+    const ux = Math.cos(a);
+    const uy = Math.sin(a);
+    const base = [cx - ux * 0.06, cy - uy * 0.06];
+    const tip = [cx + ux * len, cy + uy * len];
+    const l = [cx + ux * len * 0.6 - uy * w, cy + uy * len * 0.6 + ux * w];
+    const r = [cx + ux * len * 0.6 + uy * w, cy + uy * len * 0.6 - ux * w];
+    // Le flanc tourné vers le nord-ouest prend la lumière : normale (-uy, ux) face à (-1, -1).
+    const lLit = uy - ux > 0;
+    for (const [side, lit] of [[l, lLit], [r, !lLit]] as const) {
+      ctx.fillStyle = lit ? CRYSTAL.light : CRYSTAL.main;
+      ctx.beginPath();
+      ctx.moveTo(base[0], base[1]);
+      ctx.lineTo(side[0], side[1]);
+      ctx.lineTo(tip[0], tip[1]);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.strokeStyle = CRYSTAL.dark;
+    ctx.lineWidth = 0.025;
+    ctx.beginPath();
+    ctx.moveTo(base[0], base[1]);
+    ctx.lineTo(l[0], l[1]);
+    ctx.lineTo(tip[0], tip[1]);
+    ctx.lineTo(r[0], r[1]);
+    ctx.closePath();
+    ctx.stroke();
+  }
+}
+
+/** Coupe chaque tronçon là où il saute d'un bout de trou de ver à l'autre : pas de trait entre les deux. */
+function splitJumps(g: World['grid'], route: number[][]): number[][] {
+  const out: number[][] = [];
+  for (const leg of route) {
+    let part: number[] = [];
+    for (const i of leg) {
+      const prev = part[part.length - 1];
+      if (prev !== undefined && (Math.abs(g.cx(i) - g.cx(prev)) > 1 || Math.abs(g.cy(i) - g.cy(prev)) > 1)) {
+        out.push(part);
+        part = [];
+      }
+      part.push(i);
+    }
+    out.push(part);
+  }
+  return out;
+}
+
+const isIce = (g: World['grid'], x: number, y: number): boolean => x >= 0 && y >= 0 && x < g.w && y < g.h && g.kind[g.idx(x, y)] === 'ice';
+
+/** Chemin de l'union des cases de glace, coins saillants arrondis, élargi de `grow`. `fresh` à faux : ajouté au chemin courant. */
+function iceShape(ctx: CanvasRenderingContext2D, g: World['grid'], grow: number, fresh = true): void {
+  if (fresh) ctx.beginPath();
+  for (let y = 0; y < g.h; y++) {
+    for (let x = 0; x < g.w; x++) {
+      if (!isIce(g, x, y)) continue;
+      const r = (dx: number, dy: number): number => (!isIce(g, x + dx, y) && !isIce(g, x, y + dy) ? 0.38 + grow : 0);
+      ctx.roundRect(x - grow, y - grow, 1 + 2 * grow, 1 + 2 * grow, [r(-1, -1), r(1, -1), r(1, 1), r(-1, 1)]);
+    }
+  }
+  // Coins rentrants adoucis : un congé dans la case voisine.
+  const f = 0.22 + grow;
+  for (let y = 0; y < g.h; y++) {
+    for (let x = 0; x < g.w; x++) {
+      if (isIce(g, x, y)) continue;
+      for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        if (!isIce(g, x + dx, y) || !isIce(g, x, y + dy)) continue;
+        const cx = x + (dx > 0 ? 1 : 0);
+        const cy = y + (dy > 0 ? 1 : 0);
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx - dx * f, cy);
+        ctx.quadraticCurveTo(cx, cy, cx, cy - dy * f);
+        ctx.closePath();
+      }
+    }
+  }
+}
+
+/** Plaques de glace : bourrelet de neige, surface bleutée aux nuances profondes, reflets en biais, fissures, bord intérieur ombré. `px` : pixels par case, pour le flou. */
+function drawIce(ctx: CanvasRenderingContext2D, g: World['grid'], px: number): void {
+  const cells: [number, number][] = [];
+  for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) if (isIce(g, x, y)) cells.push([x, y]);
+  if (!cells.length) return;
+  ctx.save();
+  // Neige soufflée contre le bord.
+  ctx.fillStyle = ICE.bank;
+  iceShape(ctx, g, 0.09);
+  ctx.fill();
+  iceShape(ctx, g, 0);
+  ctx.fillStyle = ICE.base;
+  ctx.fill();
+  ctx.clip();
+  // Profondeur : nappes plus sombres, comme de l'eau prise sous la surface.
+  ctx.filter = `blur(${0.18 * px}px)`;
+  for (const [x, y] of cells) {
+    const rng = new Rng((y * g.w + x) * 6151 + 3);
+    if (rng.next() < 0.45) continue;
+    ctx.fillStyle = ICE.deep;
+    ctx.beginPath();
+    ctx.ellipse(x + rng.next(), y + rng.next(), 0.5 + rng.next() * 0.5, 0.25 + rng.next() * 0.25, rng.next() * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.filter = 'none';
+  ctx.lineCap = 'round';
+  for (const [x, y] of cells) {
+    const rng = new Rng((y * g.w + x) * 7741 + 11);
+    // Reflets : deux traits parallèles en biais.
+    if (rng.next() < 0.55) {
+      const sx = x + 0.15 + rng.next() * 0.5;
+      const sy = y + 0.4 + rng.next() * 0.5;
+      const len = 0.25 + rng.next() * 0.35;
+      ctx.strokeStyle = ICE.sheen;
+      ctx.lineWidth = 0.05;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + len, sy - len);
+      ctx.moveTo(sx + 0.1, sy + 0.04);
+      ctx.lineTo(sx + 0.1 + len * 0.45, sy + 0.04 - len * 0.45);
+      ctx.stroke();
+    }
+    // Fissures : ligne brisée sombre doublée d'un fil clair.
+    if (rng.next() < 0.4) {
+      const pts: number[] = [x + rng.next(), y + rng.next()];
+      let a = rng.next() * Math.PI * 2;
+      for (let k = 0; k < 4; k++) {
+        a += (rng.next() - 0.5) * 1.4;
+        const l = 0.2 + rng.next() * 0.3;
+        pts.push(pts[pts.length - 2] + Math.cos(a) * l, pts[pts.length - 1] + Math.sin(a) * l);
+      }
+      for (const [color, w, o] of [[ICE.sheen, 0.03, 0.03], [ICE.crack, 0.035, 0]] as const) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(pts[0] + o, pts[1] + o);
+        for (let k = 2; k < pts.length; k += 2) ctx.lineTo(pts[k] + o, pts[k + 1] + o);
+        ctx.stroke();
+      }
+    }
+  }
+  // Bord intérieur ombré : ombre portée d'un cadre qui épouse la plaque.
+  ctx.beginPath();
+  ctx.rect(-2, -2, g.w + 4, g.h + 4);
+  iceShape(ctx, g, 0, false);
+  ctx.shadowColor = ICE.rim;
+  ctx.shadowBlur = 0.22 * px;
+  ctx.shadowOffsetX = 0.05 * px;
+  ctx.shadowOffsetY = 0.07 * px;
+  ctx.fillStyle = '#000';
+  ctx.fill('evenodd');
+  ctx.restore();
+}
+

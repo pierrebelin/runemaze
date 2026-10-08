@@ -20,11 +20,37 @@ export const PAL = {
   ice: '#cfe3ee',
   parchment: '#e7e8ea',
   ink: '#151619',
+  bone: '#d2d2d4',
   danger: '#d8553f',
   good: '#8cc464',
   shadow: 'rgba(7, 8, 10, 0.35)',
   breakerAura: 'rgba(240, 154, 74, 0.4)',
 };
+
+// Plaques de glace : plus bleues et plus lisses que la neige autour, bordées d'un bourrelet de neige.
+export const ICE = {
+  base: '#a9c8da',
+  deep: 'rgba(70, 116, 150, 0.35)',
+  rim: 'rgba(38, 62, 82, 0.75)',
+  bank: 'rgba(228, 235, 242, 0.7)',
+  sheen: 'rgba(250, 253, 255, 0.55)',
+  crack: 'rgba(52, 86, 110, 0.6)',
+};
+
+// Cristaux : affleurement plat (on bâtit dessus), éclats clairs à facettes qui ressortent par la luminosité.
+export const CRYSTAL = {
+  light: '#efe9ff',
+  main: '#b8a5ee',
+  dark: '#5d4c9c',
+  bed: 'rgba(8, 6, 14, 0.6)',
+  glow: 'rgba(184, 165, 238, 0.5)',
+};
+
+// Trous de vers : une couleur par paire, doublée d'un nombre d'éclats en orbite (lisible sans la couleur).
+export const WORMHOLE = [
+  { main: '#6fd8e8', glow: 'rgba(111, 216, 232, 0.45)' },
+  { main: '#e58ad6', glow: 'rgba(229, 138, 214, 0.45)' },
+];
 
 export interface TerrainPalette {
   ground: string;
@@ -40,6 +66,16 @@ export interface TerrainPalette {
   stone: string;
   stoneDark: string;
   stoneLight: string;
+  trail: TrailPalette;
+}
+
+/** Sentier usé sous le trajet : tout translucide, le sol transparaît. */
+export interface TrailPalette {
+  wear: string;
+  bed: string;
+  core: string;
+  pebble: string;
+  clod: string;
 }
 
 export const BIOME_PALETTE: Record<Biome, TerrainPalette> = {
@@ -57,6 +93,14 @@ export const BIOME_PALETTE: Record<Biome, TerrainPalette> = {
     stone: PAL.stone,
     stoneDark: PAL.stoneDark,
     stoneLight: PAL.stoneLight,
+    // Terre battue brune sur l'herbe.
+    trail: {
+      wear: 'rgba(40, 34, 22, 0.14)',
+      bed: 'rgba(87, 70, 45, 0.32)',
+      core: 'rgba(106, 86, 57, 0.28)',
+      pebble: 'rgba(176, 162, 132, 0.3)',
+      clod: 'rgba(60, 46, 30, 0.25)',
+    },
   },
   // Neige : sol gris-bleu froid désaturé, rochers ardoise ; le contraste passe par la luminosité.
   snow: {
@@ -73,6 +117,14 @@ export const BIOME_PALETTE: Record<Biome, TerrainPalette> = {
     stone: '#9aa3ae',
     stoneDark: '#505864',
     stoneLight: '#d0d6de',
+    // Neige tassée et gadoue : ardoise plus sombre que la neige, mottes claires.
+    trail: {
+      wear: 'rgba(40, 50, 64, 0.14)',
+      bed: 'rgba(66, 76, 90, 0.3)',
+      core: 'rgba(92, 102, 116, 0.26)',
+      pebble: 'rgba(222, 230, 238, 0.35)',
+      clod: 'rgba(44, 52, 64, 0.25)',
+    },
   },
   // Espace : sol violet-noir, rochers basalte bleu-gris.
   space: {
@@ -89,6 +141,14 @@ export const BIOME_PALETTE: Record<Biome, TerrainPalette> = {
     stone: '#8c94a3',
     stoneDark: '#4a505c',
     stoneLight: '#c4cad4',
+    // Poussière stellaire : sol plus clair que le vide, violet-gris, éclats pâles.
+    trail: {
+      wear: 'rgba(120, 104, 160, 0.08)',
+      bed: 'rgba(98, 88, 132, 0.26)',
+      core: 'rgba(126, 116, 162, 0.22)',
+      pebble: 'rgba(200, 192, 232, 0.3)',
+      clod: 'rgba(10, 8, 18, 0.3)',
+    },
   },
 };
 
@@ -100,6 +160,8 @@ export const FAMILY_COLOR: Record<Family, { main: string; dark: string; glow: st
   storm: { main: '#a98cf0', dark: '#5a3fa8', glow: '#e7dcff' },
   venom: { main: '#98c94a', dark: '#4d7322', glow: '#d6f59a' },
   fire: { main: '#e0612a', dark: '#8a2f12', glow: '#ffc27a' },
+  chaos: { main: '#a8324a', dark: '#4a0f20', glow: '#f2a0b4' },
+  gold: { main: '#d9a93a', dark: '#7a5a1c', glow: '#f7e19a' },
 };
 
 export interface CreepStyle {

@@ -1,6 +1,7 @@
 import { TOWERS } from '../../domain/catalog/towers';
 import { buildMenu } from '../../domain/rules/builder';
 import { capOf, opposes } from '../../domain/rules/heading';
+import { wormholesOpen } from '../../domain/rules/wormhole';
 import type { Creep, Result } from '../../domain/model/types';
 import type { World } from '../../domain/model/World';
 import { fail } from '../result';
@@ -28,7 +29,9 @@ export function canBuild(world: World, defId: string, x: number, y: number): Res
     if (c.x + r > x && c.x - r < x + 2 && c.y + r > y && c.y - r < y + 2) return fail('Une créature bloque l’emplacement.');
     if (fp.has(g.idx(c.tx, c.ty))) return fail('Une créature bloque l’emplacement.');
   }
-  return checkPaths(world, fp);
+  const paths = checkPaths(world, fp);
+  if (!paths.ok) return paths;
+  return wormholesOpen(g, fp) ? paths : fail('L’accès au trou de ver doit rester ouvert.');
 }
 
 function checkPaths(world: World, blocked: Set<number>): Result {
@@ -64,5 +67,8 @@ export function nextSteps(world: World, creeps: Creep[]): number[] {
 function turnsBack(world: World, c: Creep, next: number): boolean {
   if (next < 0) return false; // Case d'arrivée du tronçon : pas de pas suivant.
   const g = world.grid;
-  return opposes(capOf(c), { x: g.cx(next) - c.tx, y: g.cy(next) - c.ty });
+  const step = { x: g.cx(next) - c.tx, y: g.cy(next) - c.ty };
+  // Un saut non voisin (trou de ver) est une téléportation, pas un demi-tour.
+  if (Math.abs(step.x) > 1 || Math.abs(step.y) > 1) return false;
+  return opposes(capOf(c), step);
 }

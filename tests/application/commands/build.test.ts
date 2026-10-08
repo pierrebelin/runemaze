@@ -3,7 +3,7 @@ import { dispatch } from '../../../src/application/dispatch';
 import { spawnCreep } from '../../../src/domain/systems/waves';
 import { newWorld } from '../../support/helpers';
 import { MAP_GATED_STONES, MAP_ICE, MAP_LOOP, MAP_TWO_STONES } from '../../support/maps';
-import { MAP_CROSSING } from '../../support/maps';
+import { MAP_CROSSING, MAP_WORMHOLE_GAP, MAP_WORMHOLE_NOOK, MAP_WORMHOLE_RING, MAP_WORMHOLE_SEALABLE_GATE } from '../../support/maps';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('build', () => {
@@ -280,5 +280,112 @@ describe('build : pas de demi-tour', () => {
     const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 9, y: 3 });
 
     expect(r).toEqual({ ok: false, reason: 'Les créatures en route ne peuvent pas faire demi-tour.' });
+  });
+});
+
+describe('build : trou de ver', () => {
+  it('[RM-09] accepte une construction qui ne laisse que le trou de ver comme passage', () => {
+    const w = newWorld('normal', 42, MAP_WORMHOLE_GAP);
+    const gold = w.gold;
+
+    // La tour 2×2 en (10, 9) ferme le passage du mur : seul le trou de ver relie encore les deux faces.
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 10, y: 9 });
+
+    expect(r.ok).toBe(true);
+    expect(w.towers).toHaveLength(1);
+    expect(w.gold).toBe(gold - 3);
+    expect(Number.isFinite(w.mazeLength())).toBe(true);
+  });
+
+  it('[RM-09] refuse une construction qui ne laisse aucun passage, trou de ver compris, sans rien changer', () => {
+    const w = newWorld('normal', 42, MAP_WORMHOLE_SEALABLE_GATE);
+    const gold = w.gold;
+
+    // La tour en (15, 9) ferme l'alcôve de la porte : aucun trajet ne l'atteint, même par le trou de ver.
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 15, y: 9 });
+
+    expect(r).toEqual({ ok: false, reason: 'Impossible de bloquer le chemin.' });
+    expect(w.towers).toHaveLength(0);
+    expect(w.gold).toBe(gold);
+    expect(w.log).toHaveLength(0);
+  });
+
+  it('[RM-09] refuse une construction qui enferme une créature en route, trou de ver compris', () => {
+    const w = newWorld('normal', 42, MAP_WORMHOLE_GAP);
+    // Créature dans l'alcôve sans issue (colonnes 15-18, lignes 9-10), en route vers la porte.
+    const c = spawnCreep(w, 'rat', 0);
+    c.leg = 1;
+    c.tx = 18;
+    c.ty = 9;
+    c.x = 18.5;
+    c.y = 9.5;
+    const gold = w.gold;
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 15, y: 9 });
+
+    expect(r).toEqual({ ok: false, reason: 'Impossible de bloquer le chemin.' });
+    expect(w.towers).toHaveLength(0);
+    expect(w.gold).toBe(gold);
+    expect(w.log).toHaveLength(0);
+  });
+
+  it('[RM-09] ne prend pas le passage par le trou de ver pour un demi-tour', () => {
+    const w = newWorld('normal', 42, MAP_WORMHOLE_GAP);
+    // Créature sur la case d'entrée (9, 4) du bout `a`, cap retenu vers l'ouest : sa sortie `A` est à l'est.
+    const c = spawnCreep(w, 'rat', 0);
+    c.leg = 0;
+    c.tx = 9;
+    c.ty = 4;
+    c.x = 9.5;
+    c.y = 4.5;
+    c.heading = { x: -1, y: 0 };
+    const gold = w.gold;
+
+    // Le mur en (13, 4) déplace la case d'arrivée de (12, 5) à (12, 4) : le pas suivant change, toujours vers l'est.
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 13, y: 4 });
+
+    expect(r).toEqual({ ok: true, id: expect.any(Number) });
+    expect(w.towers).toHaveLength(1);
+    expect(w.gold).toBe(gold - 3);
+  });
+
+  it('[RM-13] refuse la tour qui fermerait le dernier côté libre d’un bout, sans rien changer', () => {
+    const w = newWorld('normal', 42, MAP_WORMHOLE_NOOK);
+    const gold = w.gold;
+
+    // La tour en (12, 3) bouche les deux cases au sud de `A` ; le trajet à pied reste ouvert.
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 12, y: 3 });
+
+    expect(r).toEqual({ ok: false, reason: 'L’accès au trou de ver doit rester ouvert.' });
+    expect(w.towers).toHaveLength(0);
+    expect(w.gold).toBe(gold);
+    expect(w.log).toHaveLength(0);
+  });
+
+  it('[RM-13] refuse l’anneau de tours qui enfermerait un bout dans une poche', () => {
+    const w = newWorld('normal', 42, MAP_WORMHOLE_RING);
+    // La première tour laisse deux cases d'entrée à la poche.
+    expect(dispatch(w, { c: CommandType.Build, def: 'wall', x: 12, y: 5 }).ok).toBe(true);
+    const gold = w.gold;
+    const logged = w.log.length;
+
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 14, y: 5 });
+
+    expect(r).toEqual({ ok: false, reason: 'L’accès au trou de ver doit rester ouvert.' });
+    expect(w.towers).toHaveLength(1);
+    expect(w.gold).toBe(gold);
+    expect(w.log).toHaveLength(logged);
+  });
+
+  it('[RM-13] accepte une tour contre un bout quand un autre côté reste libre', () => {
+    const w = newWorld('normal', 42, MAP_WORMHOLE_NOOK);
+    const gold = w.gold;
+
+    // La tour en (12, 4) touche le sud de `A` par la ligne 3 laissée libre : on y accède par les côtés.
+    const r = dispatch(w, { c: CommandType.Build, def: 'wall', x: 12, y: 4 });
+
+    expect(r.ok).toBe(true);
+    expect(w.towers).toHaveLength(1);
+    expect(w.gold).toBe(gold - 3);
   });
 });

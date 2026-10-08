@@ -26,6 +26,7 @@ import { LOST_LIMIT_MS } from '../application/online/heldGame';
 import { ClientMessageType, Mode, ServerMessageType, Team } from '../application/online/protocol';
 import type { OtherMap, ServerMessage } from '../application/online/protocol';
 import { refundValue, upgradeCost } from '../domain/rules/pricing';
+import { gleanerCost } from '../domain/rules/gleanerCost';
 import { World, type Stats } from '../domain/model/World';
 import { restore, type WorldSnapshot } from '../domain/model/snapshot';
 import { fingerprint } from '../domain/rules/fingerprint';
@@ -370,7 +371,7 @@ export class Game {
     const w = this.world;
     switch (e.t) {
       case GameEventType.WaveCleared:
-        this.toast(`Vague ${e.wave + 1} repoussée : +${e.bonus} or${e.income > 0 ? `, +${e.income} de revenu` : e.interest ? `, +${e.interest} d'intérêts` : ''}.`);
+        this.toast(`Vague ${e.wave + 1} repoussée : +${e.bonus} or${e.income > 0 ? `, +${e.income} de revenu` : e.interest ? `, +${e.interest} d'intérêts` : ''}${e.trade > 0 ? `, +${e.trade} de comptoir` : ''}.`);
         break;
       case GameEventType.Leak:
         // Carte hors champ : l'effet d'écran n'est pas vu, les vies tressautent à la place.
@@ -939,7 +940,7 @@ export class Game {
         .join('');
       const body = this.sendTab === 'sends'
         ? sendPanel(this.world.ether, this.world.income)
-        : this.sendTab === 'gleaners' ? gleanerPanel(this.world.ether, this.world.gleaners.length, canBuyGleaner(this.world)) : gatePanel(this.world.ether, this.world.gate);
+        : this.sendTab === 'gleaners' ? gleanerPanel(this.world.ether, this.world.gleaners.length, canBuyGleaner(this.world), gleanerCost(GLEANER.cost, this.world.builder)) : gatePanel(this.world.ether, this.world.gate);
       html = `<div class="tabs">${tabs}</div>${body}`;
     }
     if (html === this.sendCache) return;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../../src/application/dispatch';
 import { previewRoute } from '../../../src/application/queries/previewRoute';
 import { newWorld } from '../../support/helpers';
-import { MAP_TWO_STONES } from '../../support/maps';
+import { MAP_TWO_STONES, MAP_WORMHOLE } from '../../support/maps';
 import { CommandType } from '../../../src/domain/model/types';
 
 describe('previewRoute', () => {
@@ -46,5 +46,19 @@ describe('previewRoute', () => {
 
     expect(w.mazeLength()).toBe(before);
     expect(w.groundRoute()).toEqual(beforeRoute);
+  });
+
+  it('[CU-03] montre le passage par le trou de ver dans l’aperçu du trajet', () => {
+    const w = newWorld('normal', 42, MAP_WORMHOLE);
+    const ouest = new Set(w.grid.footprint(8, 4));
+    const est = new Set(w.grid.footprint(11, 4));
+
+    // Mur loin du trajet (côté est, sous la pierre 1).
+    const { route } = previewRoute(w, 14, 7);
+
+    const cases = route[0];
+    expect(cases.some((c) => ouest.has(c))).toBe(true);
+    expect(cases.some((c) => est.has(c))).toBe(true);
+    expect(cases.some((c, i) => ouest.has(c) && est.has(cases[i + 1]))).toBe(true);
   });
 });
