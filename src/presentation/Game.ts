@@ -62,7 +62,7 @@ function paintThumb(root: HTMLElement, map: MapDef): void {
   drawMapThumbnail(c.getContext('2d')!, map, c.width, c.height);
 }
 
-const KEYS = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'z', 'x', 'c', 'v'];
+const KEYS = ['q', 'w', 'e', 'a', 's', 'd'];
 const TARGET_ORDER: TargetMode[] = ['first', 'last', 'strong', 'weak', 'close'];
 const BEST_KEY = 'runemaze.best.v2';
 /** Records par difficulté : les cartes tirées n'ont pas d'identité, une seule clé. */
@@ -752,6 +752,10 @@ export class Game {
     });
     $('muteBtn').addEventListener('click', () => this.toggleMute());
     $('helpBtn').addEventListener('click', () => (this.overlay === Overlay.Help ? this.escape() : this.showHelp()));
+    // Équivalents au doigt de Échap, L et Espace.
+    $('cancelBuildBtn').addEventListener('click', () => this.setBuild(null));
+    $('routeBtn').addEventListener('click', () => (this.view.showRoute = !this.view.showRoute));
+    $('recenterBtn').addEventListener('click', () => this.recenter());
 
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -878,7 +882,7 @@ export class Game {
 
   private computeSlots(): (Slot | null)[] {
     const w = this.world;
-    const slots: (Slot | null)[] = new Array(12).fill(null);
+    const slots: (Slot | null)[] = new Array(KEYS.length).fill(null);
     const t = this.selectedTower();
     if (t) {
       upgradeOptions(t.def, builderTowers(w.builder, TOWERS)).forEach((id, i) => {
@@ -892,7 +896,7 @@ export class Game {
         };
       });
       if (t.def.attack) {
-        slots[8] = {
+        slots[3] = {
           label: 'Ciblage', icon: ICON_TARGET,
           run: () => {
             const next = TARGET_ORDER[(TARGET_ORDER.indexOf(t.targetMode) + 1) % TARGET_ORDER.length];
@@ -903,7 +907,7 @@ export class Game {
         };
       }
       const refund = refundValue(t);
-      slots[11] = {
+      slots[5] = {
         label: 'Vendre', icon: ICON_SELL, cost: refund,
         run: () => this.sell(t),
         info: () => `<h3>Vendre · +${refund} or</h3><p>La moitié de l'or investi est rendue, à tout moment.</p>`,
@@ -930,8 +934,8 @@ export class Game {
     // Seules les rangées occupées s'affichent ; une case vide garde la place de sa touche.
     $('card').innerHTML = this.slots
       .map((s, i) => {
-        const row = Math.floor(i / 4);
-        if (!this.slots.slice(row * 4, row * 4 + 4).some(Boolean)) return '';
+        const row = Math.floor(i / 3);
+        if (!this.slots.slice(row * 3, row * 3 + 3).some(Boolean)) return '';
         const hk = KEYS[i].toUpperCase();
         if (!s) return `<div class="slot empty" aria-hidden="true"></div>`;
         const cls = ['slot', s.poor ? 'poor' : '', s.active ? 'active' : ''].join(' ');
@@ -1095,6 +1099,16 @@ export class Game {
     const can = !w.isOver();
     const secs = Math.ceil(Math.max(0, w.nextWaveIn));
     set('timer', can ? nextWaveLabel(w.wave, secs) : '');
+    const building = String(this.buildDef !== null);
+    if (this.hud.building !== building) {
+      this.hud.building = building;
+      $('cancelBuildBtn').hidden = this.buildDef === null;
+    }
+    const route = String(this.view.showRoute);
+    if (this.hud.route !== route) {
+      this.hud.route = route;
+      $('routeBtn').setAttribute('aria-pressed', route);
+    }
   }
 
   // ─── Autres cartes (duel, coop, 2 contre 2) ──────────────────────────────
@@ -1176,6 +1190,7 @@ export class Game {
   private setGameChromeHidden(hidden: boolean): void {
     $('bar').hidden = hidden;
     $('console').hidden = hidden;
+    $('viewTools').hidden = hidden;
   }
 
   private closeOverlay(): void {
@@ -1943,11 +1958,12 @@ export class Game {
       <div class="sheet">
         <header class="sheet-head"><h2>Commandes</h2></header>
         <div class="keys block">
-          <kbd>Q W E R A S</kbd><span>Choisir une construction (le panneau suit la disposition de Warcraft III)</span>
+          <kbd>Q W E A</kbd><span>Choisir une construction</span>
           <kbd>Clic</kbd><span>Bâtir ou sélectionner · clic droit ou Échap pour annuler</span>
           <kbd>Glisser</kbd><span>Déplacer la vue · <kbd>Molette</kbd> ou pincement pour zoomer · <kbd>Espace</kbd> revenir sur sa carte</span>
+          <kbd>Au doigt</kbd><span>Toucher une case pour l'aperçu, la toucher à nouveau pour bâtir · boutons en bas à gauche : annuler, trajet, recentrer</span>
           <kbd>P</kbd><span>Pause · <kbd>M</kbd> son · <kbd>L</kbd> afficher le trajet</span>
-          <kbd>Z · V</kbd><span>Sur une tour : changer le ciblage, vendre</span>
+          <kbd>A · D</kbd><span>Sur une tour : changer le ciblage, vendre</span>
         </div>
         <p class="label">Table attaque / armure</p>
         ${this.armorTable()}

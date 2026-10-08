@@ -35,9 +35,9 @@ En développement, deux serveurs en parallèle : `npm run server` (arbitre + Web
 - Prime de fin de vague, intérêts de 4 % plafonnés.
 - Vagues sans fin.
 
-Commandes : `Q W E R A S` construire, clic pour poser (clic droit / `Échap` pour annuler),
+Commandes : `Q W E A` construire, clic pour poser (clic droit / `Échap` pour annuler),
 `P` pause, `M` son, `L` trajet, `H` aide.
-Sur une tour : `Q W…` améliorer, `Z` ciblage, `V` vendre. Au doigt : premier appui pour
+Sur une tour : `Q W E` améliorer, `A` ciblage, `D` vendre. Au doigt : premier appui pour
 prévisualiser, second appui au même endroit pour bâtir.
 
 ## Architecture
