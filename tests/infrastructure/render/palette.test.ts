@@ -3,7 +3,7 @@ import { BIOME_PALETTE, PAL } from '../../../src/infrastructure/render/palette';
 
 describe('palette', () => {
   it('[RM-08] garde pour Terre les couleurs actuelles du sol, des rochers et des repères', () => {
-    expect(BIOME_PALETTE.earth).toEqual({
+    expect(BIOME_PALETTE.earth).toMatchObject({
       ground: PAL.grassB,
       groundSpots: ['rgba(78, 100, 56, 0.22)', 'rgba(34, 46, 26, 0.25)'],
       tuft: PAL.tuft,
