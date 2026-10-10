@@ -41,6 +41,8 @@ Pour une fonctionnalité non triviale, chaîne de skills ; chaque étape produit
 
 Petite correction : pas besoin de la chaîne, mais test d'abord quand même (`/tests-unit-tests`).
 
+**Workflow `run-lot`** (`.claude/workflows/run-lot.js`) : les étapes 3 et 4 sans intervention — conception, RED puis GREEN par comportement, `tsc` + `npm test`, audit `tdd-auditor` (deux reprises au plus), lot coché après `VALIDE` ; rend `TERMINÉ`, `BLOQUÉ` ou `ÉCARTS`. Argument : `F1 todo/<slug>/PLAN.md`. Prérequis dans les settings, posés par l'utilisateur : `disableWorkflows: false` et la permission `Workflow(run-lot)`. Suivi dans le pane `run-lot-pane@cctoolkit`.
+
 - **Tests unitaires uniquement** (Vitest, Node, sans mock).
 - **Jamais de commit** sans demande explicite.
 - Français partout : specs, plans, verdicts, libellés de tests, textes du jeu, commentaires. Identifiants de code en anglais.
