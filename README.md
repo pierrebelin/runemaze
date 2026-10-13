@@ -4,6 +4,14 @@ Runemaze est un tower defense de *mazing* dans l'esprit des cartes personnalisé
 (Wintermaul, Element TD) : pas de chemin imposé, c'est vous qui dessinez le
 labyrinthe avec vos tours. TypeScript, Canvas 2D, serveur Node (`ws`) qui arbitre les parties.
 
+## Aperçu
+
+![Une vague traverse le labyrinthe : tours d'archers en action, pierres runiques à toucher, porte de sortie](docs/captures/partie.png)
+
+| Écran d'accueil | Préparation de la partie |
+|---|---|
+| ![Écran d'accueil : solo ou en ligne (duel, coopération, 2 contre 2)](docs/captures/accueil.png) | ![Préparation : choix de la carte, du bâtisseur parmi huit factions et de la difficulté](docs/captures/preparation.png) |
+
 ## Lancer
 
 Le jeu se joue en ligne : chaque partie est tenue par un serveur qui l'arbitre.
