@@ -1,112 +1,112 @@
 # Runemaze
 
-Runemaze est un tower defense de *mazing* dans l'esprit des cartes personnalisées de Warcraft III
-(Wintermaul, Element TD) : pas de chemin imposé, c'est vous qui dessinez le
-labyrinthe avec vos tours. TypeScript, Canvas 2D, serveur Node (`ws`) qui arbitre les parties.
+Runemaze is a *mazing* tower defense in the spirit of Warcraft III custom maps
+(Wintermaul, Element TD): there is no fixed path, you draw the maze yourself with your
+towers. TypeScript, Canvas 2D, and a Node server (`ws`) that referees each game.
 
-## Aperçu
+The game itself is in French.
 
-![Une vague traverse le labyrinthe : tours d'archers en action, pierres runiques à toucher, porte de sortie](docs/captures/partie.png)
+## Preview
 
-| Écran d'accueil | Préparation de la partie |
+![A wave crosses the maze: archer towers firing, runestones to touch, exit gate](docs/captures/partie.png)
+
+| Home screen | Game setup |
 |---|---|
-| ![Écran d'accueil : solo ou en ligne (duel, coopération, 2 contre 2)](docs/captures/accueil.png) | ![Préparation : choix de la carte, du bâtisseur parmi huit factions et de la difficulté](docs/captures/preparation.png) |
+| ![Home screen: solo or online (duel, co-op, 2 vs 2)](docs/captures/accueil.png) | ![Setup: choice of map, builder among eight factions, and difficulty](docs/captures/preparation.png) |
 
-## Lancer
+## Running
 
-Le jeu se joue en ligne : chaque partie est tenue par un serveur qui l'arbitre.
+The game is played online: every game is run by a server that referees it.
 
 ```bash
 npm install
-npm run build && npm run server   # build puis serveur de partie (http://localhost:8080)
-npm test                          # tests de la simulation
-npm run build:artifact            # variante sans enveloppe <html>, pour une page hébergée
+npm run build && npm run server   # build, then game server (http://localhost:8080)
+npm test                          # simulation tests
+npm run build:artifact            # variant without the <html> wrapper, for a hosted page
 ```
 
-En développement, deux serveurs en parallèle : `npm run server` (arbitre + WebSocket) et
-`npm run dev` (Vite, rechargement à chaud). Le jeu n'est plus jouable hors ligne.
+In development, run two servers side by side: `npm run server` (referee + WebSocket) and
+`npm run dev` (Vite, hot reload). The game can no longer be played offline.
 
-## Règles
+## Rules
 
-- Les créatures terrestres partent du portail, **doivent toucher la pierre runique**, puis
-  rejoignent la porte. Le champ est traversé deux fois.
-- Tours 2×2 posées librement. Une construction qui fermerait le passage (pour le trajet
-  complet ou pour une créature déjà en route) est refusée.
-- **Murs à 3 or** pour allonger le trajet, transformables en n'importe quelle tour de base
-  pour la différence de prix.
-- **Table attaque / armure** à la Warcraft III (Normale, Perçante, Siège, Magique, Chaos
-  contre Sans armure, Légère, Moyenne, Lourde, Fortifiée, Héroïque), et réduction par
-  valeur d'armure `0,06·a / (1 + 0,06·a)`.
-- Volants (ignorent le labyrinthe), immunisés à la magie, régénération, trois chefs.
-- Remboursement à 50 % de l'or investi, à tout moment : vendre coûte la moitié de la
-  mise, le *juggling* (vendre et reconstruire pour détourner le flot) ne paie plus.
-- Prime de fin de vague, intérêts de 4 % plafonnés.
-- Vagues sans fin.
+- Ground creeps leave the portal, **must touch the runestone**, then head for the gate.
+  The field is crossed twice.
+- 2×2 towers placed freely. A build that would close the path (for the full route or for
+  a creep already on its way) is refused.
+- **3-gold walls** to lengthen the route, upgradable into any base tower for the price
+  difference.
+- **Attack / armor table** à la Warcraft III (Normal, Pierce, Siege, Magic, Chaos against
+  Unarmored, Light, Medium, Heavy, Fortified, Hero), and reduction by armor value
+  `0.06·a / (1 + 0.06·a)`.
+- Flyers (ignore the maze), magic immunity, regeneration, three bosses.
+- 50% refund of the gold invested, at any time: selling costs half of the stake, so
+  *juggling* (selling and rebuilding to divert the flow) no longer pays.
+- End-of-wave bounty, 4% interest with a cap.
+- Endless waves.
 
-Commandes : `Q W E A` construire, clic pour poser (clic droit / `Échap` pour annuler),
-`P` pause, `M` son, `L` trajet, `H` aide.
-Sur une tour : `Q W E` améliorer, `A` ciblage, `D` vendre. Au doigt : premier appui pour
-prévisualiser, second appui au même endroit pour bâtir.
+Controls: `Q W E A` build, click to place (right click / `Esc` to cancel),
+`P` pause, `M` sound, `L` route, `H` help.
+On a tower: `Q W E` upgrade, `A` targeting, `D` sell. On touch screens: first tap to
+preview, second tap on the same spot to build.
 
 ## Architecture
 
-Clean architecture en quatre couches ; le sens des dépendances est vérifié par
+Clean architecture in four layers; the direction of dependencies is checked by
 `tests/architecture.test.ts`.
 
 ```
 src/
-  domain/          ← cœur du jeu, aucune dépendance (ni DOM, ni autre couche)
-    model/         World (état complet + step()), Grid (terrain, occupation), types
-    rules/         Damage (table attaque/armure), FlowField (Dijkstra 8 directions
-                   par tronçon), pricing (coûts, remboursements)
-    systems/       waves, movement, combat (+ projectiles, chaînes), status (poison, lenteur…)
-    catalog/       towers, creeps (+ vagues, difficultés), map (carte en ASCII)
-    Rng.ts         mulberry32, graine
-  application/     ← ordres du joueur, dépend de domain
-    dispatch.ts    seule porte d'entrée des commandes, journal de rejeu
+  domain/          ← game core, no dependencies (no DOM, no other layer)
+    model/         World (full state + step()), Grid (terrain, occupancy), types
+    rules/         Damage (attack/armor table), FlowField (8-direction Dijkstra
+                   per leg), pricing (costs, refunds)
+    systems/       waves, movement, combat (+ projectiles, chains), status (poison, slow…)
+    catalog/       towers, creeps (+ waves, difficulties), map (ASCII map)
+    Rng.ts         mulberry32, seed
+  application/     ← player orders, depends on domain
+    dispatch.ts    single entry point for commands, replay log
     commands/      build, upgrade, sell, target
-    queries/       canBuild (validation anti-blocage), previewRoute
-  infrastructure/  ← adaptateurs techniques, dépend de domain
-    render/        Renderer (Canvas 2D), sprites procéduraux, Effects (particules, textes)
-    audio/         Sfx : sons synthétisés en Web Audio, aucun fichier
-    GameLoop.ts    requestAnimationFrame à pas fixe 1/60 s
-  presentation/    Game : entrées, panneau de commandes 4×3, HUD, écrans ; describe.ts : textes ;
-                   ServerLink.ts : liaison WebSocket au serveur de partie
-  server/          serveur HTTP + WebSocket : sert dist/, relaie les ordres à l'arbitre
+    queries/       canBuild (anti-blocking validation), previewRoute
+  infrastructure/  ← technical adapters, depends on domain
+    render/        Renderer (Canvas 2D), procedural sprites, Effects (particles, texts)
+    audio/         Sfx: sounds synthesized with Web Audio, no files
+    GameLoop.ts    fixed-step requestAnimationFrame, 1/60 s
+  presentation/    Game: input, 4×3 command panel, HUD, screens; describe.ts: texts;
+                   ServerLink.ts: WebSocket link to the game server
+  server/          HTTP + WebSocket server: serves dist/, forwards orders to the referee
                    (application/online/)
-tests/             même arborescence que src/ ; architecture, support/
+tests/             same tree as src/; architecture, support/
 ```
 
-Les choix qui comptent :
+The choices that matter:
 
-- **Simulation pure et déterministe.** `World` n'est modifié que par `dispatch(world, commande)`
-  et `step()`. Même graine + même journal de commandes = même partie, ce que vérifie un
-  test de rejeu. C'est la base d'un replay, d'un mode spectateur ou d'un multijoueur en
-  *lockstep* comme celui de Warcraft III. Côté architecture, c'est un modèle
-  commande / événement : les commandes entrent, les événements (`kill`, `hit`, `leak`,
-  `waveStart`…) sortent et alimentent le rendu, le son et l'interface sans que la
-  simulation les connaisse.
-- **Champs de flux plutôt que A\* par créature.** Un Dijkstra par tronçon donne à chaque
-  case la distance à la cible et la case suivante. Le coût ne dépend pas du nombre de
-  créatures, et recalculer après chaque construction est instantané. La même passe sert à
-  valider qu'une construction ne ferme pas le passage et à prévisualiser le nouveau trajet.
-- **Tout est donnée.** Tours, arbre d'amélioration, créatures, vagues et carte sont des
-  objets simples ; ajouter une tour ou une carte ne touche pas au moteur.
-- **Rendu interchangeable.** `Renderer` ne fait que lire `World`. Passer à PixiJS ou à
-  WebGL ne toucherait ni la simulation ni les tests.
+- **Pure, deterministic simulation.** `World` is only changed by `dispatch(world, command)`
+  and `step()`. Same seed + same command log = same game, which a replay test checks.
+  This is the foundation for replays, a spectator mode, or *lockstep* multiplayer like
+  Warcraft III's. Architecturally, it is a command / event model: commands go in, events
+  (`kill`, `hit`, `leak`, `waveStart`…) come out and feed rendering, sound and UI without
+  the simulation knowing about them.
+- **Flow fields rather than A\* per creep.** One Dijkstra pass per leg gives every cell
+  its distance to the target and the next cell to step to. The cost does not depend on
+  the number of creeps, and recomputing after each build is instant. The same pass
+  validates that a build does not close the path and previews the new route.
+- **Everything is data.** Towers, upgrade tree, creeps, waves and map are plain objects;
+  adding a tower or a map does not touch the engine.
+- **Swappable rendering.** `Renderer` only reads `World`. Moving to PixiJS or WebGL would
+  touch neither the simulation nor the tests.
 
-## Pistes
+## Ideas
 
-- Multijoueur à plusieurs couloirs (le déterminisme est déjà là : il suffit d'échanger les commandes).
-- Éditeur de cartes : la carte est un tableau de chaînes.
-- Enregistrement et relecture de parties à partir de `world.log`.
-- Rendu PixiJS pour des milliers de particules, sprites dessinés à la main.
+- Multi-lane multiplayer (determinism is already there: exchanging commands is enough).
+- Map editor: the map is an array of strings.
+- Recording and replaying games from `world.log`.
+- PixiJS rendering for thousands of particles, hand-drawn sprites.
 
-## Esprit du projet
+## Spirit of the project
 
-Runemaze est un projet pour le plaisir, fait pour jouer entre amis, et entièrement
-*vibe codé*. Il ne cherche pas à appliquer des pratiques industrielles : le but est
-d'apporter vite de la valeur, c'est-à-dire de pouvoir jouer, en évitant les complexités
-d'un code de production (pas de CI, de déploiement, de surveillance ni de compatibilité
-à maintenir). L'architecture et les tests ne servent qu'à garder le jeu facile à faire
-évoluer.
+Runemaze is a just-for-fun project, made to play with friends, and entirely
+*vibe coded*. It does not try to follow industrial practices: the goal is to deliver
+value fast, meaning being able to play, while avoiding the complexity of production code
+(no CI, deployment, monitoring or compatibility to maintain). The architecture and tests
+only exist to keep the game easy to evolve.
