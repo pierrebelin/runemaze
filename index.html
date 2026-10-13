@@ -267,6 +267,9 @@
   .start-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
   .sheet .start-links .btn { font-size: 14px; padding: 6px 14px; color: var(--text-dim); background: transparent; text-decoration: none; }
   .sheet .start-links .btn:hover { color: var(--text); }
+  /* Choix de la langue, à l'écran titre seulement. */
+  .langs { display: inline-flex; gap: 4px; }
+  .sheet .start-links .langs .btn[aria-checked="true"] { color: var(--text); border-color: var(--accent); }
   .sheet.start { width: min(760px, 100%); }
   .start-ways { display: grid; gap: 14px; }
   .start-ways .block { margin: 0; }
@@ -486,7 +489,7 @@
 <div id="app">
   <header class="bar" id="bar">
     <span class="brand">Runemaze</span>
-    <span class="res" title="Vies">
+    <span class="res" id="livesRes" title="Vies">
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17s-7-4.3-7-9.2A3.8 3.8 0 0110 5.6a3.8 3.8 0 017 2.2C17 12.7 10 17 10 17z" fill="#d8553f" stroke="#6e2419" stroke-width="1.2"/></svg>
       <b id="lives">0</b>
     </span>
@@ -498,7 +501,7 @@
       <span class="chip" id="etherChip"></span>
       <span class="detail" id="etherDetail">Éther produit par les glaneurs, dépensé en envois et en niveaux de porte.</span>
     </span>
-    <span class="res" id="waveRes"><small>Vague</small> <b id="wave">0</b></span>
+    <span class="res" id="waveRes"><small id="waveLabel">Vague</small> <b id="wave">0</b></span>
     <span class="spacer"></span>
     <span class="next"><span class="timer" id="timer"></span></span>
     <button class="btn" id="sendBtn" type="button" title="Envois (T)" hidden>Envois<kbd>T</kbd></button>

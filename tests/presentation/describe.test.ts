@@ -9,7 +9,7 @@ import { CREEPS } from '../../src/domain/catalog/creeps';
 import {
   armorName, builderCard,
   counters, creepEffects, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves,
-  duelVerdictLabel, elementsLabel, FAMILY_LABEL, fmt0, fmt1, gatePanel, gleanerPanel, matchupTags, modeHint, modeLabel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, scoreboard, sendPanel, sentMessage, pairRoster, teamRoster, towerSpecials, waveRecap,
+  duelVerdictLabel, elementsLabel, familyLabel, fmt0, fmt1, gatePanel, gleanerPanel, matchupTags, modeHint, modeLabel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, scoreboard, sendPanel, sentMessage, pairRoster, teamRoster, towerSpecials, waveRecap,
 } from '../../src/presentation/describe';
 import { GLEANER } from '../../src/domain/catalog/ether';
 import { etherChip, goldForecastChip, goldForecastInfo, missingGold, nextWaveLabel, resignPrompt, routeChange, creepTags } from '../../src/presentation/describe';
@@ -136,7 +136,7 @@ describe('bilan de partie', () => {
     const html = debriefFamilies(familyDamage([hybrid, simple]));
 
     expect(html).toContain(`Hybrides ${fmt0(75)} %`);
-    expect(html).toContain(`${FAMILY_LABEL.frost} ${fmt0(25)} %`);
+    expect(html).toContain(`${familyLabel('frost')} ${fmt0(25)} %`);
   });
 
   it('[RM-04] trace une colonne par vague, haute en proportion des vies perdues', () => {
