@@ -34,7 +34,8 @@ import type { ArmorType, AttackType, Biome, Command, Creep, Difficulty, GameEven
 import { CommandType, GameEventType } from '../domain/model/types';
 import { breakerLosses, familyDamage, towerRanking, waveCurve } from '../domain/rules/debrief';
 import { withRecord, type RecordBook } from '../domain/rules/records';
-import { biomeEffect, biomeLabel, mapFacts, resignPrompt, etherChip, goldForecastChip, goldForecastInfo, armorName, missingGold, nextWaveLabel, routeChange, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeHint, modeLabel, pairRoster, teamRoster, waveRecap, builderCard, elementsLabel, logo, FAMILY_LABEL, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, scoreboard, sendPanel, sentMessage, TARGET_LABEL, towerInfo } from './describe';
+import { biomeEffect, biomeLabel, mapFacts, resignPrompt, etherChip, goldForecastChip, goldForecastInfo, armorName, missingGold, nextWaveLabel, routeChange, creepInfo, debriefBreakers, debriefFamilies, debriefTowers, debriefWaves, duelVerdictLabel, modeHint, modeLabel, pairRoster, teamRoster, waveRecap, builderCard, elementsLabel, logo, familyLabel, fmt0, fmt1, fmtM, gatePanel, gleanerPanel, nextWaveInfo, partnerLabel, placedTowerInfo, reachedTitle, rivalDetail, rivalHeadline, scoreboard, sendPanel, sentMessage, targetLabel, towerInfo } from './describe';
+import { LANGS, LANG_NAME, armorLabel, attackLabel, creepName, creepPlural, difficultyLabel, lang, reasonText, setLang, towerName, tr, type Lang } from './i18n';
 import { ServerLink } from './ServerLink';
 
 /** Échappe une donnée venant du serveur (pseudo, carte…) avant insertion dans un gabarit HTML. */
@@ -47,7 +48,7 @@ function mapPickHtml(map: MapDef, editable: boolean): string {
   const biome = map.biome ?? BIOMES[0];
   const head = editable
     ? `<div class="biomes" role="radiogroup" aria-label="Biome">${BIOMES.map((b) => `<button type="button" class="biome" role="radio" data-biome="${b}" aria-checked="${b === biome}">${biomeLabel(b)}</button>`).join('')}</div>
-      <button type="button" class="btn" data-redraw>Retirer une carte</button>`
+      <button type="button" class="btn" data-redraw>${tr('Retirer une carte', 'Draw another map')}</button>`
     : `<h3 class="map-biome">${biomeLabel(biome)}</h3>`;
   return `<canvas class="map-thumb" width="576" height="384" aria-hidden="true"></canvas>
     <div class="map-info">
@@ -69,6 +70,7 @@ const BEST_KEY = 'runemaze.best.v2';
 const RECORD_KEY = 'tirage';
 const PENDING_KEY = 'runemaze.pending.v1';
 const DUEL_SEAT_KEY = 'runemaze.duelseat.v1';
+const LANG_KEY = 'runemaze.lang.v1';
 
 const ICON_SELL = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="17" cy="22" r="9" fill="#e9b949" stroke="#8a6320" stroke-width="2"/><circle cx="24" cy="16" r="9" fill="#f2cc66" stroke="#8a6320" stroke-width="2"/><path d="M24 11v10M21 13.5h4.5a1.7 1.7 0 010 3.4h-3a1.7 1.7 0 000 3.4h4.5" fill="none" stroke="#8a6320" stroke-width="1.6"/></svg>';
 const ICON_TARGET = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="11" fill="none" stroke="#e7e8ea" stroke-width="2.5"/><circle cx="20" cy="20" r="3" fill="#e0664f"/><path d="M20 4v8M20 28v8M4 20h8M28 20h8" stroke="#e7e8ea" stroke-width="2.5"/></svg>';
@@ -185,6 +187,7 @@ export class Game {
   private readonly portrait = $<HTMLCanvasElement>('portrait');
 
   constructor() {
+    this.loadLang();
     this.world = this.createWorld(this.drawnMap, 'normal');
     this.renderer = new Renderer(this.canvas);
     this.loop = new GameLoop(() => this.stepSim(), (dt) => this.frame(dt));
@@ -221,7 +224,7 @@ export class Game {
       });
     } catch {
       this.launching = false;
-      this.toast('Impossible de lancer la partie, vérifiez votre connexion.', true);
+      this.toast(tr('Impossible de lancer la partie, vérifiez votre connexion.', 'Could not start the game, check your connection.'), true);
       return;
     }
 
@@ -245,7 +248,7 @@ export class Game {
     this.sendPace();
     this.savePending();
     this.resetLostState();
-    this.toast(`${DIFFICULTY[d].label} : ${DIFFICULTY[d].lives} vies. Bâtissez avant la première vague.`);
+    this.toast(tr(`${difficultyLabel(d)} : ${DIFFICULTY[d].lives} vies. Bâtissez avant la première vague.`, `${difficultyLabel(d)}: ${DIFFICULTY[d].lives} lives. Build before the first wave.`));
     this.attachLink(link);
   }
 
@@ -305,8 +308,8 @@ export class Game {
     this.duelLost = true;
     this.openOverlay(Overlay.Lost, `
       <div class="sheet small">
-        <header class="sheet-head"><h2>Connexion perdue</h2><p class="lede">Reprenez la partie avec son code dans les 30 s.</p></header>
-        <div class="row actions"><button type="button" class="btn primary" id="quitDuelLost">Écran titre</button></div>
+        <header class="sheet-head"><h2>${tr('Connexion perdue', 'Connection lost')}</h2><p class="lede">${tr('Reprenez la partie avec son code dans les 30 s.', 'Rejoin the game with its code within 30 s.')}</p></header>
+        <div class="row actions"><button type="button" class="btn primary" id="quitDuelLost">${tr('Écran titre', 'Title screen')}</button></div>
       </div>`);
     $('quitDuelLost').addEventListener('click', () => this.leaveLobby());
   }
@@ -386,14 +389,17 @@ export class Game {
     const w = this.world;
     switch (e.t) {
       case GameEventType.WaveCleared:
-        this.toast(`Vague ${e.wave + 1} repoussée : +${e.bonus} or${e.income > 0 ? `, +${e.income} de revenu` : e.interest ? `, +${e.interest} d'intérêts` : ''}${e.trade > 0 ? `, +${e.trade} de comptoir` : ''}.`);
+        this.toast(tr(
+          `Vague ${e.wave + 1} repoussée : +${e.bonus} or${e.income > 0 ? `, +${e.income} de revenu` : e.interest ? `, +${e.interest} d'intérêts` : ''}${e.trade > 0 ? `, +${e.trade} de comptoir` : ''}.`,
+          `Wave ${e.wave + 1} repelled: +${e.bonus} gold${e.income > 0 ? `, +${e.income} income` : e.interest ? `, +${e.interest} interest` : ''}${e.trade > 0 ? `, +${e.trade} from trade` : ''}.`,
+        ));
         break;
       case GameEventType.Leak:
         // Carte hors champ : l'effet d'écran n'est pas vu, les vies tressautent à la place.
         if (!isMapVisible(this.worldView, this.zone, this.layout().boards[this.ownIndex()].place)) this.flashLives();
         if (w.time - this.leakToastAt > 3) {
           this.leakToastAt = w.time;
-          this.toast(e.boss ? `Le chef a franchi la porte : −${e.lives} vies.` : 'Une créature a franchi la porte.', true);
+          this.toast(e.boss ? tr(`Le chef a franchi la porte : −${e.lives} vies.`, `The boss got through the gate: −${e.lives} lives.`) : tr('Une créature a franchi la porte.', 'A creature got through the gate.'), true);
         }
         break;
       default:
@@ -473,7 +479,7 @@ export class Game {
     }
     const r = canBuild(this.world, this.buildDef, a.x, a.y);
     this.view.ghost = { x: a.x, y: a.y, ok: r.ok };
-    this.ghostReason = r.ok ? '' : r.reason;
+    this.ghostReason = r.ok ? '' : reasonText(r.reason);
     if (r.ok) {
       const p = previewRoute(this.world, a.x, a.y);
       this.previewDelta = p.length - this.world.mazeLength();
@@ -504,7 +510,7 @@ export class Game {
 
   private fail(reason: string): void {
     this.sfx.error();
-    this.toast(reason, true);
+    this.toast(reasonText(reason), true);
   }
 
   private upgrade(t: Tower, to: string): void {
@@ -888,29 +894,32 @@ export class Game {
       upgradeOptions(t.def, builderTowers(w.builder, TOWERS)).forEach((id, i) => {
         const to = TOWERS[id];
         const cost = upgradeCost(t.def, to);
-        const heading = t.def.family === 'wall' ? `Transformer en ${to.name}` : `Améliorer en ${to.name}`;
+        const heading = t.def.family === 'wall' ? tr(`Transformer en ${towerName(to)}`, `Turn into ${towerName(to)}`) : tr(`Améliorer en ${towerName(to)}`, `Upgrade to ${towerName(to)}`);
         slots[i] = {
-          label: to.name, icon: this.icon(id), cost, poor: w.gold < cost,
+          label: towerName(to), icon: this.icon(id), cost, poor: w.gold < cost,
           run: () => this.upgrade(t, id),
           info: () => towerInfo(to, cost, heading) + missingGold(cost, w.gold),
         };
       });
       if (t.def.attack) {
         slots[3] = {
-          label: 'Ciblage', icon: ICON_TARGET,
+          label: tr('Ciblage', 'Targeting'), icon: ICON_TARGET,
           run: () => {
             const next = TARGET_ORDER[(TARGET_ORDER.indexOf(t.targetMode) + 1) % TARGET_ORDER.length];
             this.order({ c: CommandType.Target, tower: t.id, mode: next });
-            this.toast(`Ciblage : ${TARGET_LABEL[next]}.`);
+            this.toast(tr(`Ciblage : ${targetLabel(next)}.`, `Targeting: ${targetLabel(next)}.`));
           },
-          info: () => `<h3>Ciblage : ${TARGET_LABEL[t.targetMode]}</h3><p>Change la priorité de tir : premier (le plus avancé), dernier, plus robuste, plus faible ou plus proche.</p>`,
+          info: () => tr(
+            `<h3>Ciblage : ${targetLabel(t.targetMode)}</h3><p>Change la priorité de tir : premier (le plus avancé), dernier, plus robuste, plus faible ou plus proche.</p>`,
+            `<h3>Targeting: ${targetLabel(t.targetMode)}</h3><p>Changes firing priority: first (furthest along), last, strongest, weakest or closest.</p>`,
+          ),
         };
       }
       const refund = refundValue(t);
       slots[5] = {
-        label: 'Vendre', icon: ICON_SELL, cost: refund,
+        label: tr('Vendre', 'Sell'), icon: ICON_SELL, cost: refund,
         run: () => this.sell(t),
-        info: () => `<h3>Vendre · +${refund} or</h3><p>La moitié de l'or investi est rendue, à tout moment.</p>`,
+        info: () => tr(`<h3>Vendre · +${refund} or</h3><p>La moitié de l'or investi est rendue, à tout moment.</p>`, `<h3>Sell · +${refund} gold</h3><p>Half of the gold invested is refunded, at any time.</p>`),
       };
       return slots;
     }
@@ -918,7 +927,7 @@ export class Game {
     buildMenu(w.builder).forEach((id, i) => {
       const def = TOWERS[id];
       slots[i] = {
-        label: def.name, icon: this.icon(id), cost: def.cost, poor: w.gold < def.cost, active: this.buildDef === id,
+        label: towerName(def), icon: this.icon(id), cost: def.cost, poor: w.gold < def.cost, active: this.buildDef === id,
         run: () => this.setBuild(this.buildDef === id ? null : id),
         info: () => towerInfo(def, def.cost) + missingGold(def.cost, w.gold),
       };
@@ -940,7 +949,7 @@ export class Game {
         if (!s) return `<div class="slot empty" aria-hidden="true"></div>`;
         const cls = ['slot', s.poor ? 'poor' : '', s.active ? 'active' : ''].join(' ');
         const cost = s.cost !== undefined ? `<span class="cost">${s.cost}</span>` : '';
-        return `<button type="button" class="${cls}" data-slot="${i}" title="${s.label} (${hk})" aria-label="${s.label}, touche ${hk}">${s.icon}<span class="hk">${hk}</span>${cost}<span class="name">${s.label}</span></button>`;
+        return `<button type="button" class="${cls}" data-slot="${i}" title="${s.label} (${hk})" aria-label="${s.label}, ${tr('touche', 'key')} ${hk}">${s.icon}<span class="hk">${hk}</span>${cost}<span class="name">${s.label}</span></button>`;
       })
       .join('');
   }
@@ -952,7 +961,7 @@ export class Game {
     let html = '';
     if (this.sendOpen) {
       const tabs = (['sends', 'gleaners', 'gate'] as const)
-        .map((t) => `<button type="button" data-tab="${t}"${t === this.sendTab ? ' class="active"' : ''}>${{ sends: 'Envois', gleaners: 'Glaneurs', gate: 'Porte' }[t]}</button>`)
+        .map((t) => `<button type="button" data-tab="${t}"${t === this.sendTab ? ' class="active"' : ''}>${{ sends: tr('Envois', 'Sends'), gleaners: tr('Glaneurs', 'Gleaners'), gate: tr('Porte', 'Gate') }[t]}</button>`)
         .join('');
       const body = this.sendTab === 'sends'
         ? sendPanel(this.world.ether, this.world.income)
@@ -994,20 +1003,24 @@ export class Game {
     if (this.buildDef) {
       const def = TOWERS[this.buildDef];
       const touch = matchMedia('(pointer: coarse)').matches;
-      unit = `<h2>${def.name}</h2><div class="sub">Construction · ${def.cost} or</div><div class="facts">${touch ? 'Touchez pour prévisualiser, touchez à nouveau pour bâtir.' : 'Clic pour bâtir · Échap pour annuler'}</div>`;
+      const hint = touch
+        ? tr('Touchez pour prévisualiser, touchez à nouveau pour bâtir.', 'Tap to preview, tap again to build.')
+        : tr('Clic pour bâtir · Échap pour annuler', 'Click to build · Esc to cancel');
+      unit = `<h2>${towerName(def)}</h2><div class="sub">${tr('Construction', 'Building')} · ${def.cost} ${tr('or', 'gold')}</div><div class="facts">${hint}</div>`;
     } else if (shown && this.selected!.board === this.duelSeat) {
-      const family = shown.def.elements ? `${elementsLabel(shown.def)} · hybride` : FAMILY_LABEL[shown.def.family];
-      unit = `<h2>${shown.def.name}</h2><div class="sub">${family}${shown.def.tier ? ` · niveau ${shown.def.tier}` : ''}</div><div class="facts">${shown.def.attack ? `${ATTACK_LABEL[shown.def.attack.type]} · ${fmt0(shown.kills)} éliminations` : 'Bloc de labyrinthe'}</div>`;
+      const family = shown.def.elements ? `${elementsLabel(shown.def)} · ${tr('hybride', 'hybrid')}` : familyLabel(shown.def.family);
+      const facts = shown.def.attack ? `${attackLabel(shown.def.attack.type)} · ${fmt0(shown.kills)} ${tr('éliminations', 'kills')}` : tr('Bloc de labyrinthe', 'Maze block');
+      unit = `<h2>${towerName(shown.def)}</h2><div class="sub">${family}${shown.def.tier ? ` · ${tr('niveau', 'tier')} ${shown.def.tier}` : ''}</div><div class="facts">${facts}</div>`;
     } else if (this.selected?.kind === 'creep' && this.selected.board === this.duelSeat) {
       const c = w.creeps.find((k) => k.id === this.selected!.id);
       unit = c
-        ? `<h2>${c.def.name}</h2><div class="sub">${armorName(c.def.armorType)} · vague ${c.wave + 1}</div><div class="hpbar"><i style="width:${Math.max(0, (c.hp / c.maxHp) * 100).toFixed(1)}%"></i></div><div class="facts">${fmt0(c.hp)} / ${fmt0(c.maxHp)} PV</div>`
+        ? `<h2>${creepName(c.def)}</h2><div class="sub">${armorName(c.def.armorType)} · ${tr('vague', 'wave')} ${c.wave + 1}</div><div class="hpbar"><i style="width:${Math.max(0, (c.hp / c.maxHp) * 100).toFixed(1)}%"></i></div><div class="facts">${fmt0(c.hp)} / ${fmt0(c.maxHp)} ${tr('PV', 'HP')}</div>`
         : '';
     } else {
       const i = w.wave + 1;
       const wg = waveAt(i).groups[0];
       const def = CREEPS[wg.creep];
-      unit = `<h2>${def.boss ? def.name : def.plural}</h2><div class="sub">Vague ${i + 1}${wg.count > 1 ? ` · ×${wg.count}` : ' · chef'}</div><div class="facts">${armorName(def.armorType)}${def.air ? ' · volants' : ''}${def.magicImmune ? ' · immunisés' : ''}</div>`;
+      unit = `<h2>${def.boss ? creepName(def) : creepPlural(def)}</h2><div class="sub">${tr('Vague', 'Wave')} ${i + 1}${wg.count > 1 ? ` · ×${wg.count}` : ` · ${tr('chef', 'boss')}`}</div><div class="facts">${armorName(def.armorType)}${def.air ? ` · ${tr('volants', 'flying')}` : ''}${def.magicImmune ? ` · ${tr('immunisés', 'immune')}` : ''}</div>`;
     }
     if (unit !== this.unitCache) {
       this.unitCache = unit;
@@ -1070,6 +1083,7 @@ export class Game {
       for (const { creep, seat } of list) seats.set(seat, [...(seats.get(seat) ?? []), creep]);
       return [...seats].sort(([x], [y]) => x - y).map(([seat, creeps]) => ({ nick: this.others.get(seat)?.nick ?? '', groups: groupSends(creeps) }));
     };
+    if (this.fx.banner) this.fx.banner.title = `${tr('Vague', 'Wave')} ${w.wave + 1}${this.fx.banner.boss ? ` · ${tr('Chef', 'Boss')}` : ''}`;
     if (this.fx.banner) this.fx.banner.lines = waveRecap(waveBriefing(w, w.wave), bySeat(w.waveSends.received.map((s) => ({ creep: s.creep, seat: s.from }))));
     if (this.duelRole) {
       // `to` est un rang parmi les sièges adverses, pas un siège.
@@ -1121,7 +1135,7 @@ export class Game {
     const panel = document.createElement('details');
     panel.id = `rivalPanel${seat}`;
     panel.className = 'rival-panel';
-    panel.innerHTML = `<summary id="rivalHeadline${seat}"></summary><div id="rivalDetail${seat}"></div><button type="button" class="btn" id="rivalViewBtn${seat}">Ma carte</button>`;
+    panel.innerHTML = `<summary id="rivalHeadline${seat}"></summary><div id="rivalDetail${seat}"></div><button type="button" class="btn" id="rivalViewBtn${seat}">${tr('Ma carte', 'My map')}</button>`;
     side.prepend(panel);
     // Coéquipier d'abord, puis les adversaires, chacun par siège.
     const rank = (el: Element) => {
@@ -1200,6 +1214,62 @@ export class Game {
     $('overlay').innerHTML = '';
   }
 
+  /** Langue gardée d'une visite à l'autre ; français à défaut. */
+  private loadLang(): void {
+    try {
+      const saved = localStorage.getItem(LANG_KEY);
+      if (saved && (LANGS as string[]).includes(saved)) setLang(saved as Lang);
+    } catch {
+      /* stockage indisponible : on s'en passe */
+    }
+    this.applyStaticTexts();
+  }
+
+  /** Choix de la langue, à l'écran titre seulement : jamais pendant une partie. */
+  private chooseLang(l: Lang): void {
+    if (this.overlay !== Overlay.Start || l === lang()) return;
+    setLang(l);
+    try {
+      localStorage.setItem(LANG_KEY, l);
+    } catch {
+      /* stockage indisponible : on s'en passe */
+    }
+    this.applyStaticTexts();
+    this.showStart();
+    document.querySelector<HTMLButtonElement>(`[data-lang="${l}"]`)?.focus();
+  }
+
+  /** Textes écrits dans `index.html` : barre du haut, commandes de vue, libellés d'accessibilité. */
+  private applyStaticTexts(): void {
+    document.documentElement.lang = lang();
+    const texts: [string, 'title' | 'aria-label' | 'html', string, string][] = [
+      ['livesRes', 'title', 'Vies', 'Lives'],
+      ['etherDetail', 'html', 'Éther produit par les glaneurs, dépensé en envois et en niveaux de porte.', 'Ether produced by gleaners, spent on sends and gate levels.'],
+      ['waveLabel', 'html', 'Vague', 'Wave'],
+      ['sendBtn', 'title', 'Envois (T)', 'Sends (T)'],
+      ['sendBtn', 'html', 'Envois<kbd>T</kbd>', 'Sends<kbd>T</kbd>'],
+      ['pauseBtn', 'title', 'Pause (P)', 'Pause (P)'],
+      ['muteBtn', 'aria-label', 'Couper le son', 'Mute'],
+      ['muteBtn', 'title', 'Son (M)', 'Sound (M)'],
+      ['helpBtn', 'aria-label', 'Aide', 'Help'],
+      ['helpBtn', 'title', 'Aide (H)', 'Help (H)'],
+      ['resignBtn', 'html', 'Quitter la partie', 'Quit game'],
+      ['game', 'aria-label', 'Carte du jeu', 'Game map'],
+      ['sendPanel', 'aria-label', 'Envois', 'Sends'],
+      ['cancelBuildBtn', 'title', 'Annuler la construction (Échap)', 'Cancel building (Esc)'],
+      ['cancelBuildBtn', 'html', 'Annuler<kbd>Échap</kbd>', 'Cancel<kbd>Esc</kbd>'],
+      ['routeBtn', 'aria-label', 'Afficher le trajet', 'Show the route'],
+      ['routeBtn', 'title', 'Trajet (L)', 'Route (L)'],
+      ['recenterBtn', 'aria-label', 'Recentrer sur ma carte', 'Recenter on my map'],
+      ['recenterBtn', 'title', 'Recentrer (Espace)', 'Recenter (Space)'],
+      ['card', 'aria-label', 'Commandes', 'Commands'],
+    ];
+    for (const [id, attr, fr, en] of texts) {
+      if (attr === 'html') $(id).innerHTML = tr(fr, en);
+      else $(id).setAttribute(attr, tr(fr, en));
+    }
+  }
+
   private loadBest(): RecordBook {
     try {
       return JSON.parse(localStorage.getItem(BEST_KEY) ?? '{}') as RecordBook;
@@ -1266,15 +1336,15 @@ export class Game {
   private lostHtml(seconds: number): string {
     return `
       <div class="sheet small">
-        <header class="sheet-head"><h2>Connexion perdue — ${seconds} s</h2><p class="lede">Nouvelle tentative de connexion en cours…</p></header>
+        <header class="sheet-head"><h2>${tr('Connexion perdue', 'Connection lost')} — ${seconds} s</h2><p class="lede">${tr('Nouvelle tentative de connexion en cours…', 'Trying to reconnect…')}</p></header>
       </div>`;
   }
 
   private showFrozen(): void {
     this.openOverlay(Overlay.Lost, `
       <div class="sheet small">
-        <header class="sheet-head"><h2>${partnerLabel(!this.world.duel)} déconnecté — ${Math.ceil(this.frozenMs! / 1000)} s</h2></header>
-        <div class="row actions"><button type="button" class="btn" id="quitFrozen">Quitter la partie</button></div>
+        <header class="sheet-head"><h2>${partnerLabel(!this.world.duel)} ${tr('déconnecté', 'disconnected')} — ${Math.ceil(this.frozenMs! / 1000)} s</h2></header>
+        <div class="row actions"><button type="button" class="btn" id="quitFrozen">${tr('Quitter la partie', 'Quit game')}</button></div>
       </div>`);
     $('quitFrozen').addEventListener('click', () => {
       this.link = null;
@@ -1291,8 +1361,8 @@ export class Game {
   private showEndedOverlay(): void {
     this.openOverlay(Overlay.End, `
       <div class="sheet small">
-        <header class="sheet-head"><h2>La partie est terminée.</h2></header>
-        <div class="row actions"><button type="button" class="btn primary" id="backToStart">Écran titre</button></div>
+        <header class="sheet-head"><h2>${tr('La partie est terminée.', 'The game is over.')}</h2></header>
+        <div class="row actions"><button type="button" class="btn primary" id="backToStart">${tr('Écran titre', 'Title screen')}</button></div>
       </div>`);
     $('backToStart').addEventListener('click', () => this.showStart(true));
   }
@@ -1383,7 +1453,7 @@ export class Game {
     this.difficulty = this.world.difficulty;
     this.resize();
     this.saveBest();
-    this.toast('La partie est terminée.', true);
+    this.toast(tr('La partie est terminée.', 'The game is over.'), true);
     this.showEnd();
     this.resetLostState();
   }
@@ -1403,9 +1473,10 @@ export class Game {
     return (Object.keys(DIFFICULTY) as Difficulty[])
       .map((d) => {
         const D = DIFFICULTY[d];
-        const rec = best[d] ? `<span class="record">Record : vague ${best[d]}</span>` : '';
+        const rec = best[d] ? `<span class="record">${tr(`Record : vague ${best[d]}`, `Best: wave ${best[d]}`)}</span>` : '';
+        const facts = tr(`${D.lives} vies · ${D.gold} or · PV ×${fmt1(D.hp)}`, `${D.lives} lives · ${D.gold} gold · HP ×${fmt1(D.hp)}`);
         return `<button type="button" class="diff" role="radio" data-diff="${d}" aria-checked="${d === checked}"${enabled ? '' : ' disabled'}>
-          <strong>${D.label}</strong><span>${D.lives} vies · ${D.gold} or · PV ×${fmt1(D.hp)}</span>${rec}</button>`;
+          <strong>${difficultyLabel(d)}</strong><span>${facts}</span>${rec}</button>`;
       })
       .join('');
   }
@@ -1443,33 +1514,38 @@ export class Game {
         <header class="sheet-head">
           ${logo()}
           <h1>Runemaze</h1>
-          <p class="lede">Ici, pas de chemin tout tracé : c'est vous qui le dessinez, mur après mur, pour égarer les hordes sous le feu de vos tours.</p>
+          <p class="lede">${tr("Ici, pas de chemin tout tracé : c'est vous qui le dessinez, mur après mur, pour égarer les hordes sous le feu de vos tours.", 'No ready-made path here: you draw it yourself, wall after wall, to lead the hordes astray under the fire of your towers.')}</p>
         </header>
         <div class="start-ways">
           <section class="block solo" aria-labelledby="soloTitle">
             <div>
               <h2 id="soloTitle">Solo</h2>
-              <p>Huit factions, des vagues sans fin. Tenez le plus longtemps possible.</p>
+              <p>${tr('Huit factions, des vagues sans fin. Tenez le plus longtemps possible.', 'Eight factions, endless waves. Hold out as long as you can.')}</p>
             </div>
-            <div class="row play-row"><button type="button" class="btn primary" id="playBtn">Jouer en solo</button></div>
+            <div class="row play-row"><button type="button" class="btn primary" id="playBtn">${tr('Jouer en solo', 'Play solo')}</button></div>
           </section>
           <section class="block multi" aria-labelledby="multiTitle">
-            <h2 id="multiTitle">En ligne</h2>
-            <label class="field"><span>Votre pseudo</span><input type="text" id="duelNick" minlength="${NICK_MIN}" maxlength="${NICK_MAX}" value="${escapeHtml(this.ownNick)}" placeholder="${NICK_MIN} à ${NICK_MAX} caractères" autocomplete="nickname" spellcheck="false"></label>
+            <h2 id="multiTitle">${tr('En ligne', 'Online')}</h2>
+            <label class="field"><span>${tr('Votre pseudo', 'Your nickname')}</span><input type="text" id="duelNick" minlength="${NICK_MIN}" maxlength="${NICK_MAX}" value="${escapeHtml(this.ownNick)}" placeholder="${tr(`${NICK_MIN} à ${NICK_MAX} caractères`, `${NICK_MIN} to ${NICK_MAX} characters`)}" autocomplete="nickname" spellcheck="false"></label>
             <p class="label">Mode</p>
             <div class="modes" role="radiogroup" aria-label="Mode">${Object.values(Mode).map((m) => `<button type="button" class="diff" role="radio" data-room-mode="${m}" aria-checked="${m === this.duelMode}"><strong>${modeLabel(m)}</strong><span>${modeHint(m)}</span></button>`).join('')}</div>
             <div class="duel-ways">
-              <button type="button" class="btn primary" id="hostDuelBtn">Héberger une partie</button>
-              <p class="or">ou</p>
-              <div class="code-join"><input type="text" id="duelCode" maxlength="6" placeholder="ABCDEF" aria-label="Code de la partie" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="btn" id="joinDuelBtn">Rejoindre</button></div>
+              <button type="button" class="btn primary" id="hostDuelBtn">${tr('Héberger une partie', 'Host a game')}</button>
+              <p class="or">${tr('ou', 'or')}</p>
+              <div class="code-join"><input type="text" id="duelCode" maxlength="6" placeholder="ABCDEF" aria-label="${tr('Code de la partie', 'Game code')}" autocomplete="off" autocapitalize="characters" spellcheck="false"><button type="button" class="btn" id="joinDuelBtn">${tr('Rejoindre', 'Join')}</button></div>
             </div>
           </section>
         </div>
-        <nav class="start-links" aria-label="Ressources">
-          <button type="button" class="btn" id="startHelp">Commandes</button>
-          <a class="btn" href="sprites.html" target="_blank" rel="noopener">Sprites des factions</a>
+        <nav class="start-links" aria-label="${tr('Ressources', 'Resources')}">
+          <button type="button" class="btn" id="startHelp">${tr('Commandes', 'Controls')}</button>
+          <a class="btn" href="sprites.html" target="_blank" rel="noopener">${tr('Sprites des factions', 'Faction sprites')}</a>
+          <span class="langs" role="radiogroup" aria-label="Langue · Language">${LANGS.map((l) => `<button type="button" class="btn" role="radio" data-lang="${l}" lang="${l}" aria-checked="${l === lang()}">${LANG_NAME[l]}</button>`).join('')}</span>
         </nav>
       </div>`);
+    // Seul l'écran titre propose la langue : elle ne change jamais en cours de partie.
+    document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach((b) =>
+      b.addEventListener('click', () => this.chooseLang(b.dataset.lang as Lang)),
+    );
     $('playBtn').addEventListener('click', () => this.showSetup());
     document.querySelectorAll<HTMLButtonElement>('[data-room-mode]').forEach((b) =>
       b.addEventListener('click', () => {
@@ -1527,16 +1603,16 @@ export class Game {
     this.openOverlay(Overlay.Setup, `
       <div class="sheet wide">
         <header class="sheet-head">
-          <h2>Préparer la partie</h2>
-          <p class="lede">Choisissez votre terrain, votre bâtisseur et le niveau de la menace.</p>
+          <h2>${tr('Préparer la partie', 'Prepare the game')}</h2>
+          <p class="lede">${tr('Choisissez votre terrain, votre bâtisseur et le niveau de la menace.', 'Choose your ground, your builder and how fierce the threat is.')}</p>
         </header>
-        <p class="label">Carte</p>
+        <p class="label">${tr('Carte', 'Map')}</p>
         <div class="maps"></div>
-        <p class="label">Bâtisseur</p>
-        <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.builderId)}</div>
-        <p class="label">Difficulté</p>
-        <div class="diffs" role="radiogroup" aria-label="Difficulté"></div>
-        <div class="row actions"><button type="button" class="btn primary" id="startBtn">Commencer</button><button type="button" class="btn" id="setupBack">Retour</button></div>
+        <p class="label">${tr('Bâtisseur', 'Builder')}</p>
+        <div class="builders" role="radiogroup" aria-label="${tr('Bâtisseur', 'Builder')}">${this.buildersHtml(this.builderId)}</div>
+        <p class="label">${tr('Difficulté', 'Difficulty')}</p>
+        <div class="diffs" role="radiogroup" aria-label="${tr('Difficulté', 'Difficulty')}"></div>
+        <div class="row actions"><button type="button" class="btn primary" id="startBtn">${tr('Commencer', 'Start')}</button><button type="button" class="btn" id="setupBack">${tr('Retour', 'Back')}</button></div>
       </div>`);
     const el = $('overlay');
     this.bindSettings(el);
@@ -1584,7 +1660,7 @@ export class Game {
     const field = $<HTMLInputElement>('duelNick');
     const nick = validNick(field.value);
     if (nick === null) {
-      this.toast(`Choisissez un pseudo de ${NICK_MIN} à ${NICK_MAX} caractères.`, true);
+      this.toast(tr(`Choisissez un pseudo de ${NICK_MIN} à ${NICK_MAX} caractères.`, `Choose a nickname of ${NICK_MIN} to ${NICK_MAX} characters.`), true);
       field.focus();
     }
     return nick;
@@ -1602,7 +1678,7 @@ export class Game {
       await link.connect();
     } catch {
       if (this.duelLink === link) this.duelLink = null;
-      this.toast('Impossible de créer la partie, vérifiez votre connexion.', true);
+      this.toast(tr('Impossible de créer la partie, vérifiez votre connexion.', 'Could not create the game, check your connection.'), true);
       return;
     }
     this.duelRole = 'host';
@@ -1625,7 +1701,7 @@ export class Game {
       await link.connect();
     } catch {
       if (this.duelLink === link) this.duelLink = null;
-      this.toast('Impossible de créer la partie, vérifiez votre connexion.', true);
+      this.toast(tr('Impossible de créer la partie, vérifiez votre connexion.', 'Could not create the game, check your connection.'), true);
       return;
     }
     this.duelRole = 'guest';
@@ -1688,13 +1764,13 @@ export class Game {
           this.duelRejoining = false;
           this.clearSeat(DUEL_SEAT_KEY);
         }
-        this.toast(msg.reason, true);
+        this.toast(reasonText(msg.reason), true);
         if (!this.duelInRoom) this.closeDuelLink();
         break;
       case ServerMessageType.Cancelled:
         this.closeDuelLink();
         this.showStart(true);
-        this.toast('L’hôte a quitté la partie.', true);
+        this.toast(tr('L’hôte a quitté la partie.', 'The host left the game.'), true);
         break;
       default:
         break;
@@ -1766,12 +1842,12 @@ export class Game {
     const losses = breakerLosses(stats.towers.values());
     return `
       <section class="debrief">
-        <p class="label">Meilleures tours</p>
+        <p class="label">${tr('Meilleures tours', 'Best towers')}</p>
         ${debriefTowers(ranking, (id) => this.icon(id))}
         ${ranking.length ? debriefFamilies(familyDamage(ranking)) : ''}
       </section>
       <section class="debrief">
-        <p class="label">Vies perdues par vague</p>
+        <p class="label">${tr('Vies perdues par vague', 'Lives lost per wave')}</p>
         ${debriefWaves(waveCurve(stats.waves, gold))}
         ${losses.count ? debriefBreakers(losses) : ''}
       </section>`;
@@ -1787,7 +1863,7 @@ export class Game {
     const title = coop ? reachedTitle(own.wave) : duelVerdictLabel(msg.verdict);
     const label = (nick: string) => (teams ? nick : rivalNick);
     const board = scoreboard([
-      { name: 'Vous', wave: own.wave, lives: own.lives, stats: own.stats },
+      { name: tr('Vous', 'You'), wave: own.wave, lives: own.lives, stats: own.stats },
       ...others.map((o) => ({ name: label(o.nick), wave: o.world.wave, lives: o.world.lives, stats: o.world.stats })),
     ]);
     this.world = own;
@@ -1795,14 +1871,14 @@ export class Game {
       <div class="sheet">
         <header class="sheet-head"><h2>${escapeHtml(title)}</h2></header>
         ${board}
-        <p class="label">Détail par joueur</p>
+        <p class="label">${tr('Détail par joueur', 'Details by player')}</p>
         <div class="duel-tabs" role="tablist">
-          <button type="button" class="duel-tab active" data-player="own">Vous</button>
+          <button type="button" class="duel-tab active" data-player="own">${tr('Vous', 'You')}</button>
           ${others.map((o) => `<button type="button" class="duel-tab" data-player="${o.seat}">${escapeHtml(label(o.nick))}</button>`).join('')}
         </div>
         <div class="duel-panel" data-player="own">${this.debriefBlockHtml(own.stats, own.gold)}</div>
         ${others.map((o) => `<div class="duel-panel" data-player="${o.seat}" hidden>${this.debriefBlockHtml(o.world.stats, o.world.gold)}</div>`).join('')}
-        <div class="row actions"><button type="button" class="btn primary" id="again">Retour à l'accueil</button></div>
+        <div class="row actions"><button type="button" class="btn primary" id="again">${tr("Retour à l'accueil", 'Back to home')}</button></div>
       </div>`);
     const el = $('overlay');
     for (const tab of el.querySelectorAll<HTMLButtonElement>('.duel-tab')) {
@@ -1822,10 +1898,10 @@ export class Game {
 
   private lobbyHtml(): string {
     const code = this.duelRole === 'host'
-      ? `<div class="block lobby-code"><p class="label">Code à partager</p><p class="code">${escapeHtml(this.duelCode ?? '')}</p></div>`
+      ? `<div class="block lobby-code"><p class="label">${tr('Code à partager', 'Code to share')}</p><p class="code">${escapeHtml(this.duelCode ?? '')}</p></div>`
       : '';
     const teams = this.duelMode === Mode.Teams;
-    const startBtn = this.duelRole === 'host' ? '<button type="button" class="btn primary" id="startDuel">Lancer la partie</button>' : '';
+    const startBtn = this.duelRole === 'host' ? `<button type="button" class="btn primary" id="startDuel">${tr('Lancer la partie', 'Start the game')}</button>` : '';
     return `
       <div class="sheet wide">
         <header class="sheet-head">
@@ -1835,11 +1911,11 @@ export class Game {
         ${teams
           ? teamRoster(this.duelTeams, this.duelWaiting)
           : pairRoster({ nick: this.duelHostNick ?? '', picked: this.duelPicked.host }, { nick: this.duelGuestNick, picked: this.duelPicked.guest })}
-        ${this.duelMap ? `<p class="label">Carte</p><div class="maps">${mapPickHtml(this.duelMap, this.duelRole === 'host')}</div>` : ''}
-        <p class="label">Bâtisseur</p>
-        <div class="builders" role="radiogroup" aria-label="Bâtisseur">${this.buildersHtml(this.lobbyBuilderId)}</div>
-        ${this.duelDifficulty ? `<p class="label">Difficulté</p><div class="diffs" role="radiogroup" aria-label="Difficulté">${this.diffsHtml(this.duelDifficulty, false, this.duelRole === 'host')}</div>` : ''}
-        <div class="row actions">${startBtn}<button type="button" class="btn" id="leaveLobby">Quitter</button></div>
+        ${this.duelMap ? `<p class="label">${tr('Carte', 'Map')}</p><div class="maps">${mapPickHtml(this.duelMap, this.duelRole === 'host')}</div>` : ''}
+        <p class="label">${tr('Bâtisseur', 'Builder')}</p>
+        <div class="builders" role="radiogroup" aria-label="${tr('Bâtisseur', 'Builder')}">${this.buildersHtml(this.lobbyBuilderId)}</div>
+        ${this.duelDifficulty ? `<p class="label">${tr('Difficulté', 'Difficulty')}</p><div class="diffs" role="radiogroup" aria-label="${tr('Difficulté', 'Difficulty')}">${this.diffsHtml(this.duelDifficulty, false, this.duelRole === 'host')}</div>` : ''}
+        <div class="row actions">${startBtn}<button type="button" class="btn" id="leaveLobby">${tr('Quitter', 'Leave')}</button></div>
       </div>`;
   }
 
@@ -1907,11 +1983,13 @@ export class Game {
   /** Bouton « Reprendre la partie » : ouvre une liaison neuve à chaque clic, la clé locale n'est jamais effacée sur échec réseau. */
   private addResumeButton(pending: { id: string; token: string }): void {
     const row = document.querySelector<HTMLElement>('#overlay .play-row');
-    if (!row) return;
+    // Un changement de langue redessine l'écran titre : deux sondages peuvent alors répondre.
+    if (!row || row.querySelector('[data-resume]')) return;
     const btn = document.createElement('button');
     btn.type = 'button';
+    btn.dataset.resume = '';
     btn.className = 'btn primary';
-    btn.textContent = 'Reprendre la partie';
+    btn.textContent = tr('Reprendre la partie', 'Resume the game');
     btn.addEventListener('click', () => {
       if (btn.disabled || this.launching) return;
       btn.disabled = true;
@@ -1924,7 +2002,7 @@ export class Game {
         })
         .catch(() => {
           this.launching = false;
-          this.toast('Impossible de reprendre la partie, vérifiez votre connexion.', true);
+          this.toast(tr('Impossible de reprendre la partie, vérifiez votre connexion.', 'Could not resume the game, check your connection.'), true);
           btn.disabled = false;
         });
     });
@@ -1934,7 +2012,7 @@ export class Game {
   private armorTable(): string {
     const armors = Object.keys(ARMOR_LABEL) as ArmorType[];
     const attacks = Object.keys(ATTACK_LABEL) as AttackType[];
-    const head = armors.map((a) => `<th scope="col">${ARMOR_LABEL[a]}</th>`).join('');
+    const head = armors.map((a) => `<th scope="col">${armorLabel(a)}</th>`).join('');
     const rows = attacks
       .map((t) => {
         const cells = armors
@@ -1943,7 +2021,7 @@ export class Game {
             return `<td class="${m >= 1.25 ? 'g' : m <= 0.75 ? 'b' : ''}">×${fmtM(m)}</td>`;
           })
           .join('');
-        return `<tr><th scope="row">${ATTACK_LABEL[t]}</th>${cells}</tr>`;
+        return `<tr><th scope="row">${attackLabel(t)}</th>${cells}</tr>`;
       })
       .join('');
     return `<div class="table-wrap"><table class="armor"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -1956,25 +2034,35 @@ export class Game {
     this.setPaused(true);
     this.openOverlay(Overlay.Help, `
       <div class="sheet">
-        <header class="sheet-head"><h2>Commandes</h2></header>
-        <div class="keys block">
+        <header class="sheet-head"><h2>${tr('Commandes', 'Controls')}</h2></header>
+        <div class="keys block">${tr(`
           <kbd>Q W E A</kbd><span>Choisir une construction</span>
           <kbd>Clic</kbd><span>Bâtir ou sélectionner · clic droit ou Échap pour annuler</span>
           <kbd>Glisser</kbd><span>Déplacer la vue · <kbd>Molette</kbd> ou pincement pour zoomer · <kbd>Espace</kbd> revenir sur sa carte</span>
           <kbd>Au doigt</kbd><span>Toucher une case pour l'aperçu, la toucher à nouveau pour bâtir · boutons en bas à gauche : annuler, trajet, recentrer</span>
           <kbd>P</kbd><span>Pause · <kbd>M</kbd> son · <kbd>L</kbd> afficher le trajet</span>
-          <kbd>A · D</kbd><span>Sur une tour : changer le ciblage, vendre</span>
+          <kbd>A · D</kbd><span>Sur une tour : changer le ciblage, vendre</span>`, `
+          <kbd>Q W E A</kbd><span>Pick a building</span>
+          <kbd>Click</kbd><span>Build or select · right click or Esc to cancel</span>
+          <kbd>Drag</kbd><span>Move the view · <kbd>Wheel</kbd> or pinch to zoom · <kbd>Space</kbd> back to your map</span>
+          <kbd>Touch</kbd><span>Tap a cell to preview, tap it again to build · bottom-left buttons: cancel, route, recenter</span>
+          <kbd>P</kbd><span>Pause · <kbd>M</kbd> sound · <kbd>L</kbd> show the route</span>
+          <kbd>A · D</kbd><span>On a tower: change targeting, sell</span>`)}
         </div>
-        <p class="label">Table attaque / armure</p>
+        <p class="label">${tr('Table attaque / armure', 'Attack / armor table')}</p>
         ${this.armorTable()}
-        <p class="label">Conseils</p>
-        <ol class="block">
+        <p class="label">${tr('Conseils', 'Tips')}</p>
+        <ol class="block">${tr(`
           <li>Le trajet en pointillés montre le chemin actuel ; en doré, celui qu'aurait votre prochaine construction.</li>
           <li>Chaque point d'armure réduit les dégâts d'environ 6 % ; la Tour acide et la Corrosion la rongent pour toutes vos tours.</li>
           <li>Les intérêts (4 % de votre or, plafonnés) tombent à la fin de chaque vague : épargner rapporte, mais pas autant que tenir.</li>
-          <li>Les spectres de la vague 9 ignorent givre et foudre : prévoyez archers, canons ou venin.</li>
+          <li>Les spectres de la vague 9 ignorent givre et foudre : prévoyez archers, canons ou venin.</li>`, `
+          <li>The dotted line shows the current route; in gold, the one your next building would create.</li>
+          <li>Each point of armor reduces damage by about 6%; the Acid Tower and Corrosion eat it away for all your towers.</li>
+          <li>Interest (4% of your gold, capped) is paid at the end of each wave: saving pays, but not as much as holding.</li>
+          <li>The wraiths of wave 9 ignore frost and lightning: plan archers, cannons or venom.</li>`)}
         </ol>
-        <div class="row actions"><button type="button" class="btn primary" id="closeHelp">${fromStart ? 'Retour' : 'Reprendre'}</button></div>
+        <div class="row actions"><button type="button" class="btn primary" id="closeHelp">${fromStart ? tr('Retour', 'Back') : tr('Reprendre', 'Resume')}</button></div>
       </div>`);
     $('closeHelp').addEventListener('click', () => this.escape());
   }
@@ -1983,8 +2071,8 @@ export class Game {
     this.pausedByOverlay = false;
     this.openOverlay(Overlay.Pause, `
       <div class="sheet small">
-        <header class="sheet-head"><h2>Pause</h2><p class="lede">Le temps est suspendu. Vous pouvez encore consulter vos tours.</p></header>
-        <div class="row actions"><button type="button" class="btn primary" id="resume">Reprendre</button><button type="button" class="btn" id="resignPause">Quitter la partie</button></div>
+        <header class="sheet-head"><h2>Pause</h2><p class="lede">${tr('Le temps est suspendu. Vous pouvez encore consulter vos tours.', 'Time is frozen. You can still look at your towers.')}</p></header>
+        <div class="row actions"><button type="button" class="btn primary" id="resume">${tr('Reprendre', 'Resume')}</button><button type="button" class="btn" id="resignPause">${tr('Quitter la partie', 'Quit game')}</button></div>
       </div>`);
     $('resume').addEventListener('click', () => this.togglePause());
     $('resignPause').addEventListener('click', () => this.showResign());
@@ -2020,17 +2108,17 @@ export class Game {
     this.openOverlay(Overlay.End, `
       <div class="sheet">
         <header class="sheet-head">
-          <h2>La porte est tombée</h2>
-          <p class="lede">Votre défense a tenu jusqu'à la vague ${reached}.</p>
+          <h2>${tr('La porte est tombée', 'The gate has fallen')}</h2>
+          <p class="lede">${tr(`Votre défense a tenu jusqu'à la vague ${reached}.`, `Your defense held until wave ${reached}.`)}</p>
         </header>
         <div class="endstats">
-          <div><b>${reached}</b><span>Vague atteinte</span></div>
-          <div><b>${fmt0(s.kills)}</b><span>Éliminations</span></div>
-          <div><b>${fmt0(s.leaked)}</b><span>Évasions</span></div>
-          <div><b>${fmt0(s.goldEarned)}</b><span>Or gagné</span></div>
+          <div><b>${reached}</b><span>${tr('Vague atteinte', 'Wave reached')}</span></div>
+          <div><b>${fmt0(s.kills)}</b><span>${tr('Éliminations', 'Kills')}</span></div>
+          <div><b>${fmt0(s.leaked)}</b><span>${tr('Évasions', 'Leaks')}</span></div>
+          <div><b>${fmt0(s.goldEarned)}</b><span>${tr('Or gagné', 'Gold earned')}</span></div>
         </div>
         ${this.debriefBlockHtml(s, w.gold)}
-        <div class="row actions"><button type="button" class="btn primary" id="again">Retour à l'accueil</button></div>
+        <div class="row actions"><button type="button" class="btn primary" id="again">${tr("Retour à l'accueil", 'Back to home')}</button></div>
       </div>`);
     $('again').addEventListener('click', () => this.showStart(true));
   }

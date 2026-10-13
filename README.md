@@ -4,7 +4,8 @@ Runemaze is a *mazing* tower defense in the spirit of Warcraft III custom maps
 (Wintermaul, Element TD): there is no fixed path, you draw the maze yourself with your
 towers. TypeScript, Canvas 2D, and a Node server (`ws`) that referees each game.
 
-The game itself is in French.
+The game is playable in French or English: the language is picked on the home screen and
+cannot be changed during a game.
 
 ## Preview
 
@@ -73,6 +74,7 @@ src/
     audio/         Sfx: sounds synthesized with Web Audio, no files
     GameLoop.ts    fixed-step requestAnimationFrame, 1/60 s
   presentation/    Game: input, 4×3 command panel, HUD, screens; describe.ts: texts;
+                   i18n.ts: interface language, english.ts: English game data;
                    ServerLink.ts: WebSocket link to the game server
   server/          HTTP + WebSocket server: serves dist/, forwards orders to the referee
                    (application/online/)
